@@ -109,3 +109,4 @@ Run the local checks with:
 flutter test
 flutter analyze
 ```
+# solar
