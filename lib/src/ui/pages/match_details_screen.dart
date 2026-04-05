@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/solar_app_scope.dart';
+import '../../core/solar_competition_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../models/solar_match_prediction.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
@@ -76,7 +77,7 @@ class MatchDetailsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _FlatSection(
-                title: 'Model Readout',
+                title: '$solarizeLabel Readout',
                 child: Column(
                   children: <Widget>[
                     for (var i = 0; i < prediction.insights.length; i++)
@@ -202,12 +203,8 @@ class _PredictionSection extends StatelessWidget {
             value: '${(prediction.blueWinProbability * 100).round()}%',
           ),
           _PredictionMetricRow(
-            label: 'Model confidence',
+            label: '$solarizeLabel confidence',
             value: '${(prediction.confidence * 100).round()}%',
-          ),
-          _PredictionMetricRow(
-            label: 'Estimated AWP',
-            value: prediction.estimatedAwpLabel,
             showDivider: false,
           ),
         ],
@@ -285,11 +282,7 @@ class _ActualResultSection extends StatelessWidget {
             value: prediction.predictionDeltaLabel,
           ),
           _PredictionMetricRow(
-            label: 'Estimated AWP',
-            value: prediction.estimatedAwpLabel,
-          ),
-          _PredictionMetricRow(
-            label: 'Model call',
+            label: '$solarizeLabel call',
             value: accuracy == null
                 ? 'Too close to grade'
                 : accuracy
@@ -373,7 +366,7 @@ class _TeamModelRow extends StatelessWidget {
                 if (team.eventCombinedSkills != null) ...<Widget>[
                   const SizedBox(height: 4),
                   Text(
-                    'Skills ${team.eventCombinedSkills}  •  D ${team.eventDriverScore ?? 0}  •  A ${team.eventAutonScore ?? 0}',
+                    'Skills ${team.eventCombinedSkills}  •  Driver ${team.eventDriverScore ?? 0}  •  Auton ${team.eventAutonScore ?? 0}',
                     style: const TextStyle(
                       color: Color(0xFF8E92A7),
                       fontSize: 12,

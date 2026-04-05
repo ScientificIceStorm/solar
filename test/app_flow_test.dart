@@ -84,7 +84,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Skip'), findsOneWidget);
-    expect(find.text('View your live team stats'), findsOneWidget);
+    expect(find.text('Everything Solar has right now'), findsOneWidget);
 
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
@@ -104,6 +104,7 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Sign up'));
     await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
 
@@ -113,6 +114,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(3), 'password123');
     await tester.enterText(find.byType(TextField).at(4), 'password123');
 
+    await tester.ensureVisible(find.text('SIGN UP'));
     await tester.tap(find.text('SIGN UP'));
     await tester.pumpAndSettle();
 

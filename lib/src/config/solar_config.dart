@@ -9,6 +9,11 @@ const _roboServerBaseUrlDefine = String.fromEnvironment('ROBO_SERVER_BASE_URL');
 const _worldSkillsBaseUrlDefine = String.fromEnvironment(
   'WORLD_SKILLS_BASE_URL',
 );
+const _supabaseUrlDefine = String.fromEnvironment('SUPABASE_URL');
+const _supabaseAnonKeyDefine = String.fromEnvironment('SUPABASE_ANON_KEY');
+const _supabaseRedirectUrlDefine = String.fromEnvironment(
+  'SUPABASE_REDIRECT_URL',
+);
 
 class SolarConfig {
   const SolarConfig({
@@ -16,6 +21,9 @@ class SolarConfig {
     required this.robotEventsBaseUrl,
     required this.roboServerBaseUrl,
     required this.worldSkillsBaseUrl,
+    required this.supabaseUrl,
+    required this.supabaseAnonKey,
+    required this.supabaseRedirectUrl,
   });
 
   static const defaults = SolarConfig(
@@ -23,14 +31,22 @@ class SolarConfig {
     robotEventsBaseUrl: 'https://www.robotevents.com/api/v2',
     roboServerBaseUrl: 'http://127.0.0.1:8080',
     worldSkillsBaseUrl: 'https://www.robotevents.com/api',
+    supabaseUrl: '',
+    supabaseAnonKey: '',
+    supabaseRedirectUrl: 'dev.minzhang.solarV6://login-callback',
   );
 
   final String robotEventsApiKey;
   final String robotEventsBaseUrl;
   final String roboServerBaseUrl;
   final String worldSkillsBaseUrl;
+  final String supabaseUrl;
+  final String supabaseAnonKey;
+  final String supabaseRedirectUrl;
 
   bool get hasRobotEventsApiKey => robotEventsApiKey.trim().isNotEmpty;
+  bool get hasSupabaseConfig =>
+      supabaseUrl.trim().isNotEmpty && supabaseAnonKey.trim().isNotEmpty;
 
   Map<String, dynamic> toSafeJson() {
     return <String, dynamic>{
@@ -38,6 +54,9 @@ class SolarConfig {
       'robotEventsBaseUrl': robotEventsBaseUrl,
       'roboServerBaseUrl': roboServerBaseUrl,
       'worldSkillsBaseUrl': worldSkillsBaseUrl,
+      'supabaseConfigured': hasSupabaseConfig,
+      'supabaseUrl': supabaseUrl,
+      'supabaseRedirectUrl': supabaseRedirectUrl,
     };
   }
 
@@ -68,6 +87,22 @@ class SolarConfig {
         environment['WORLD_SKILLS_BASE_URL'],
         readString(fileValues['worldSkillsBaseUrl']),
       ], fallback: defaults.worldSkillsBaseUrl),
+      supabaseUrl: firstNonEmpty(<String?>[
+        _supabaseUrlDefine,
+        environment['SUPABASE_URL'],
+        readString(fileValues['supabaseUrl']),
+        readString(fileValues['supabaseURL']),
+      ]),
+      supabaseAnonKey: firstNonEmpty(<String?>[
+        _supabaseAnonKeyDefine,
+        environment['SUPABASE_ANON_KEY'],
+        readString(fileValues['supabaseAnonKey']),
+      ]),
+      supabaseRedirectUrl: firstNonEmpty(<String?>[
+        _supabaseRedirectUrlDefine,
+        environment['SUPABASE_REDIRECT_URL'],
+        readString(fileValues['supabaseRedirectUrl']),
+      ], fallback: defaults.supabaseRedirectUrl),
     );
   }
 

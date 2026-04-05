@@ -19,6 +19,10 @@ class SolarMatchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final redAlliance = _allianceForColor(match, 'red');
     final blueAlliance = _allianceForColor(match, 'blue');
+    final teamResultColor = _highlightResultColor(
+      match: match,
+      highlightTeamNumber: highlightTeamNumber,
+    );
 
     final content = Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -30,40 +34,48 @@ class SolarMatchRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          SizedBox(
-            width: 24,
-            child: RotatedBox(
-              quarterTurns: 3,
-              child: Text(
-                solarMatchTimeLabel(match),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                softWrap: false,
-                style: const TextStyle(
-                  color: Color(0xFFB6B7C2),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+          Container(
+            width: 6,
+            height: 52,
+            decoration: BoxDecoration(
+              color: teamResultColor,
+              borderRadius: BorderRadius.circular(999),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 10),
           SizedBox(
-            width: 54,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                solarMatchScreenLabel(match),
-                maxLines: 1,
-                softWrap: false,
-                style: const TextStyle(
-                  color: Color(0xFF191B35),
-                  fontSize: 30,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -1.2,
+            width: 60,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  solarMatchTimeLabel(match),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFB6B7C2),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    solarMatchScreenLabel(match),
+                    maxLines: 1,
+                    softWrap: false,
+                    style: const TextStyle(
+                      color: Color(0xFF191B35),
+                      fontSize: 27,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -1.1,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -108,6 +120,64 @@ class SolarMatchRow extends StatelessWidget {
       child: InkWell(onTap: onTap, child: content),
     );
   }
+}
+
+Color _highlightResultColor({
+  required MatchSummary match,
+  required String? highlightTeamNumber,
+}) {
+  if (highlightTeamNumber == null || highlightTeamNumber.trim().isEmpty) {
+    return const Color(0xFFDADAE3);
+  }
+
+  final alliance = _allianceContainingTeam(match, highlightTeamNumber);
+  final opponent = alliance == null ? null : _opposingAlliance(match, alliance);
+  if (alliance == null ||
+      opponent == null ||
+      alliance.score < 0 ||
+      opponent.score < 0) {
+    return const Color(0xFFDADAE3);
+  }
+
+  if (alliance.score > opponent.score) {
+    return const Color(0xFF3FCB73);
+  }
+  if (alliance.score < opponent.score) {
+    return const Color(0xFFFF6B64);
+  }
+  return const Color(0xFFD6AF52);
+}
+
+MatchAlliance? _allianceContainingTeam(MatchSummary match, String teamNumber) {
+  final normalized = teamNumber.trim().toUpperCase();
+  for (final alliance in match.alliances) {
+    for (final team in alliance.teams) {
+      if (team.number.trim().toUpperCase() == normalized) {
+        return alliance;
+      }
+    }
+  }
+  return null;
+}
+
+MatchAlliance? _opposingAlliance(
+  MatchSummary match,
+  MatchAlliance selectedAlliance,
+) {
+  for (final alliance in match.alliances) {
+    if (!identical(alliance, selectedAlliance) &&
+        alliance.color.toLowerCase() != selectedAlliance.color.toLowerCase()) {
+      return alliance;
+    }
+  }
+
+  for (final alliance in match.alliances) {
+    if (!identical(alliance, selectedAlliance)) {
+      return alliance;
+    }
+  }
+
+  return null;
 }
 
 class _AllianceColumn extends StatelessWidget {

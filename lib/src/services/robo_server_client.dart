@@ -1,5 +1,6 @@
 import '../core/json_api_client.dart';
 import '../core/json_utils.dart';
+import '../core/solar_competition_scope.dart';
 import '../models/open_skill_models.dart';
 import '../models/robo_server_models.dart';
 
@@ -92,6 +93,7 @@ class RoboServerClient {
     required int season,
     required String gradeLevel,
     bool forceRefresh = false,
+    List<int> programIds = solarPrimaryProgramIds,
   }) async {
     final payload = await _jsonClient.getJson(
       baseUrl: baseUrl,
@@ -100,6 +102,9 @@ class RoboServerClient {
         'season': season,
         'grade_level': gradeLevel,
         'force_refresh': forceRefresh,
+        ...programIds.isEmpty
+            ? const <String, Object?>{}
+            : <String, Object?>{'program': programIds},
       },
     );
 

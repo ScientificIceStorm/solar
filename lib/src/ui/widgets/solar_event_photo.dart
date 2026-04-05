@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../models/robot_events_models.dart';
 import '../services/city_photo_service.dart';
+import '../services/location_photo_service.dart';
 
-class SolarEventPhoto extends StatelessWidget {
+class SolarEventPhoto extends StatefulWidget {
   const SolarEventPhoto({
     required this.location,
     super.key,
@@ -20,16 +21,70 @@ class SolarEventPhoto extends StatelessWidget {
   final Widget? overlay;
 
   @override
+  State<SolarEventPhoto> createState() => _SolarEventPhotoState();
+}
+
+class _SolarEventPhotoState extends State<SolarEventPhoto> {
+  late Future<String?> _photoUrlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _photoUrlFuture = LocationPhotoService.photoUrlFor(widget.location);
+  }
+
+  @override
+  void didUpdateWidget(covariant SolarEventPhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.location.city != widget.location.city ||
+        oldWidget.location.region != widget.location.region ||
+        oldWidget.location.country != widget.location.country ||
+        oldWidget.location.venue != widget.location.venue) {
+      _photoUrlFuture = LocationPhotoService.photoUrlFor(widget.location);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final overlayChildren = overlay == null ? null : <Widget>[overlay!];
+    final overlayChildren = widget.overlay == null
+        ? null
+        : <Widget>[widget.overlay!];
 
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
         SolarEventPhotoFallback(
-          location: location,
-          fit: fit,
-          alignment: alignment,
+          location: widget.location,
+          fit: widget.fit,
+          alignment: widget.alignment,
+        ),
+        FutureBuilder<String?>(
+          future: _photoUrlFuture,
+          builder: (context, snapshot) {
+            final photoUrl = snapshot.data;
+            if (photoUrl == null || photoUrl.trim().isEmpty) {
+              return const SizedBox.shrink();
+            }
+
+            return Image.network(
+              photoUrl,
+              fit: widget.fit,
+              alignment: widget.alignment,
+              gaplessPlayback: true,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) {
+                  return child;
+                }
+                return AnimatedOpacity(
+                  duration: const Duration(milliseconds: 220),
+                  opacity: 0,
+                  child: child,
+                );
+              },
+              errorBuilder: (context, error, stackTrace) =>
+                  const SizedBox.shrink(),
+            );
+          },
         ),
         ...?overlayChildren,
       ],

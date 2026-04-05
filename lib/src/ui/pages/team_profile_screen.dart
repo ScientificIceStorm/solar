@@ -58,138 +58,139 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
           return RefreshIndicator(
             color: Colors.black,
             onRefresh: _refresh,
-            child: ListView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              padding: const EdgeInsets.only(bottom: 24),
-              children: <Widget>[
-                _TeamHeader(teamStats: teamStats),
-                const SizedBox(height: 24),
-                if ((teamStats.errorMessage ?? '').isNotEmpty) ...<Widget>[
-                  _InlineMessage(teamStats.errorMessage!),
+            child: StretchingOverscrollIndicator(
+              axisDirection: AxisDirection.down,
+              child: ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                padding: const EdgeInsets.only(bottom: 24),
+                children: <Widget>[
+                  _TeamHeader(teamStats: teamStats),
                   const SizedBox(height: 24),
-                ],
-                _TeamSection(
-                  title: 'Performance',
-                  child: Column(
-                    children: <Widget>[
-                      _StatRow(
-                        label: 'CCWM',
-                        value: _decimalLabel(teamStats.ccwm, signed: true),
-                      ),
-                      _StatRow(
-                        label: 'OPR',
-                        value: _decimalLabel(teamStats.opr),
-                      ),
-                      _StatRow(
-                        label: 'DPR',
-                        value: _decimalLabel(teamStats.dpr),
-                      ),
-                      _StatRow(label: 'Record', value: teamStats.recordLabel),
-                      _StatRow(
-                        label: 'Win Rate',
-                        value: teamStats.winRate == null
-                            ? '--'
-                            : '${teamStats.winRate!.toStringAsFixed(1)}%',
-                      ),
-                      _StatRow(
-                        label: 'Matches',
-                        value: '${teamStats.totalMatches}',
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _TeamSection(
-                  title: 'Skills',
-                  child: Column(
-                    children: <Widget>[
-                      _StatRow(
-                        label: 'World Rank',
-                        value: teamStats.skillsRankLabel,
-                      ),
-                      _StatRow(
-                        label: 'Combined',
-                        value: teamStats.skillsScoreLabel,
-                      ),
-                      _StatRow(
-                        label: 'Driver',
-                        value: teamStats.driverScoreLabel,
-                      ),
-                      _StatRow(
-                        label: 'Auton',
-                        value: teamStats.programmingScoreLabel,
-                      ),
-                      _StatRow(
-                        label: 'Ordinal',
-                        value: teamStats.ordinalLabel,
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _TeamSection(
-                  title: 'Profile',
-                  child: Column(
-                    children: <Widget>[
-                      _StatRow(
-                        label: 'Organization',
-                        value: _fallback(teamStats.team.organization),
-                      ),
-                      _StatRow(
-                        label: 'Robot',
-                        value: _fallback(teamStats.team.robotName),
-                      ),
-                      _StatRow(
-                        label: 'Grade',
-                        value: _fallback(teamStats.team.grade),
-                      ),
-                      _StatRow(
-                        label: 'Location',
-                        value: teamStats.locationLabel,
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                ),
-                if (teamStats.openSkillEntry != null) ...<Widget>[
-                  const SizedBox(height: 24),
+                  if ((teamStats.errorMessage ?? '').isNotEmpty) ...<Widget>[
+                    _InlineMessage(teamStats.errorMessage!),
+                    const SizedBox(height: 24),
+                  ],
                   _TeamSection(
-                    title: 'Rating Source',
-                    child: _OpenSkillSummary(entry: teamStats.openSkillEntry!),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                _EventSection(
-                  title: 'Upcoming Events',
-                  emptyLabel: 'No upcoming events for this team.',
-                  events: teamStats.futureEvents,
-                ),
-                const SizedBox(height: 24),
-                _EventSection(
-                  title: 'Past Events',
-                  emptyLabel: 'No past events published yet.',
-                  events: teamStats.pastEvents,
-                ),
-                if (teamStats.rankings.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 24),
-                  _TeamSection(
-                    title: 'Ranking History',
+                    title: 'Performance',
                     child: Column(
                       children: <Widget>[
-                        for (var i = 0; i < teamStats.rankings.length; i++)
-                          _RankingHistoryRow(
-                            ranking: teamStats.rankings[i],
-                            showDivider: i != teamStats.rankings.length - 1,
-                          ),
+                        _StatRow(
+                          label: 'CCWM',
+                          value: _decimalLabel(teamStats.ccwm, signed: true),
+                        ),
+                        _StatRow(
+                          label: 'OPR',
+                          value: _decimalLabel(teamStats.opr),
+                        ),
+                        _StatRow(
+                          label: 'DPR',
+                          value: _decimalLabel(teamStats.dpr),
+                        ),
+                        _StatRow(label: 'Record', value: teamStats.recordLabel),
+                        _StatRow(
+                          label: 'Win Rate',
+                          value: teamStats.winRate == null
+                              ? '--'
+                              : '${teamStats.winRate!.toStringAsFixed(1)}%',
+                        ),
+                        _StatRow(
+                          label: 'Matches',
+                          value: '${teamStats.totalMatches}',
+                          showDivider: false,
+                        ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  _TeamSection(
+                    title: 'Skills',
+                    child: Column(
+                      children: <Widget>[
+                        _StatRow(
+                          label: 'World Rank',
+                          value: teamStats.skillsRankLabel,
+                        ),
+                        _StatRow(
+                          label: 'Combined',
+                          value: teamStats.skillsScoreLabel,
+                        ),
+                        _StatRow(
+                          label: 'Driver',
+                          value: teamStats.driverScoreLabel,
+                        ),
+                        _StatRow(
+                          label: 'Auton',
+                          value: teamStats.programmingScoreLabel,
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _TeamSection(
+                    title: 'Profile',
+                    child: Column(
+                      children: <Widget>[
+                        _StatRow(
+                          label: 'Organization',
+                          value: _fallback(teamStats.team.organization),
+                        ),
+                        _StatRow(
+                          label: 'Robot',
+                          value: _fallback(teamStats.team.robotName),
+                        ),
+                        _StatRow(
+                          label: 'Grade',
+                          value: _fallback(teamStats.team.grade),
+                        ),
+                        _StatRow(
+                          label: 'Location',
+                          value: teamStats.locationLabel,
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (teamStats.openSkillEntry != null) ...<Widget>[
+                    const SizedBox(height: 24),
+                    _TeamSection(
+                      title: 'Rating Source',
+                      child: _OpenSkillSummary(
+                        entry: teamStats.openSkillEntry!,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  _EventSection(
+                    title: 'Upcoming Events',
+                    emptyLabel: 'No upcoming events for this team.',
+                    events: teamStats.futureEvents,
+                  ),
+                  const SizedBox(height: 24),
+                  _EventSection(
+                    title: 'Past Events',
+                    emptyLabel: 'No past events published yet.',
+                    events: teamStats.pastEvents,
+                  ),
+                  if (teamStats.rankings.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 24),
+                    _TeamSection(
+                      title: 'Ranking History',
+                      child: Column(
+                        children: <Widget>[
+                          for (var i = 0; i < teamStats.rankings.length; i++)
+                            _RankingHistoryRow(
+                              ranking: teamStats.rankings[i],
+                              showDivider: i != teamStats.rankings.length - 1,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           );
         },
@@ -344,8 +345,8 @@ class _OpenSkillSummary extends StatelessWidget {
           value: entry.apPerMatch.toStringAsFixed(2),
         ),
         _StatRow(
-          label: 'AWP / Match',
-          value: entry.awpPerMatch.toStringAsFixed(2),
+          label: 'Record',
+          value: '${entry.totalWins}-${entry.totalLosses}-${entry.totalTies}',
         ),
         _StatRow(
           label: 'Worlds Qualified',

@@ -1,3 +1,4 @@
+import '../../core/solar_competition_scope.dart';
 import '../../models/robot_events_models.dart';
 
 class SolarQuickviewSnapshot {
@@ -110,7 +111,7 @@ class SolarMatchPrediction {
     final total = totalScoreError;
     final margin = marginError;
     if (total == null || margin == null) {
-      return 'The model will grade itself after the match finishes.';
+      return '$solarizeLabel will grade itself after the match finishes.';
     }
     if (total >= 28 || (predictedCorrectly == false && margin >= 18)) {
       return 'This was a major swing. Factors like a robot disconnect, tipping, or an auton miss may have changed the shape of the match.';
@@ -118,7 +119,7 @@ class SolarMatchPrediction {
     if (total >= 14 || margin >= 10) {
       return 'The match ran noticeably different than expected, likely because one alliance cycled faster or missed key scoring chances.';
     }
-    return 'The model tracked this one closely and stayed near the final result.';
+    return '$solarizeLabel tracked this one closely and stayed near the final result.';
   }
 
   bool get estimatedRedAwpAwarded {
@@ -129,16 +130,6 @@ class SolarMatchPrediction {
   bool get estimatedBlueAwpAwarded {
     final winner = _actualWinnerColor ?? favoredAllianceColor.toLowerCase();
     return winner == 'blue' && blueAlliance.awpPotential >= 0.55;
-  }
-
-  String get estimatedAwpLabel {
-    if (estimatedRedAwpAwarded) {
-      return 'Red likely earned AWP';
-    }
-    if (estimatedBlueAwpAwarded) {
-      return 'Blue likely earned AWP';
-    }
-    return 'No clear AWP edge';
   }
 
   String? get _actualWinnerColor {

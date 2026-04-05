@@ -4,6 +4,7 @@ import '../../app/solar_app_scope.dart';
 import '../models/team_stats_snapshot.dart';
 import '../widgets/solar_page_scaffold.dart';
 import '../widgets/solar_navigation.dart';
+import '../widgets/solar_team_overview_card.dart';
 import '../widgets/solar_team_link.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -32,68 +33,27 @@ class ProfileScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.only(bottom: 14),
             children: <Widget>[
-              Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.96),
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: const <BoxShadow>[
-                    BoxShadow(
-                      color: Color(0x12000000),
-                      blurRadius: 20,
-                      offset: Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      account.fullName,
-                      style: const TextStyle(
-                        color: Color(0xFF24243A),
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      account.email,
-                      style: const TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: <Widget>[
-                        _ProfilePill(
-                          label: 'Team',
-                          value: account.team.number,
-                          onTap: () {
-                            openSolarTeamProfileForSummary(
-                              context,
-                              account.team,
-                            );
-                          },
-                        ),
-                        _ProfilePill(
-                          label: 'Skills Rank',
-                          value: teamStats.skillsRankLabel,
-                        ),
-                        _ProfilePill(
-                          label: 'CCWM',
-                          value: teamStats.ccwm?.toStringAsFixed(1) ?? '--',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              SolarTeamOverviewCard(
+                team: account.team,
+                teamStats: teamStats,
+                statusLabel: account.team.registered ? 'REGISTERED' : 'PENDING',
+                onTap: () {
+                  openSolarTeamProfileForSummary(context, account.team);
+                },
               ),
               const SizedBox(height: 22),
+              _InfoCard(
+                title: 'Account',
+                rows: <MapEntry<String, String>>[
+                  MapEntry('Name', account.fullName),
+                  MapEntry('Email', account.email),
+                  MapEntry('Joined', _formatDate(account.createdAt)),
+                  MapEntry(
+                    'Status',
+                    account.team.registered ? 'Registered' : 'Pending',
+                  ),
+                ],
+              ),
               _InfoCard(
                 title: 'Team Info',
                 rows: <MapEntry<String, String>>[
@@ -118,66 +78,9 @@ class ProfileScreen extends StatelessWidget {
                   MapEntry('Location', teamStats.locationLabel),
                 ],
               ),
-              const SizedBox(height: 18),
-              _InfoCard(
-                title: 'Account Info',
-                rows: <MapEntry<String, String>>[
-                  MapEntry('Email', account.email),
-                  MapEntry('Joined', _formatDate(account.createdAt)),
-                  MapEntry(
-                    'Status',
-                    account.team.registered ? 'Registered' : 'Pending',
-                  ),
-                ],
-              ),
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _ProfilePill extends StatelessWidget {
-  const _ProfilePill({required this.label, required this.value, this.onTap});
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8F8FD),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF8E92A7),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Color(0xFF24243A),
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

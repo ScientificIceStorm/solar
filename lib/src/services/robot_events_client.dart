@@ -1,6 +1,7 @@
 import '../core/api_exception.dart';
 import '../core/json_api_client.dart';
 import '../core/json_utils.dart';
+import '../core/solar_competition_scope.dart';
 import '../models/robot_events_models.dart';
 
 class RobotEventsClient {
@@ -27,7 +28,7 @@ class RobotEventsClient {
   Future<List<TeamSummary>> searchTeams({
     int? id,
     String? number,
-    List<int> programIds = const <int>[1, 4],
+    List<int> programIds = solarPrimaryProgramIds,
   }) async {
     final data = await _pagedGet(
       '/teams',

@@ -6,6 +6,7 @@ import 'match_details_screen.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_team_link.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
+import '../widgets/solarize_team_list.dart';
 
 class EventDivisionScreenArgs {
   const EventDivisionScreenArgs({
@@ -39,7 +40,7 @@ class EventDivisionScreen extends StatelessWidget {
     );
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: SolarEventSubpageScaffold(
         title: args.division.name,
         subtitle: args.event.name,
@@ -57,6 +58,7 @@ class EventDivisionScreen extends StatelessWidget {
                 tabs: <Widget>[
                   Tab(text: 'Rankings'),
                   Tab(text: 'Matches'),
+                  Tab(text: 'Teams'),
                 ],
               ),
             ),
@@ -88,14 +90,17 @@ class EventDivisionScreen extends StatelessWidget {
                       final performanceTable =
                           _DivisionPerformanceTable.fromMatches(matches);
 
-                      return ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        itemCount: rankings.length,
-                        itemBuilder: (context, index) => _RankingCard(
-                          ranking: rankings[index],
-                          highlightTeamNumber: args.highlightTeamNumber,
-                          metrics: performanceTable.forTeam(
-                            rankings[index].team.number,
+                      return StretchingOverscrollIndicator(
+                        axisDirection: AxisDirection.down,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          itemCount: rankings.length,
+                          itemBuilder: (context, index) => _RankingCard(
+                            ranking: rankings[index],
+                            highlightTeamNumber: args.highlightTeamNumber,
+                            metrics: performanceTable.forTeam(
+                              rankings[index].team.number,
+                            ),
                           ),
                         ),
                       );
@@ -115,23 +120,60 @@ class EventDivisionScreen extends StatelessWidget {
                               'When division match data is available, it will show up here.',
                         );
                       }
-                      return ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        itemCount: matches.length,
-                        itemBuilder: (context, index) => SolarMatchRow(
-                          match: matches[index],
-                          highlightTeamNumber: args.highlightTeamNumber,
-                          onTap: () {
-                            Navigator.of(context).pushNamed(
-                              MatchDetailsScreen.routeName,
-                              arguments: MatchDetailsScreenArgs(
-                                match: matches[index],
-                                event: args.event,
-                                highlightTeamNumber: args.highlightTeamNumber,
-                              ),
-                            );
-                          },
+                      return StretchingOverscrollIndicator(
+                        axisDirection: AxisDirection.down,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          itemCount: matches.length,
+                          itemBuilder: (context, index) => SolarMatchRow(
+                            match: matches[index],
+                            highlightTeamNumber: args.highlightTeamNumber,
+                            onTap: () {
+                              Navigator.of(context).pushNamed(
+                                MatchDetailsScreen.routeName,
+                                arguments: MatchDetailsScreenArgs(
+                                  match: matches[index],
+                                  event: args.event,
+                                  highlightTeamNumber: args.highlightTeamNumber,
+                                ),
+                              );
+                            },
+                          ),
                         ),
+                      );
+                    },
+                  ),
+                  FutureBuilder<List<Object>>(
+                    future: Future.wait<Object>(<Future<Object>>[
+                      rankingsFuture.then<Object>((value) => value),
+                    ]),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const _CenteredLoader();
+                      }
+
+                      final rankings =
+                          snapshot.data!.first as List<RankingRecord>;
+                      final teams = rankings
+                          .map(
+                            (ranking) => TeamSummary(
+                              id: ranking.team.id,
+                              number: ranking.team.number,
+                              teamName: ranking.team.name,
+                              organization: '',
+                              robotName: '',
+                              location: args.event.location,
+                              grade: 'High School',
+                              registered: true,
+                            ),
+                          )
+                          .toList(growable: false);
+
+                      return SolarizeTeamList(
+                        controller: controller,
+                        teams: teams,
+                        highlightTeamNumber: args.highlightTeamNumber,
+                        emptyLabel: 'No division teams available.',
                       );
                     },
                   ),
@@ -222,7 +264,18 @@ class _RankingCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_recordLabel(ranking)}  •  WP ${_intLabel(ranking.wp)}',
+                  _teamSubtitle(ranking.team.name),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF8E92A7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${_recordLabel(ranking)}  •  WP ${_intLabel(ranking.wp)}  •  AP ${_intLabel(ranking.ap)}',
                   style: const TextStyle(
                     color: Color(0xFF8E92A7),
                     fontSize: 12,
@@ -245,6 +298,11 @@ class _RankingCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _teamSubtitle(String teamName) {
+  final label = teamName.trim();
+  return label.isEmpty ? 'Team profile pending' : label;
 }
 
 class _DivisionPerformanceTable {

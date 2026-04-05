@@ -7,6 +7,7 @@ import '../widgets/solar_brand_mark.dart';
 import '../widgets/solar_screen_background.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
+import 'reset_password_screen.dart';
 import 'sign_in_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -36,7 +37,9 @@ class _SplashScreenState extends State<SplashScreen> {
       }
 
       final controller = SolarAppScope.of(context);
-      final nextScreen = controller.isSignedIn
+      final nextScreen = controller.isPasswordRecoveryActive
+          ? const ResetPasswordScreen(forceRecoveryMode: true)
+          : controller.isSignedIn
           ? const HomeScreen()
           : controller.hasCompletedOnboarding
           ? const SignInScreen()

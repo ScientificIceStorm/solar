@@ -12,13 +12,13 @@ void main() {
       <String, Object?>{
         'season': 190,
         'grade_level': 'High School',
-        'program': <int>[1, 4],
+        'program': <int>[1],
       },
     );
 
     expect(
       uri.toString(),
-      'http://127.0.0.1:8080/api/openskill-cache?season=190&grade_level=High+School&program%5B0%5D=1&program%5B1%5D=4',
+      'http://127.0.0.1:8080/api/openskill-cache?season=190&grade_level=High+School&program%5B0%5D=1',
     );
   });
 

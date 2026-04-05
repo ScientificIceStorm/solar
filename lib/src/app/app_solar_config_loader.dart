@@ -33,6 +33,24 @@ class AppSolarConfigLoader {
         defaultValue: SolarConfig.defaults.worldSkillsBaseUrl,
         assetValue: readString(assetValues['worldSkillsBaseUrl']),
       ),
+      supabaseUrl: _resolvedOrAsset(
+        resolvedValue: baseConfig.supabaseUrl,
+        defaultValue: SolarConfig.defaults.supabaseUrl,
+        assetValue: firstNonEmpty(<String?>[
+          readString(assetValues['supabaseUrl']),
+          readString(assetValues['supabaseURL']),
+        ]),
+      ),
+      supabaseAnonKey: _resolvedOrAsset(
+        resolvedValue: baseConfig.supabaseAnonKey,
+        defaultValue: SolarConfig.defaults.supabaseAnonKey,
+        assetValue: readString(assetValues['supabaseAnonKey']),
+      ),
+      supabaseRedirectUrl: _resolvedOrAsset(
+        resolvedValue: baseConfig.supabaseRedirectUrl,
+        defaultValue: SolarConfig.defaults.supabaseRedirectUrl,
+        assetValue: readString(assetValues['supabaseRedirectUrl']),
+      ),
     );
   }
 

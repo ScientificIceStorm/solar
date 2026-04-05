@@ -18,7 +18,7 @@ class EventScheduleScreen extends StatelessWidget {
     final controller = SolarAppScope.of(context);
     final teamNumber = controller.currentAccount?.team.number ?? 'Team';
 
-    return SolarEventSubpageScaffold(R
+    return SolarEventSubpageScaffold(
       title: '$teamNumber Schedule',
       subtitle: event.name,
       body: FutureBuilder<List<MatchSummary>>(
@@ -37,22 +37,25 @@ class EventScheduleScreen extends StatelessWidget {
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 8),
-            itemCount: matches.length,
-            itemBuilder: (context, index) => SolarMatchRow(
-              match: matches[index],
-              highlightTeamNumber: teamNumber,
-              onTap: () {
-                Navigator.of(context).pushNamed(
-                  MatchDetailsScreen.routeName,
-                  arguments: MatchDetailsScreenArgs(
-                    match: matches[index],
-                    event: event,
-                    highlightTeamNumber: teamNumber,
-                  ),
-                );
-              },
+          return StretchingOverscrollIndicator(
+            axisDirection: AxisDirection.down,
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 8),
+              itemCount: matches.length,
+              itemBuilder: (context, index) => SolarMatchRow(
+                match: matches[index],
+                highlightTeamNumber: teamNumber,
+                onTap: () {
+                  Navigator.of(context).pushNamed(
+                    MatchDetailsScreen.routeName,
+                    arguments: MatchDetailsScreenArgs(
+                      match: matches[index],
+                      event: event,
+                      highlightTeamNumber: teamNumber,
+                    ),
+                  );
+                },
+              ),
             ),
           );
         },

@@ -1,21 +1,28 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/solar_config.dart';
+import '../core/solar_competition_scope.dart';
 import '../models/open_skill_models.dart';
 import '../models/robot_events_models.dart';
 import '../models/world_skills_models.dart';
 import '../solar_api.dart';
 import 'app_solar_config_loader.dart';
+import 'solar_ios_companion_service.dart';
+import 'solar_supabase_bootstrap.dart';
 import '../ui/models/app_account.dart';
 import '../ui/models/solar_match_prediction.dart';
+import '../ui/models/solar_notification_center_snapshot.dart';
 import '../ui/models/team_stats_snapshot.dart';
 import '../ui/services/account_repository.dart';
 import '../ui/services/in_memory_account_repository.dart';
 import '../ui/services/local_account_repository.dart';
+import '../ui/services/solar_auth_service.dart';
 import '../ui/services/solar_match_prediction_service.dart';
 import '../ui/services/solar_scrimmage_service.dart';
+import '../ui/services/solarize_history_service.dart';
 import '../ui/services/team_directory_service.dart';
 
 class AppSessionController extends ChangeNotifier {
@@ -23,20 +30,32 @@ class AppSessionController extends ChangeNotifier {
     required AccountRepository repository,
     required TeamDirectoryService teamDirectory,
     SolarApi? api,
+    SolarAuthService? authService,
   }) : _repository = repository,
        _teamDirectory = teamDirectory,
-       _api = api;
+       _api = api,
+       _authService =
+           authService ?? LocalSolarAuthService(repository: repository);
 
   final AccountRepository _repository;
   final TeamDirectoryService _teamDirectory;
   final SolarApi? _api;
+  final SolarAuthService _authService;
   static const _matchPredictionService = SolarMatchPredictionService();
   static const _scrimmageService = SolarScrimmageService();
+  static const _solarizeHistoryService = SolarizeHistoryService();
+  static const _iosCompanionService = SolarIosCompanionService();
+  static const _solarizeHistoryTeamLimit = 256;
+  static const _solarizeHistoryBatchSize = 16;
 
   AppAccount? _currentAccount;
   TeamStatsSnapshot? _teamStats;
   bool _hasCompletedOnboarding = false;
+  bool _isPasswordRecoveryActive = false;
   int? _preferredSeasonId;
+  AppThemeModePreference _themeModePreference = AppThemeModePreference.system;
+  AppCompetitionPreference _competitionPreference =
+      AppCompetitionPreference.vexV5;
   bool _isRefreshingTeamStats = false;
   bool _isPreloadingSearchEvents = false;
   bool _isPreloadingSearchTeams = false;
@@ -55,7 +74,11 @@ class AppSessionController extends ChangeNotifier {
       <String, Future<List<WorldSkillsEntry>>>{};
   final Map<String, Future<List<OpenSkillCacheEntry>>> _openSkillRankingsCache =
       <String, Future<List<OpenSkillCacheEntry>>>{};
+  final Map<String, Future<List<RankingRecord>>> _teamRankingsCache =
+      <String, Future<List<RankingRecord>>>{};
   final Map<int, Future<int?>> _eventTeamCountCache = <int, Future<int?>>{};
+  final Map<int, Future<List<TeamSummary>>> _eventTeamsCache =
+      <int, Future<List<TeamSummary>>>{};
   final Map<String, Future<List<RankingRecord>>> _divisionRankingsCache =
       <String, Future<List<RankingRecord>>>{};
   final Map<String, Future<List<MatchSummary>>> _divisionMatchesCache =
@@ -73,8 +96,10 @@ class AppSessionController extends ChangeNotifier {
   final Map<String, Future<TeamStatsSnapshot>> _teamStatsCache =
       <String, Future<TeamStatsSnapshot>>{};
   Future<SolarQuickviewSnapshot?>? _quickviewSnapshotFuture;
+  Future<SolarNotificationCenterSnapshot>? _notificationCenterSnapshotFuture;
   SolarScrimmagePackage? _scrimmagePackage;
   String? _scrimmageTeamKey;
+  StreamSubscription<SolarAuthStateChange>? _authStateSubscription;
 
   AppAccount? get currentAccount => _currentAccount;
 
@@ -82,7 +107,13 @@ class AppSessionController extends ChangeNotifier {
 
   bool get hasCompletedOnboarding => _hasCompletedOnboarding;
 
+  bool get isPasswordRecoveryActive => _isPasswordRecoveryActive;
+
   int? get preferredSeasonId => _preferredSeasonId;
+
+  AppThemeModePreference get themeModePreference => _themeModePreference;
+
+  AppCompetitionPreference get competitionPreference => _competitionPreference;
 
   bool get isRefreshingTeamStats => _isRefreshingTeamStats;
 
@@ -106,11 +137,14 @@ class AppSessionController extends ChangeNotifier {
 
   static Future<AppSessionController> bootstrap() async {
     final repository = await _openRepository();
-    final api = await _openApi();
+    final config = await _loadConfig();
+    await SolarSupabaseBootstrap.ensureInitialized(config);
+    final api = SolarApi(config: config);
     final controller = AppSessionController(
       repository: repository,
       teamDirectory: SolarTeamDirectoryService(api: api),
       api: api,
+      authService: _openAuthService(repository: repository, config: config),
     );
     await controller.initialize();
     return controller;
@@ -128,16 +162,60 @@ class AppSessionController extends ChangeNotifier {
     }
   }
 
-  static Future<SolarApi> _openApi() async {
+  static Future<SolarConfig> _loadConfig() async {
     try {
-      final config = await AppSolarConfigLoader.load();
-      return SolarApi(config: config);
+      return await AppSolarConfigLoader.load();
     } catch (error, stackTrace) {
       debugPrint(
-        'Solar startup warning: local API config unavailable. Using default config.\n$error',
+        'Solar startup warning: local config unavailable. Using default config.\n$error',
       );
       debugPrintStack(stackTrace: stackTrace);
-      return SolarApi(config: SolarConfig.defaults);
+      return SolarConfig.defaults;
+    }
+  }
+
+  static SolarAuthService _openAuthService({
+    required AccountRepository repository,
+    required SolarConfig config,
+  }) {
+    if (!config.hasSupabaseConfig) {
+      return LocalSolarAuthService(repository: repository);
+    }
+
+    return SupabaseSolarAuthService(
+      client: Supabase.instance.client,
+      redirectUrl: config.supabaseRedirectUrl,
+    );
+  }
+
+  Future<void> _handleAuthStateChange(SolarAuthStateChange change) async {
+    switch (change.event) {
+      case SolarAuthEvent.passwordRecovery:
+        if (_isPasswordRecoveryActive) {
+          return;
+        }
+        _isPasswordRecoveryActive = true;
+        notifyListeners();
+        return;
+      case SolarAuthEvent.signedOut:
+        await _clearSignedInState();
+        return;
+      case SolarAuthEvent.signedIn:
+      case SolarAuthEvent.userUpdated:
+        final restoredAccount =
+            change.account ??
+            await _authService.restoreCurrentAccount(
+              cachedEmail: _currentAccount?.normalizedEmail,
+              cachedAccount: _currentAccount,
+            );
+        if (restoredAccount == null) {
+          return;
+        }
+        await _setSignedInAccount(restoredAccount);
+        if (change.event == SolarAuthEvent.signedIn) {
+          unawaited(refreshTeamStats());
+        }
+        return;
     }
   }
 
@@ -145,23 +223,56 @@ class AppSessionController extends ChangeNotifier {
     final settings = await _repository.loadSettings();
     _hasCompletedOnboarding = settings.hasCompletedOnboarding;
     _preferredSeasonId = settings.preferredSeasonId;
+    _themeModePreference = settings.themeModePreference;
+    _competitionPreference = settings.competitionPreference;
+    _authStateSubscription = _authService.authStateChanges.listen((change) {
+      unawaited(_handleAuthStateChange(change));
+    });
 
     final currentUserEmail = settings.currentUserEmail;
-    if (currentUserEmail != null) {
-      _currentAccount = await _repository.findByEmail(currentUserEmail);
-    }
-
+    final cachedAccount = currentUserEmail == null
+        ? null
+        : await _repository.findByEmail(currentUserEmail);
+    _currentAccount = await _authService.restoreCurrentAccount(
+      cachedEmail: currentUserEmail,
+      cachedAccount: cachedAccount,
+    );
     if (_currentAccount != null) {
-      _teamStats = _withLocalScrimmage(
-        TeamStatsSnapshot(team: _currentAccount!.team),
-      );
-      _primeSearchEvents(_teamStats!.allEvents);
+      await _setSignedInAccount(_currentAccount!, notify: false);
       unawaited(refreshTeamStats());
+      unawaited(syncIosCompanion());
     }
   }
 
-  Future<void> completeOnboarding() async {
+  Future<void> completeOnboarding({
+    AppThemeModePreference? themeModePreference,
+    AppCompetitionPreference? competitionPreference,
+  }) async {
     _hasCompletedOnboarding = true;
+    if (themeModePreference != null) {
+      _themeModePreference = themeModePreference;
+    }
+    if (competitionPreference != null) {
+      _competitionPreference = competitionPreference;
+    }
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> setThemeModePreference(AppThemeModePreference value) async {
+    if (_themeModePreference == value) {
+      return;
+    }
+    _themeModePreference = value;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> setCompetitionPreference(AppCompetitionPreference value) async {
+    if (_competitionPreference == value) {
+      return;
+    }
+    _competitionPreference = value;
     await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
     notifyListeners();
   }
@@ -172,18 +283,13 @@ class AppSessionController extends ChangeNotifier {
       throw const FormatException('Enter your password.');
     }
 
-    final account = await _repository.findByEmail(normalizedEmail);
-    if (account == null || account.password != password) {
-      throw const FormatException(
-        'We could not find an account with that email and password.',
-      );
-    }
-
-    _currentAccount = account;
-    _teamStats = _withLocalScrimmage(TeamStatsSnapshot(team: account.team));
-    _primeSearchEvents(_teamStats!.allEvents);
-    await _saveSettings(currentUserEmail: account.normalizedEmail);
-    notifyListeners();
+    final cachedAccount = await _repository.findByEmail(normalizedEmail);
+    final account = await _authService.signIn(
+      email: normalizedEmail,
+      password: password,
+      cachedAccount: cachedAccount,
+    );
+    await _setSignedInAccount(account);
     await refreshTeamStats();
     unawaited(preloadSearchEvents());
     unawaited(preloadSearchTeams());
@@ -211,42 +317,26 @@ class AppSessionController extends ChangeNotifier {
       throw const FormatException('Passwords do not match yet.');
     }
 
-    final existingAccount = await _repository.findByEmail(normalizedEmail);
-    if (existingAccount != null) {
-      throw const FormatException('An account with that email already exists.');
-    }
-
     final team = await _teamDirectory.validateTeamNumber(
       teamNumber,
       preferredSeasonId: await _resolveActiveSeasonId(),
     );
-    final account = AppAccount(
+    await _authService.signUp(
       fullName: normalizedName,
       email: normalizedEmail,
       password: password,
       team: team,
-      createdAt: DateTime.now(),
     );
-
-    await _repository.saveAccount(account);
   }
 
   Future<void> sendResetPassword({required String email}) async {
     final normalizedEmail = _validateEmail(email);
-    final account = await _repository.findByEmail(normalizedEmail);
-    if (account == null) {
-      throw const FormatException(
-        'We could not find an account with that email.',
-      );
-    }
+    await _authService.sendResetPassword(email: normalizedEmail);
   }
 
   Future<void> signOut() async {
-    _currentAccount = null;
-    _teamStats = null;
-    _clearTeamDerivedCaches();
-    await _saveSettings(clearCurrentUserEmail: true);
-    notifyListeners();
+    await _authService.signOut();
+    await _clearSignedInState();
   }
 
   Future<void> refreshTeamStats() async {
@@ -269,6 +359,7 @@ class AppSessionController extends ChangeNotifier {
 
       _teamStats = _withLocalScrimmage(snapshot);
       _quickviewSnapshotFuture = null;
+      _notificationCenterSnapshotFuture = null;
       _primeSearchEvents(
         snapshot.allEvents.isEmpty
             ? snapshot.upcomingEvents
@@ -278,6 +369,7 @@ class AppSessionController extends ChangeNotifier {
       await _repository.saveAccount(_currentAccount!);
       unawaited(preloadSearchEvents());
       unawaited(preloadSearchTeams(force: true));
+      unawaited(syncIosCompanion());
     } finally {
       _isRefreshingTeamStats = false;
       notifyListeners();
@@ -364,13 +456,14 @@ class AppSessionController extends ChangeNotifier {
             .fetchRankings(seasonId: seasonId, gradeLevel: gradeLevel)
             .then<Object>((value) => value)
             .catchError((_) => const <WorldSkillsEntry>[]),
-        api.roboServer
-            .fetchOpenSkillCache(season: seasonId, gradeLevel: gradeLevel)
+        fetchOpenSkillRankings(seasonId: seasonId, gradeLevel: gradeLevel)
             .then<Object>((value) => value)
             .catchError((_) => const <OpenSkillCacheEntry>[]),
       ]);
 
-      final worldSkillsEntries = results[0] as List<WorldSkillsEntry>;
+      final worldSkillsEntries = _filterPreferredProgramWorldSkills(
+        results[0] as List<WorldSkillsEntry>,
+      );
       final openSkillEntries = results[1] as List<OpenSkillCacheEntry>;
 
       final mergedTeams = <String, TeamSummary>{};
@@ -430,7 +523,7 @@ class AppSessionController extends ChangeNotifier {
   }
 
   Future<List<SeasonSummary>> fetchWorldSkillsSeasons({
-    String programFilter = 'V5RC',
+    String programFilter = solarPrimaryProgramFilter,
     bool force = false,
   }) {
     final cacheKey = programFilter.trim().toLowerCase();
@@ -445,8 +538,13 @@ class AppSessionController extends ChangeNotifier {
       }
 
       try {
-        final seasons = await api.robotEvents.fetchSeasons();
-        seasons.sort((a, b) => b.id.compareTo(a.id));
+        final normalizedFilter = programFilter.trim().toLowerCase();
+        final seasons = await api.robotEvents.fetchSeasons(
+          programId: normalizedFilter == solarPrimaryProgramFilter.toLowerCase()
+              ? solarPrimaryProgramId
+              : null,
+        );
+        seasons.sort(_compareSeasonSummaries);
         return seasons
             .where((season) {
               return _matchesSeasonProgramFilter(season, programFilter);
@@ -475,9 +573,11 @@ class AppSessionController extends ChangeNotifier {
       }
 
       try {
-        final entries = await api.worldSkills.fetchRankings(
-          seasonId: seasonId,
-          gradeLevel: gradeLevel,
+        final entries = _filterPreferredProgramWorldSkills(
+          await api.worldSkills.fetchRankings(
+            seasonId: seasonId,
+            gradeLevel: gradeLevel,
+          ),
         );
         entries.sort((a, b) {
           final aRank = a.rank <= 0 ? 999999 : a.rank;
@@ -503,25 +603,28 @@ class AppSessionController extends ChangeNotifier {
 
     return _openSkillRankingsCache.putIfAbsent(cacheKey, () async {
       final api = _api;
-      if (api == null) {
+      if (api == null || !api.config.hasRobotEventsApiKey) {
         return const <OpenSkillCacheEntry>[];
       }
 
-      try {
-        final entries = await api.roboServer.fetchOpenSkillCache(
-          season: seasonId,
-          gradeLevel: gradeLevel,
-          forceRefresh: force,
-        );
-        entries.sort((a, b) {
-          final aRank = a.ranking <= 0 ? 999999 : a.ranking;
-          final bRank = b.ranking <= 0 ? 999999 : b.ranking;
-          return aRank.compareTo(bRank);
-        });
-        return entries;
-      } catch (_) {
+      final worldSkills = await fetchWorldSkillsRankings(
+        seasonId: seasonId,
+        gradeLevel: gradeLevel,
+        force: force,
+      );
+      if (worldSkills.isEmpty) {
         return const <OpenSkillCacheEntry>[];
       }
+
+      final rankingsByTeam = await _loadSolarizeTeamRankings(
+        worldSkills,
+        seasonId: seasonId,
+        force: force,
+      );
+      return _solarizeHistoryService.build(
+        worldSkills: worldSkills,
+        rankingsByTeam: rankingsByTeam,
+      );
     });
   }
 
@@ -674,6 +777,123 @@ class AppSessionController extends ChangeNotifier {
       });
   }
 
+  Future<Map<String, List<RankingRecord>>> _loadSolarizeTeamRankings(
+    List<WorldSkillsEntry> worldSkills, {
+    required int seasonId,
+    required bool force,
+  }) async {
+    final prioritized = _prioritizedSolarizeTeams(worldSkills);
+    final results = <String, List<RankingRecord>>{};
+
+    for (
+      var index = 0;
+      index < prioritized.length;
+      index += _solarizeHistoryBatchSize
+    ) {
+      final batch = prioritized
+          .skip(index)
+          .take(_solarizeHistoryBatchSize)
+          .toList(growable: false);
+      final batchResults =
+          await Future.wait<MapEntry<String, List<RankingRecord>>>(
+            batch.map((entry) async {
+              final rankings = await _fetchTeamRankingsForSolarize(
+                teamId: entry.teamId,
+                seasonId: seasonId,
+                force: force,
+              );
+              return MapEntry<String, List<RankingRecord>>(
+                entry.teamNumber.trim().toUpperCase(),
+                rankings,
+              );
+            }),
+          );
+
+      for (final result in batchResults) {
+        results[result.key] = result.value;
+      }
+    }
+
+    return results;
+  }
+
+  List<WorldSkillsEntry> _prioritizedSolarizeTeams(
+    List<WorldSkillsEntry> worldSkills,
+  ) {
+    final ordered = List<WorldSkillsEntry>.from(worldSkills)
+      ..sort((a, b) {
+        final aRank = a.rank <= 0 ? 999999 : a.rank;
+        final bRank = b.rank <= 0 ? 999999 : b.rank;
+        final rankCompare = aRank.compareTo(bRank);
+        if (rankCompare != 0) {
+          return rankCompare;
+        }
+        return b.combinedScore.compareTo(a.combinedScore);
+      });
+
+    final selected = <WorldSkillsEntry>[];
+    final seen = <String>{};
+    void addEntry(WorldSkillsEntry entry) {
+      final key = entry.teamNumber.trim().toUpperCase();
+      if (seen.add(key)) {
+        selected.add(entry);
+      }
+    }
+
+    for (final entry in ordered.take(_solarizeHistoryTeamLimit)) {
+      addEntry(entry);
+    }
+
+    final currentTeamNumber = _currentAccount?.team.number.trim().toUpperCase();
+    if (currentTeamNumber != null) {
+      for (final entry in ordered) {
+        if (entry.teamNumber.trim().toUpperCase() == currentTeamNumber) {
+          addEntry(entry);
+          break;
+        }
+      }
+    }
+
+    return selected;
+  }
+
+  Future<List<RankingRecord>> _fetchTeamRankingsForSolarize({
+    required int teamId,
+    required int seasonId,
+    required bool force,
+  }) {
+    if (teamId <= 0) {
+      return Future<List<RankingRecord>>.value(const <RankingRecord>[]);
+    }
+
+    final cacheKey = '$teamId:$seasonId';
+    if (force) {
+      _teamRankingsCache.remove(cacheKey);
+    }
+
+    return _teamRankingsCache.putIfAbsent(cacheKey, () async {
+      final api = _api;
+      if (api == null || !api.config.hasRobotEventsApiKey) {
+        return const <RankingRecord>[];
+      }
+
+      try {
+        final rankings = await api.robotEvents.fetchTeamRankings(
+          teamId,
+          season: seasonId,
+        );
+        rankings.sort((a, b) {
+          final aRank = a.rank <= 0 ? 999999 : a.rank;
+          final bRank = b.rank <= 0 ? 999999 : b.rank;
+          return aRank.compareTo(bRank);
+        });
+        return rankings;
+      } catch (_) {
+        return const <RankingRecord>[];
+      }
+    });
+  }
+
   Future<void> updateProfile({required String fullName}) async {
     final account = _currentAccount;
     if (account == null) {
@@ -685,7 +905,9 @@ class AppSessionController extends ChangeNotifier {
       throw const FormatException('Enter your full name.');
     }
 
-    _currentAccount = account.copyWith(fullName: normalizedName);
+    _currentAccount = await _authService.saveAccount(
+      account.copyWith(fullName: normalizedName),
+    );
     await _repository.saveAccount(_currentAccount!);
     notifyListeners();
   }
@@ -710,7 +932,9 @@ class AppSessionController extends ChangeNotifier {
       normalizedNumber,
       preferredSeasonId: activeSeasonId,
     );
-    _currentAccount = account.copyWith(team: validatedTeam);
+    _currentAccount = await _authService.saveAccount(
+      account.copyWith(team: validatedTeam),
+    );
     _teamStats = _withLocalScrimmage(TeamStatsSnapshot(team: validatedTeam));
     _clearTeamDerivedCaches();
     await _repository.saveAccount(_currentAccount!);
@@ -764,9 +988,34 @@ class AppSessionController extends ChangeNotifier {
       throw const FormatException('New passwords do not match.');
     }
 
-    _currentAccount = account.copyWith(password: newPassword);
+    await _authService.updatePassword(
+      account: account,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+    final storedPassword = _authService is LocalSolarAuthService
+        ? newPassword
+        : '';
+    _currentAccount = account.copyWith(password: storedPassword);
     await _repository.saveAccount(_currentAccount!);
     notifyListeners();
+  }
+
+  Future<void> updateRecoveryPassword({
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    if (newPassword.trim().isEmpty) {
+      throw const FormatException('Enter a new password.');
+    }
+
+    if (newPassword != confirmPassword) {
+      throw const FormatException('New passwords do not match.');
+    }
+
+    await _authService.updateRecoveryPassword(newPassword: newPassword);
+    _isPasswordRecoveryActive = false;
+    await signOut();
   }
 
   Future<int?> fetchEventTeamCount(int eventId) {
@@ -786,6 +1035,41 @@ class AppSessionController extends ChangeNotifier {
         return teams.length;
       } catch (_) {
         return null;
+      }
+    });
+  }
+
+  Future<List<TeamSummary>> fetchEventTeams(int eventId) {
+    final scrimmage = _scrimmagePackageForCurrentTeam();
+    if (scrimmage != null && eventId == scrimmage.event.id) {
+      return Future<List<TeamSummary>>.value(
+        scrimmage.teams
+            .map(
+              (team) => TeamSummary(
+                id: team.id,
+                number: team.number,
+                teamName: team.name,
+                organization: '',
+                robotName: '',
+                location: scrimmage.event.location,
+                grade: _currentAccount?.team.grade ?? 'High School',
+                registered: true,
+              ),
+            )
+            .toList(growable: false),
+      );
+    }
+
+    return _eventTeamsCache.putIfAbsent(eventId, () async {
+      final api = _api;
+      if (api == null || !api.config.hasRobotEventsApiKey) {
+        return const <TeamSummary>[];
+      }
+
+      try {
+        return await api.robotEvents.fetchEventTeams(eventId);
+      } catch (_) {
+        return const <TeamSummary>[];
       }
     });
   }
@@ -1073,6 +1357,30 @@ class AppSessionController extends ChangeNotifier {
     return future;
   }
 
+  Future<SolarNotificationCenterSnapshot> fetchNotificationCenterSnapshot() {
+    if (_notificationCenterSnapshotFuture != null) {
+      return _notificationCenterSnapshotFuture!;
+    }
+
+    final future = _loadNotificationCenterSnapshot();
+    _notificationCenterSnapshotFuture = future;
+    return future;
+  }
+
+  Future<void> syncIosCompanion() async {
+    final account = _currentAccount;
+    if (account == null) {
+      await _iosCompanionService.clear();
+      return;
+    }
+
+    final snapshot = await fetchNotificationCenterSnapshot();
+    await _iosCompanionService.sync(
+      teamNumber: account.team.number,
+      snapshot: snapshot,
+    );
+  }
+
   Future<SolarQuickviewSnapshot?> _loadQuickviewSnapshot() async {
     if (_preloadedWorldSkillsRankings.isEmpty &&
         _currentAccount != null &&
@@ -1126,6 +1434,21 @@ class AppSessionController extends ChangeNotifier {
           ? null
           : fallbackMatches.first,
       futureMatches: fallbackMatches,
+    );
+  }
+
+  Future<SolarNotificationCenterSnapshot>
+  _loadNotificationCenterSnapshot() async {
+    final quickview = await fetchQuickviewSnapshot();
+    final recentResults = await _loadRecentMatchResults(limit: 4);
+    return SolarNotificationCenterSnapshot(
+      upcomingEvent: quickview?.event,
+      upcomingMatch:
+          quickview?.nextQualifyingMatch ??
+          (quickview?.futureMatches.isEmpty ?? true
+              ? null
+              : quickview!.futureMatches.first),
+      recentResults: recentResults,
     );
   }
 
@@ -1362,6 +1685,93 @@ class AppSessionController extends ChangeNotifier {
     return 1;
   }
 
+  Future<List<SolarRecentMatchResult>> _loadRecentMatchResults({
+    required int limit,
+  }) async {
+    final account = _currentAccount;
+    final teamStats = _teamStats;
+    if (account == null || teamStats == null) {
+      return const <SolarRecentMatchResult>[];
+    }
+
+    final events =
+        (teamStats.allEvents.isEmpty
+                ? teamStats.upcomingEvents
+                : teamStats.allEvents)
+            .toList(growable: false)
+          ..sort((a, b) {
+            final aDate =
+                a.end ?? a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                b.end ?? b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return bDate.compareTo(aDate);
+          });
+
+    final results = <SolarRecentMatchResult>[];
+    for (final event in events.take(4)) {
+      final matches = await fetchTeamScheduleForEvent(event.id);
+      for (final match in matches.reversed) {
+        final recentResult = _recentResultForMatch(
+          match,
+          teamNumber: account.team.number,
+          event: event,
+        );
+        if (recentResult != null) {
+          results.add(recentResult);
+        }
+      }
+      if (results.length >= limit) {
+        break;
+      }
+    }
+
+    results.sort((a, b) {
+      final aDate = a.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return results.take(limit).toList(growable: false);
+  }
+
+  SolarRecentMatchResult? _recentResultForMatch(
+    MatchSummary match, {
+    required String teamNumber,
+    required EventSummary event,
+  }) {
+    if (_isFuturePendingMatch(match)) {
+      return null;
+    }
+
+    MatchAlliance? yourAlliance;
+    MatchAlliance? opponentAlliance;
+    for (final alliance in match.alliances) {
+      final containsTeam = alliance.teams.any((team) {
+        return team.number.trim().toUpperCase() ==
+            teamNumber.trim().toUpperCase();
+      });
+      if (containsTeam) {
+        yourAlliance = alliance;
+      } else {
+        opponentAlliance = alliance;
+      }
+    }
+
+    if (yourAlliance == null ||
+        opponentAlliance == null ||
+        yourAlliance.score < 0 ||
+        opponentAlliance.score < 0) {
+      return null;
+    }
+
+    return SolarRecentMatchResult(
+      event: event,
+      match: match,
+      allianceColor: yourAlliance.color,
+      allianceScore: yourAlliance.score,
+      opponentScore: opponentAlliance.score,
+    );
+  }
+
   bool _isFuturePendingMatch(MatchSummary match) {
     final now = DateTime.now();
     final anchor = match.scheduled ?? match.started;
@@ -1381,6 +1791,7 @@ class AppSessionController extends ChangeNotifier {
     _preloadedOpenSkillEntriesByTeam = const <String, OpenSkillCacheEntry>{};
     _openSkillRankingsCache.clear();
     _eventTeamCountCache.clear();
+    _eventTeamsCache.clear();
     _divisionRankingsCache.clear();
     _divisionMatchesCache.clear();
     _eventSkillsCache.clear();
@@ -1390,6 +1801,7 @@ class AppSessionController extends ChangeNotifier {
     _matchPredictionCache.clear();
     _teamStatsCache.clear();
     _quickviewSnapshotFuture = null;
+    _notificationCenterSnapshotFuture = null;
     _scrimmagePackage = null;
     _scrimmageTeamKey = null;
   }
@@ -1451,15 +1863,33 @@ class AppSessionController extends ChangeNotifier {
       return true;
     }
 
+    if (normalizedFilter == solarPrimaryProgramFilter.toLowerCase()) {
+      return isSolarPrimaryProgramText('${season.name} ${season.programName}');
+    }
+
     final haystack = '${season.name} ${season.programName}'
         .trim()
         .toLowerCase();
-    if (normalizedFilter == 'v5rc') {
-      return haystack.contains('v5') ||
-          haystack.contains('vrc') ||
-          haystack.contains('robotics competition');
-    }
     return haystack.contains(normalizedFilter);
+  }
+
+  int _compareSeasonSummaries(SeasonSummary left, SeasonSummary right) {
+    return compareSolarSeasonPriority(
+      leftName: left.name,
+      leftId: left.id,
+      rightName: right.name,
+      rightId: right.id,
+    );
+  }
+
+  List<WorldSkillsEntry> _filterPreferredProgramWorldSkills(
+    List<WorldSkillsEntry> entries,
+  ) {
+    return entries
+        .where((entry) {
+          return isSolarPrimaryProgramText(entry.program);
+        })
+        .toList(growable: false);
   }
 
   Future<void> _saveSettings({
@@ -1471,6 +1901,8 @@ class AppSessionController extends ChangeNotifier {
         hasCompletedOnboarding: _hasCompletedOnboarding,
         currentUserEmail: clearCurrentUserEmail ? null : currentUserEmail,
         preferredSeasonId: _preferredSeasonId,
+        themeModePreference: _themeModePreference,
+        competitionPreference: _competitionPreference,
       ),
     );
   }
@@ -1483,8 +1915,44 @@ class AppSessionController extends ChangeNotifier {
     return normalizedEmail;
   }
 
+  Future<void> _setSignedInAccount(
+    AppAccount account, {
+    bool notify = true,
+  }) async {
+    final currentUserKey = _currentAccount?.normalizedEmail;
+    final nextUserKey = account.normalizedEmail;
+    final currentTeamKey = _currentAccount?.team.number.trim().toUpperCase();
+    final nextTeamKey = account.team.number.trim().toUpperCase();
+    final didUserChange =
+        currentUserKey != nextUserKey || currentTeamKey != nextTeamKey;
+
+    _currentAccount = account;
+    _isPasswordRecoveryActive = false;
+    if (didUserChange) {
+      _clearTeamDerivedCaches();
+    }
+    _teamStats = _withLocalScrimmage(TeamStatsSnapshot(team: account.team));
+    await _repository.saveAccount(account);
+    await _saveSettings(currentUserEmail: account.normalizedEmail);
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> _clearSignedInState() async {
+    _currentAccount = null;
+    _teamStats = null;
+    _isPasswordRecoveryActive = false;
+    _clearTeamDerivedCaches();
+    await _iosCompanionService.clear();
+    await _saveSettings(clearCurrentUserEmail: true);
+    notifyListeners();
+  }
+
   @override
   void dispose() {
+    unawaited(_authStateSubscription?.cancel() ?? Future<void>.value());
+    unawaited(_authService.dispose());
     unawaited(_repository.close());
     _api?.close();
     super.dispose();

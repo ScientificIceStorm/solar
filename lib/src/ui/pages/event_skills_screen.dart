@@ -122,7 +122,7 @@ class _CombinedSkillRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'D ${entry.driverScore} • A ${entry.programmingScore}',
+                      'Driver ${entry.driverScore} • Auton ${entry.programmingScore}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

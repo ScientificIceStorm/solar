@@ -17,6 +17,8 @@ class SolarMlRankingEntry {
     required this.programmingScore,
     required this.driverScore,
     required this.ordinal,
+    required this.openSkillMu,
+    required this.openSkillSigma,
     required this.ccwm,
     required this.opr,
     required this.dpr,
@@ -40,6 +42,8 @@ class SolarMlRankingEntry {
   final int programmingScore;
   final int driverScore;
   final double? ordinal;
+  final double? openSkillMu;
+  final double? openSkillSigma;
   final double? ccwm;
   final double? opr;
   final double? dpr;

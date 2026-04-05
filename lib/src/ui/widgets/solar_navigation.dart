@@ -303,6 +303,10 @@ class _BottomBarIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = selected
+        ? Colors.white
+        : Colors.white.withValues(alpha: 0.76);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(30),
@@ -311,22 +315,26 @@ class _BottomBarIconButton extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Icon(
-              icon,
-              color: selected
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.8),
-              size: 31,
-            ),
-            const SizedBox(height: 3),
             Container(
-              width: 8,
-              height: 8,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(icon, color: color, size: 30),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: 20,
+              height: 3,
               decoration: BoxDecoration(
                 color: selected ? const Color(0xFF6B73FF) : Colors.transparent,
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
+            const SizedBox(height: 3),
           ],
         ),
       ),

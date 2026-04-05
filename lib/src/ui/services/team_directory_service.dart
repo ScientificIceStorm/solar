@@ -1,4 +1,5 @@
 import '../../core/api_exception.dart';
+import '../../core/solar_competition_scope.dart';
 import '../../models/open_skill_models.dart';
 import '../../models/robot_events_models.dart';
 import '../../models/world_skills_models.dart';
@@ -36,10 +37,7 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     }
 
     try {
-      final allEvents = await _loadAllEvents(
-        team.id,
-        seasonId: preferredSeasonId,
-      );
+      final allEvents = await _loadAllEvents(team.id);
       final seasonId = await _resolveSeasonId(
         allEvents,
         preferredSeasonId: preferredSeasonId,
@@ -143,11 +141,8 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     return scoredTeams.first.$1;
   }
 
-  Future<List<EventSummary>> _loadAllEvents(int teamId, {int? seasonId}) async {
-    final events = await _api.robotEvents.fetchEvents(
-      teamId: teamId,
-      season: seasonId,
-    );
+  Future<List<EventSummary>> _loadAllEvents(int teamId) async {
+    final events = await _api.robotEvents.fetchEvents(teamId: teamId);
     events.sort((a, b) {
       final aStart = a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
       final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -200,12 +195,21 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
       return allEvents.last.seasonId;
     }
 
-    final seasons = await _api.robotEvents.fetchSeasons();
+    final seasons = await _api.robotEvents.fetchSeasons(
+      programId: solarPrimaryProgramId,
+    );
     if (seasons.isEmpty) {
       throw SolarApiException('No RobotEvents seasons were available.');
     }
 
-    seasons.sort((a, b) => b.id.compareTo(a.id));
+    seasons.sort((a, b) {
+      return compareSolarSeasonPriority(
+        leftName: a.name,
+        leftId: a.id,
+        rightName: b.name,
+        rightId: b.id,
+      );
+    });
     return seasons.first.id;
   }
 
@@ -215,10 +219,15 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     required TeamSummary team,
   }) async {
     try {
-      final entries = await _api.worldSkills.fetchRankings(
-        seasonId: seasonId,
-        gradeLevel: gradeLevel,
-      );
+      final entries =
+          (await _api.worldSkills.fetchRankings(
+                seasonId: seasonId,
+                gradeLevel: gradeLevel,
+              ))
+              .where((entry) {
+                return isSolarPrimaryProgramText(entry.program);
+              })
+              .toList(growable: false);
       for (final entry in entries) {
         if (entry.teamId == team.id ||
             entry.teamNumber.trim().toUpperCase() ==

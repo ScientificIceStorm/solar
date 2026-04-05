@@ -69,8 +69,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
     return SolarAuthShell(
       title: 'Sign in',
-      subtitle:
-          'Sign in with the local account database for now. Supabase can replace this later.',
+      subtitle: 'Sign in with your Solar account to load your saved team.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[

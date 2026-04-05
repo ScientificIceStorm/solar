@@ -161,14 +161,6 @@ class TeamStatsSnapshot {
     return score == null || score <= 0 ? '--' : '$score';
   }
 
-  String get ordinalLabel {
-    final value = openSkillEntry?.openSkillOrdinal;
-    if (value == null || value <= 0) {
-      return '--';
-    }
-    return value.toStringAsFixed(1);
-  }
-
   String get locationLabel {
     final pieces = <String>[
       if (team.location.city.isNotEmpty) team.location.city,

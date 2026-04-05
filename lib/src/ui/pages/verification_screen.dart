@@ -26,7 +26,7 @@ class VerificationDetails {
       kind: VerificationKind.signUp,
       title: 'Verification',
       message:
-          "We've sent you a fake verification link for now. Check $email and then continue back to sign in.",
+          "We've sent a verification link to $email. Open it from your inbox, then come back and sign in.",
       email: email,
       primaryActionLabel: 'Back to sign in',
     );
@@ -37,7 +37,7 @@ class VerificationDetails {
       kind: VerificationKind.resetPassword,
       title: 'Verification',
       message:
-          "We've sent a fake password reset email to $email. Open it later when Supabase is connected, then come back and sign in.",
+          "We've sent a password reset link to $email. Open it on this device and Solar will bring you to the new password screen.",
       email: email,
       primaryActionLabel: 'Back to sign in',
     );

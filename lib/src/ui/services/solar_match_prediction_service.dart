@@ -55,14 +55,16 @@ class SolarMatchPredictionService {
 
     final redProjectedRaw =
         baselineScore +
-        ((redAlliance.offense - blueAlliance.defense) * 0.28) +
+        ((redAlliance.offense - blueAlliance.defense) * 0.30) +
         (redAlliance.momentum * 0.34) +
-        ((redAlliance.strength - blueAlliance.strength) * 0.14);
+        ((redAlliance.strength - blueAlliance.strength) * 0.16) +
+        ((redAlliance.awpPotential - blueAlliance.awpPotential) * 4.0);
     final blueProjectedRaw =
         baselineScore +
-        ((blueAlliance.offense - redAlliance.defense) * 0.28) +
+        ((blueAlliance.offense - redAlliance.defense) * 0.30) +
         (blueAlliance.momentum * 0.34) +
-        ((blueAlliance.strength - redAlliance.strength) * 0.14);
+        ((blueAlliance.strength - redAlliance.strength) * 0.16) +
+        ((blueAlliance.awpPotential - redAlliance.awpPotential) * 4.0);
 
     final normalizedScores = _normalizeProjectedScores(
       redProjectedRaw,
@@ -143,14 +145,14 @@ class SolarMatchPredictionService {
           final eventSkill = eventSkillsByTeam[key];
           final awpPotential =
               _weightedAverage(<_Signal>[
-                _Signal(openSkill?.awpPerMatch, weight: 0.64),
+                _Signal(openSkill?.awpPerMatch, weight: 0.60),
                 _Signal(
                   _scaledAutonForAwp(eventSkill?.autonScore),
-                  weight: 0.22,
+                  weight: 0.30,
                 ),
                 _Signal(
                   _scaledAutonForAwp(worldSkills?.programmingScore),
-                  weight: 0.14,
+                  weight: 0.10,
                 ),
               ]) ??
               0.42;
@@ -176,36 +178,39 @@ class SolarMatchPredictionService {
               0.5;
           final offense =
               _weightedAverage(<_Signal>[
-                _Signal(divisionStats?.offenseAvg, weight: 0.42),
-                _Signal(seasonStats.offenseAvg, weight: 0.20),
-                _Signal(openSkill?.opr, weight: 0.20),
-                _Signal(skillPower, weight: 0.10),
-                _Signal(ordinalPower, weight: 0.08),
+                _Signal(divisionStats?.offenseAvg, weight: 0.46),
+                _Signal(seasonStats.offenseAvg, weight: 0.24),
+                _Signal(openSkill?.opr, weight: 0.18),
+                _Signal(skillPower, weight: 0.08),
+                _Signal(ordinalPower, weight: 0.04),
               ]) ??
               22;
           final defense =
               _weightedAverage(<_Signal>[
-                _Signal(divisionStats?.defenseAvg, weight: 0.38),
-                _Signal(seasonStats.defenseAvg, weight: 0.20),
+                _Signal(divisionStats?.defenseAvg, weight: 0.40),
+                _Signal(seasonStats.defenseAvg, weight: 0.24),
                 _Signal(openSkillDpr, weight: 0.24),
-                _Signal(_fallbackDefense(openSkill), weight: 0.18),
+                _Signal(_fallbackDefense(openSkill), weight: 0.12),
               ]) ??
               20;
           final momentum =
               _weightedAverage(<_Signal>[
-                _Signal(divisionStats?.marginAvg, weight: 0.34),
-                _Signal(seasonStats.marginAvg, weight: 0.18),
+                _Signal(divisionStats?.marginAvg, weight: 0.40),
+                _Signal(seasonStats.marginAvg, weight: 0.24),
                 _Signal(openSkill?.ccwm, weight: 0.20),
                 _Signal((winRate - 0.5) * 24, weight: 0.10),
-                _Signal(ordinalPower, weight: 0.10),
+                _Signal(ordinalPower, weight: 0.04),
                 _Signal(
                   skillPower != null ? skillPower - 16 : null,
-                  weight: 0.08,
+                  weight: 0.02,
                 ),
               ]) ??
               0;
           final compositeRating =
-              offense - (defense * 0.38) + (momentum * 0.95);
+              offense -
+              (defense * 0.34) +
+              (momentum * 1.04) +
+              ((awpPotential - 0.5) * 4.5);
           final coverage =
               ([
                         if (divisionStats?.matches != null &&
@@ -288,6 +293,7 @@ class SolarMatchPredictionService {
     required MatchSummary targetMatch,
   }) {
     final accumulator = _HistoryAccumulator();
+    final priorMatches = <MatchSummary>[];
     for (final match in matches) {
       if (match.id == targetMatch.id || !_hasOfficialScore(match)) {
         continue;
@@ -296,7 +302,16 @@ class SolarMatchPredictionService {
           !_isPredictableRound(match.round)) {
         continue;
       }
+      priorMatches.add(match);
+    }
 
+    priorMatches.sort(_compareMatchesChronologically);
+    final recentWindow = priorMatches.length > 10
+        ? priorMatches.sublist(priorMatches.length - 10)
+        : priorMatches;
+
+    for (var i = 0; i < recentWindow.length; i++) {
+      final match = recentWindow[i];
       final alliance = _findAllianceForTeam(match, team);
       if (alliance == null || alliance.score < 0) {
         continue;
@@ -306,7 +321,14 @@ class SolarMatchPredictionService {
         continue;
       }
 
-      accumulator.add(score: alliance.score, against: opponent.score);
+      final recencyWeight = recentWindow.length <= 1
+          ? 1.0
+          : 0.75 + ((i / (recentWindow.length - 1)) * 0.5);
+      accumulator.add(
+        score: alliance.score,
+        against: opponent.score,
+        weight: recencyWeight,
+      );
     }
 
     return accumulator.toStats();
@@ -351,8 +373,8 @@ class SolarMatchPredictionService {
     if (skillGap.abs() >= 3.5) {
       insights.add(
         skillGap.isNegative
-            ? 'Blue brings the stronger skills ceiling into this match.'
-            : 'Red brings the stronger skills ceiling into this match.',
+            ? 'Blue brings the stronger scoring ceiling from recent skills and event data.'
+            : 'Red brings the stronger scoring ceiling from recent skills and event data.',
       );
     }
 
@@ -369,14 +391,14 @@ class SolarMatchPredictionService {
     if (ordinalGap.abs() >= 1.5) {
       insights.add(
         ordinalGap.isNegative
-            ? 'Blue owns the stronger season-long rating signal.'
-            : 'Red owns the stronger season-long rating signal.',
+            ? 'Blue owns the stronger season-long efficiency profile.'
+            : 'Red owns the stronger season-long efficiency profile.',
       );
     }
 
     if (evidenceMatches < 8) {
       insights.add(
-        'The model is leaning more on season priors because this event has limited completed matches.',
+        'Solarize is leaning more on season form because this event still has limited completed matches.',
       );
     } else if ((redWinProbability - 0.5).abs() < 0.08) {
       insights.add(
@@ -392,7 +414,7 @@ class SolarMatchPredictionService {
 
     if (insights.isEmpty) {
       insights.add(
-        'Both alliances grade out fairly evenly, so the model is separating them with small differences in recent form and season signals.',
+        'Both alliances grade out close, so Solarize is separating them with small differences in recent form and efficiency.',
       );
     }
 
@@ -525,6 +547,34 @@ class SolarMatchPredictionService {
     return candidate.id < target.id;
   }
 
+  static int _compareMatchesChronologically(
+    MatchSummary left,
+    MatchSummary right,
+  ) {
+    final leftAnchor = _matchAnchor(left);
+    final rightAnchor = _matchAnchor(right);
+    if (leftAnchor != null && rightAnchor != null) {
+      final anchorCompare = leftAnchor.compareTo(rightAnchor);
+      if (anchorCompare != 0) {
+        return anchorCompare;
+      }
+    }
+
+    if (left.round.code != right.round.code) {
+      return left.round.code.compareTo(right.round.code);
+    }
+
+    if (left.instance != right.instance) {
+      return left.instance.compareTo(right.instance);
+    }
+
+    if (left.matchNumber != right.matchNumber) {
+      return left.matchNumber.compareTo(right.matchNumber);
+    }
+
+    return left.id.compareTo(right.id);
+  }
+
   static DateTime? _matchAnchor(MatchSummary match) {
     return match.started ?? match.scheduled;
   }
@@ -628,38 +678,39 @@ class _Signal {
 
 class _HistoryAccumulator {
   int matches = 0;
-  int wins = 0;
-  int losses = 0;
-  int ties = 0;
+  double weightedMatches = 0;
+  double weightedWins = 0;
+  double weightedTies = 0;
   double offenseTotal = 0;
   double defenseTotal = 0;
   double marginTotal = 0;
 
-  void add({required int score, required int against}) {
+  void add({required int score, required int against, double weight = 1.0}) {
     matches += 1;
-    offenseTotal += score;
-    defenseTotal += against;
-    marginTotal += score - against;
+    weightedMatches += weight;
+    offenseTotal += score * weight;
+    defenseTotal += against * weight;
+    marginTotal += (score - against) * weight;
     if (score > against) {
-      wins += 1;
+      weightedWins += weight;
     } else if (score < against) {
-      losses += 1;
+      // Losses are implied by the remaining weight.
     } else {
-      ties += 1;
+      weightedTies += weight;
     }
   }
 
   _HistoryStats toStats() {
-    if (matches == 0) {
+    if (matches == 0 || weightedMatches == 0) {
       return const _HistoryStats();
     }
 
     return _HistoryStats(
       matches: matches,
-      offenseAvg: offenseTotal / matches,
-      defenseAvg: defenseTotal / matches,
-      marginAvg: marginTotal / matches,
-      winRate: (wins + (ties * 0.5)) / matches,
+      offenseAvg: offenseTotal / weightedMatches,
+      defenseAvg: defenseTotal / weightedMatches,
+      marginAvg: marginTotal / weightedMatches,
+      winRate: (weightedWins + (weightedTies * 0.5)) / weightedMatches,
     );
   }
 }

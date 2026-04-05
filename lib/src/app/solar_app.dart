@@ -125,174 +125,207 @@ class _SolarAppState extends State<SolarApp> {
     required Color textPrimary,
     required Color accent,
   }) {
-    final baseTextTheme = GoogleFonts.montserratTextTheme().apply(
-      bodyColor: textPrimary,
-      displayColor: textPrimary,
-    );
-
     return SolarAppScope(
       controller: controller,
-      child: MaterialApp(
-        title: 'Solar v6',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          fontFamily: GoogleFonts.montserrat().fontFamily,
-          colorScheme: colorScheme,
-          scaffoldBackgroundColor: surface,
-          pageTransitionsTheme: const PageTransitionsTheme(
-            builders: <TargetPlatform, PageTransitionsBuilder>{
-              TargetPlatform.android: _NoTransitionsBuilder(),
-              TargetPlatform.iOS: _NoTransitionsBuilder(),
-              TargetPlatform.macOS: _NoTransitionsBuilder(),
-              TargetPlatform.windows: _NoTransitionsBuilder(),
-              TargetPlatform.linux: _NoTransitionsBuilder(),
-              TargetPlatform.fuchsia: _NoTransitionsBuilder(),
-            },
-          ),
-          textTheme: baseTextTheme.copyWith(
-            headlineMedium: baseTextTheme.headlineMedium?.copyWith(
-              fontSize: 34,
-              fontWeight: FontWeight.w700,
-              height: 1.15,
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          return MaterialApp(
+            title: 'Solar v6',
+            debugShowCheckedModeBanner: false,
+            themeMode: ThemeMode.light,
+            theme: _buildTheme(
+              colorScheme: colorScheme,
+              surface: surface,
+              textPrimary: textPrimary,
+              accent: accent,
+              dark: false,
             ),
-            headlineSmall: baseTextTheme.headlineSmall?.copyWith(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-            ),
-            titleLarge: baseTextTheme.titleLarge?.copyWith(
-              fontSize: 30,
-              fontWeight: FontWeight.w700,
-            ),
-            titleMedium: baseTextTheme.titleMedium?.copyWith(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-            ),
-            bodyLarge: baseTextTheme.bodyLarge?.copyWith(
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-              height: 1.45,
-            ),
-            bodyMedium: baseTextTheme.bodyMedium?.copyWith(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              height: 1.45,
-            ),
-          ),
-          useMaterial3: true,
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-          ),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.88),
-            hintStyle: TextStyle(
-              color: textPrimary.withValues(alpha: 0.45),
-              fontSize: 14,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 18,
-              vertical: 18,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: textPrimary.withValues(alpha: 0.08),
+            darkTheme: _buildTheme(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF2C97BF),
+                brightness: Brightness.dark,
+                surface: const Color(0xFF0F1220),
+                primary: const Color(0xFF2C97BF),
               ),
+              surface: const Color(0xFF0F1220),
+              textPrimary: Colors.white,
+              accent: const Color(0xFF8DA5FF),
+              dark: true,
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: textPrimary.withValues(alpha: 0.08),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: accent, width: 1.3),
-            ),
-          ),
-        ),
-        home: const SplashScreen(),
-        onGenerateRoute: (settings) {
-          final builder = switch (settings.name) {
-            SplashScreen.routeName => (_) => const SplashScreen(),
-            OnboardingScreen.routeName => (_) => const OnboardingScreen(),
-            SignInScreen.routeName => (_) => const SignInScreen(),
-            SignUpScreen.routeName => (_) => const SignUpScreen(),
-            VerificationScreen.routeName => (_) {
-              final details = settings.arguments is VerificationDetails
-                  ? settings.arguments! as VerificationDetails
-                  : VerificationDetails.signUp(email: '');
-              return VerificationScreen(details: details);
-            },
-            ResetPasswordScreen.routeName => (_) => const ResetPasswordScreen(),
-            HomeScreen.routeName => (_) => const HomeScreen(),
-            CalendarScreen.routeName => (_) => const CalendarScreen(),
-            ProfileScreen.routeName => (_) => const ProfileScreen(),
-            TeamProfileScreen.routeName => (_) {
-              final team = settings.arguments;
-              if (team is! TeamSummary) {
-                return const HomeScreen();
-              }
-              return TeamProfileScreen(team: team);
-            },
-            RankingsScreen.routeName => (_) => const RankingsScreen(),
-            SettingsScreen.routeName => (_) => const SettingsScreen(),
-            EventDetailsScreen.routeName => (_) {
-              final event = settings.arguments;
-              if (event is! EventSummary) {
-                return const HomeScreen();
-              }
-              return EventDetailsScreen(event: event);
-            },
-            EventScheduleScreen.routeName => (_) {
-              final event = settings.arguments;
-              if (event is! EventSummary) {
-                return const HomeScreen();
-              }
-              return EventScheduleScreen(event: event);
-            },
-            MatchDetailsScreen.routeName => (_) {
-              final args = settings.arguments;
-              if (args is! MatchDetailsScreenArgs) {
-                return const HomeScreen();
-              }
-              return MatchDetailsScreen(args: args);
-            },
-            EventSkillsScreen.routeName => (_) {
-              final event = settings.arguments;
-              if (event is! EventSummary) {
-                return const HomeScreen();
-              }
-              return EventSkillsScreen(event: event);
-            },
-            EventAwardsScreen.routeName => (_) {
-              final event = settings.arguments;
-              if (event is! EventSummary) {
-                return const HomeScreen();
-              }
-              return EventAwardsScreen(event: event);
-            },
-            EventDivisionScreen.routeName => (_) {
-              final args = settings.arguments;
-              if (args is! EventDivisionScreenArgs) {
-                return const HomeScreen();
-              }
-              return EventDivisionScreen(args: args);
-            },
-            _ => null,
-          };
+            home: const SplashScreen(),
+            onGenerateRoute: (settings) {
+              final builder = switch (settings.name) {
+                SplashScreen.routeName => (_) => const SplashScreen(),
+                OnboardingScreen.routeName => (_) => const OnboardingScreen(),
+                SignInScreen.routeName => (_) => const SignInScreen(),
+                SignUpScreen.routeName => (_) => const SignUpScreen(),
+                VerificationScreen.routeName => (_) {
+                  final details = settings.arguments is VerificationDetails
+                      ? settings.arguments! as VerificationDetails
+                      : VerificationDetails.signUp(email: '');
+                  return VerificationScreen(details: details);
+                },
+                ResetPasswordScreen.routeName =>
+                  (_) => const ResetPasswordScreen(),
+                HomeScreen.routeName => (_) => const HomeScreen(),
+                CalendarScreen.routeName => (_) => const CalendarScreen(),
+                ProfileScreen.routeName => (_) => const ProfileScreen(),
+                TeamProfileScreen.routeName => (_) {
+                  final team = settings.arguments;
+                  if (team is! TeamSummary) {
+                    return const HomeScreen();
+                  }
+                  return TeamProfileScreen(team: team);
+                },
+                RankingsScreen.routeName => (_) => const RankingsScreen(),
+                SettingsScreen.routeName => (_) => const SettingsScreen(),
+                EventDetailsScreen.routeName => (_) {
+                  final event = settings.arguments;
+                  if (event is! EventSummary) {
+                    return const HomeScreen();
+                  }
+                  return EventDetailsScreen(event: event);
+                },
+                EventScheduleScreen.routeName => (_) {
+                  final event = settings.arguments;
+                  if (event is! EventSummary) {
+                    return const HomeScreen();
+                  }
+                  return EventScheduleScreen(event: event);
+                },
+                MatchDetailsScreen.routeName => (_) {
+                  final args = settings.arguments;
+                  if (args is! MatchDetailsScreenArgs) {
+                    return const HomeScreen();
+                  }
+                  return MatchDetailsScreen(args: args);
+                },
+                EventSkillsScreen.routeName => (_) {
+                  final event = settings.arguments;
+                  if (event is! EventSummary) {
+                    return const HomeScreen();
+                  }
+                  return EventSkillsScreen(event: event);
+                },
+                EventAwardsScreen.routeName => (_) {
+                  final event = settings.arguments;
+                  if (event is! EventSummary) {
+                    return const HomeScreen();
+                  }
+                  return EventAwardsScreen(event: event);
+                },
+                EventDivisionScreen.routeName => (_) {
+                  final args = settings.arguments;
+                  if (args is! EventDivisionScreenArgs) {
+                    return const HomeScreen();
+                  }
+                  return EventDivisionScreen(args: args);
+                },
+                _ => null,
+              };
 
-          if (builder == null) {
-            return null;
-          }
+              if (builder == null) {
+                return null;
+              }
 
-          return MaterialPageRoute<void>(builder: builder, settings: settings);
+              return MaterialPageRoute<void>(
+                builder: builder,
+                settings: settings,
+              );
+            },
+          );
         },
       ),
     );
   }
+}
+
+ThemeData _buildTheme({
+  required ColorScheme colorScheme,
+  required Color surface,
+  required Color textPrimary,
+  required Color accent,
+  required bool dark,
+}) {
+  final baseTextTheme = GoogleFonts.montserratTextTheme().apply(
+    bodyColor: textPrimary,
+    displayColor: textPrimary,
+  );
+
+  return ThemeData(
+    fontFamily: GoogleFonts.montserrat().fontFamily,
+    colorScheme: colorScheme,
+    scaffoldBackgroundColor: surface,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: <TargetPlatform, PageTransitionsBuilder>{
+        TargetPlatform.android: _NoTransitionsBuilder(),
+        TargetPlatform.iOS: _NoTransitionsBuilder(),
+        TargetPlatform.macOS: _NoTransitionsBuilder(),
+        TargetPlatform.windows: _NoTransitionsBuilder(),
+        TargetPlatform.linux: _NoTransitionsBuilder(),
+        TargetPlatform.fuchsia: _NoTransitionsBuilder(),
+      },
+    ),
+    textTheme: baseTextTheme.copyWith(
+      headlineMedium: baseTextTheme.headlineMedium?.copyWith(
+        fontSize: 34,
+        fontWeight: FontWeight.w700,
+        height: 1.15,
+      ),
+      headlineSmall: baseTextTheme.headlineSmall?.copyWith(
+        fontSize: 28,
+        fontWeight: FontWeight.w700,
+      ),
+      titleLarge: baseTextTheme.titleLarge?.copyWith(
+        fontSize: 30,
+        fontWeight: FontWeight.w700,
+      ),
+      titleMedium: baseTextTheme.titleMedium?.copyWith(
+        fontSize: 24,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyLarge: baseTextTheme.bodyLarge?.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        height: 1.45,
+      ),
+      bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        height: 1.45,
+      ),
+    ),
+    useMaterial3: true,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: dark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.white.withValues(alpha: 0.88),
+      hintStyle: TextStyle(
+        color: textPrimary.withValues(alpha: 0.45),
+        fontSize: 14,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: textPrimary.withValues(alpha: 0.08)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: textPrimary.withValues(alpha: 0.08)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: accent, width: 1.3),
+      ),
+    ),
+  );
 }
 
 class _BootstrapErrorScreen extends StatelessWidget {

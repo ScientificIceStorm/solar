@@ -34,111 +34,30 @@ class CalendarScreen extends StatelessWidget {
           return RefreshIndicator(
             color: Colors.black,
             onRefresh: controller.refreshTeamStats,
-            child: ListView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
+            child: StretchingOverscrollIndicator(
+              axisDirection: AxisDirection.down,
+              child: ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                padding: const EdgeInsets.only(bottom: 14),
+                children: <Widget>[
+                  _CalendarSection(
+                    title: 'Upcoming',
+                    emptyLabel: 'No upcoming events for this team right now.',
+                    events: teamStats.futureEvents,
+                  ),
+                  const SizedBox(height: 22),
+                  _CalendarSection(
+                    title: 'Past',
+                    emptyLabel: 'No completed events yet.',
+                    events: teamStats.pastEvents,
+                  ),
+                ],
               ),
-              padding: const EdgeInsets.only(bottom: 14),
-              children: <Widget>[
-                _CalendarSummary(teamStats: teamStats),
-                const SizedBox(height: 22),
-                _CalendarSection(
-                  title: 'Upcoming',
-                  emptyLabel: 'No upcoming events for this team right now.',
-                  events: teamStats.futureEvents,
-                ),
-                const SizedBox(height: 22),
-                _CalendarSection(
-                  title: 'Past',
-                  emptyLabel: 'No completed events yet.',
-                  events: teamStats.pastEvents,
-                ),
-              ],
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _CalendarSummary extends StatelessWidget {
-  const _CalendarSummary({required this.teamStats});
-
-  final TeamStatsSnapshot teamStats;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 20,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: _CountPill(
-              label: 'Upcoming',
-              value: '${teamStats.futureEvents.length}',
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _CountPill(
-              label: 'Past',
-              value: '${teamStats.pastEvents.length}',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CountPill extends StatelessWidget {
-  const _CountPill({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8FD),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF8E92A7),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Color(0xFF24243A),
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.7,
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -5,16 +5,19 @@ import 'package:flutter/services.dart';
 
 import '../../app/app_session_controller.dart';
 import '../../app/solar_app_scope.dart';
+import '../../core/solar_competition_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../pages/event_details_screen.dart';
-import '../models/app_account.dart';
 import '../models/solar_match_prediction.dart';
+import '../models/solar_notification_center_snapshot.dart';
 import '../models/team_stats_snapshot.dart';
 import '../widgets/solar_event_photo.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
+import '../widgets/solar_team_overview_card.dart';
+import 'event_division_screen.dart';
 import 'match_details_screen.dart';
 import 'sign_in_screen.dart';
 import 'team_profile_screen.dart';
@@ -40,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _sessionController = controller;
       unawaited(controller.preloadSearchEvents());
       unawaited(controller.preloadSearchTeams());
+      unawaited(controller.syncIosCompanion());
     }
   }
 
@@ -71,6 +75,39 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
+  Future<void> _openNotificationHub(AppSessionController controller) async {
+    await controller.syncIosCompanion();
+    if (!mounted) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFF7F5F8),
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: FutureBuilder<SolarNotificationCenterSnapshot>(
+            future: controller.fetchNotificationCenterSnapshot(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(24, 24, 24, 32),
+                  child: SizedBox(
+                    height: 220,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                );
+              }
+              return _NotificationHubSheet(snapshot: snapshot.data!);
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
@@ -89,13 +126,14 @@ class _HomeScreenState extends State<HomeScreen> {
         final eventResults = controller.searchCachedEvents(query);
         final teamStats =
             controller.teamStats ?? TeamStatsSnapshot(team: account.team);
+        final notificationFuture = controller.fetchNotificationCenterSnapshot();
         final topInset = MediaQuery.paddingOf(context).top;
 
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
           child: Scaffold(
             extendBody: true,
-            backgroundColor: Colors.transparent,
+            backgroundColor: Colors.black,
             drawerEnableOpenDragGesture: true,
             drawerEdgeDragWidth: 36,
             drawer: SolarAppDrawer(
@@ -124,97 +162,115 @@ class _HomeScreenState extends State<HomeScreen> {
                   await controller.refreshTeamStats();
                   await controller.preloadSearchEvents(force: true);
                 },
-                child: ListView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  padding: const EdgeInsets.only(bottom: 148),
-                  children: <Widget>[
-                    _HomeHeader(
-                      topInset: topInset,
-                      isRefreshing: controller.isRefreshingTeamStats,
-                      searchController: _searchController,
-                      onSearchChanged: _handleSearchChanged,
-                      onClearSearch: _clearSearch,
+                child: StretchingOverscrollIndicator(
+                  axisDirection: AxisDirection.down,
+                  child: ListView(
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
                     ),
-                    const SizedBox(height: 30),
-                    if (showSearchResults) ...<Widget>[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _SearchResultsPanel(
-                          query: query,
-                          teamResults: teamResults,
-                          eventResults: eventResults,
-                          isLoadingTeams:
-                              controller.isPreloadingSearchTeams &&
-                              controller.preloadedSearchTeams.isEmpty,
-                          isLoadingEvents:
-                              controller.isPreloadingSearchEvents &&
-                              controller.preloadedSearchEvents.isEmpty,
-                        ),
+                    padding: const EdgeInsets.only(bottom: 148),
+                    children: <Widget>[
+                      _HomeHeader(
+                        topInset: topInset,
+                        isRefreshing: controller.isRefreshingTeamStats,
+                        searchController: _searchController,
+                        onSearchChanged: _handleSearchChanged,
+                        onClearSearch: _clearSearch,
+                        notificationFuture: notificationFuture,
+                        onNotificationsTap: () {
+                          _openNotificationHub(controller);
+                        },
                       ),
-                    ] else ...<Widget>[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _SectionHeader(
-                          title: 'Quickview',
-                          trailingLabel: 'Calendar',
-                          onTap: () {
-                            navigateToSolarDestination(
-                              context,
-                              SolarNavDestination.calendar,
-                            );
-                          },
+                      const SizedBox(height: 30),
+                      if (showSearchResults) ...<Widget>[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: _SearchResultsPanel(
+                            query: query,
+                            teamResults: teamResults,
+                            eventResults: eventResults,
+                            isLoadingTeams:
+                                controller.isPreloadingSearchTeams &&
+                                controller.preloadedSearchTeams.isEmpty,
+                            isLoadingEvents:
+                                controller.isPreloadingSearchEvents &&
+                                controller.preloadedSearchEvents.isEmpty,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _QuickviewSection(
-                          controller: controller,
-                          teamNumber: account.team.number,
+                      ] else ...<Widget>[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: _SectionHeader(
+                            title: 'Quickview',
+                            trailingLabel: 'Calendar',
+                            onTap: () {
+                              navigateToSolarDestination(
+                                context,
+                                SolarNavDestination.calendar,
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 28),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _SectionHeader(
-                          title: 'Upcoming Events',
-                          trailingLabel: 'See All',
-                          onTap: () {
-                            navigateToSolarDestination(
-                              context,
-                              SolarNavDestination.calendar,
-                            );
-                          },
+                        const SizedBox(height: 18),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: _QuickviewSection(
+                            controller: controller,
+                            teamNumber: account.team.number,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      _UpcomingEventsSection(events: teamStats.upcomingEvents),
-                      const SizedBox(height: 28),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _SectionHeader(
-                          title: 'Team Stats',
-                          trailingLabel: 'See All',
-                          onTap: () {
-                            openSolarTeamProfileForSummary(
-                              context,
-                              account.team,
-                            );
-                          },
+                        const SizedBox(height: 28),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: _SectionHeader(
+                            title: 'Upcoming Events',
+                            trailingLabel: 'See All',
+                            onTap: () {
+                              navigateToSolarDestination(
+                                context,
+                                SolarNavDestination.calendar,
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: _TeamStatsPanel(
-                          account: account,
-                          teamStats: teamStats,
+                        const SizedBox(height: 18),
+                        _UpcomingEventsSection(
+                          events: teamStats.upcomingEvents,
                         ),
-                      ),
+                        const SizedBox(height: 28),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: _SectionHeader(
+                            title: 'Team Stats',
+                            trailingLabel: 'See All',
+                            onTap: () {
+                              openSolarTeamProfileForSummary(
+                                context,
+                                account.team,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: SolarTeamOverviewCard(
+                            team: account.team,
+                            teamStats: teamStats,
+                            statusLabel: account.team.registered
+                                ? 'REGISTERED'
+                                : 'PENDING',
+                            onTap: () {
+                              openSolarTeamProfileForSummary(
+                                context,
+                                account.team,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -238,6 +294,8 @@ class _HomeHeader extends StatelessWidget {
     required this.searchController,
     required this.onSearchChanged,
     required this.onClearSearch,
+    required this.notificationFuture,
+    required this.onNotificationsTap,
   });
 
   final double topInset;
@@ -245,6 +303,8 @@ class _HomeHeader extends StatelessWidget {
   final TextEditingController searchController;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onClearSearch;
+  final Future<SolarNotificationCenterSnapshot> notificationFuture;
+  final VoidCallback onNotificationsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -276,35 +336,61 @@ class _HomeHeader extends StatelessWidget {
                 },
               ),
               const Spacer(),
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: <Widget>[
-                    const Icon(
-                      Icons.notifications_none_rounded,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                    Positioned(
-                      top: 15,
-                      right: 16,
-                      child: Container(
-                        width: 11,
-                        height: 11,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF2C97BF),
-                          shape: BoxShape.circle,
-                        ),
+              FutureBuilder<SolarNotificationCenterSnapshot>(
+                future: notificationFuture,
+                builder: (context, snapshot) {
+                  final itemCount = snapshot.data?.itemCount ?? 0;
+                  return InkWell(
+                    onTap: onNotificationsTap,
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: <Widget>[
+                          const Icon(
+                            Icons.notifications_none_rounded,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                          if (itemCount > 0)
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                  minWidth: 22,
+                                  minHeight: 22,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF2C97BF),
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  itemCount > 9 ? '9+' : '$itemCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ],
           ),
@@ -338,6 +424,244 @@ class _HomeHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NotificationHubSheet extends StatelessWidget {
+  const _NotificationHubSheet({required this.snapshot});
+
+  final SolarNotificationCenterSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 10, 22, 26),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            'Match Notifications',
+            style: TextStyle(
+              color: Color(0xFF24243A),
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Your next published match and the latest completed results live here.',
+            style: TextStyle(
+              color: Color(0xFF8E92A7),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (snapshot.upcomingMatch != null)
+            _NotificationCard.upcoming(
+              event: snapshot.upcomingEvent,
+              match: snapshot.upcomingMatch!,
+            )
+          else
+            const _NotificationEmptyCard(
+              label: 'No upcoming published match right now.',
+            ),
+          const SizedBox(height: 16),
+          const Text(
+            'Recent Results',
+            style: TextStyle(
+              color: Color(0xFF24243A),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (snapshot.recentResults.isEmpty)
+            const _NotificationEmptyCard(
+              label:
+                  'Completed match results will show up here after they post.',
+            )
+          else
+            ...snapshot.recentResults.map<Widget>(_NotificationCard.result),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationCard extends StatelessWidget {
+  const _NotificationCard._({
+    required this.title,
+    required this.subtitle,
+    required this.meta,
+    required this.leadingLabel,
+    required this.leadingColor,
+  });
+
+  factory _NotificationCard.upcoming({
+    required EventSummary? event,
+    required MatchSummary match,
+  }) {
+    return _NotificationCard._(
+      title: match.name,
+      subtitle: event?.name ?? match.event.name,
+      meta: <String>[
+        if (match.division.name.trim().isNotEmpty) match.division.name.trim(),
+        if (match.field.trim().isNotEmpty) match.field.trim(),
+        solarMatchTimeLabel(match),
+      ].join('  •  '),
+      leadingLabel: 'NEXT',
+      leadingColor: const Color(0xFF2930FF),
+    );
+  }
+
+  factory _NotificationCard.result(SolarRecentMatchResult result) {
+    final scoreLabel = '${result.allianceScore} - ${result.opponentScore}';
+    final title = result.tied
+        ? 'Tied $scoreLabel'
+        : result.won
+        ? 'Won $scoreLabel'
+        : 'Lost $scoreLabel';
+    return _NotificationCard._(
+      title: title,
+      subtitle:
+          '${result.match.name}  •  ${result.event?.name ?? result.match.event.name}',
+      meta: <String>[
+        result.match.division.name,
+        if (result.match.field.trim().isNotEmpty) result.match.field.trim(),
+        _notificationResultTimeLabel(result.completedAt),
+      ].where((value) => value.trim().isNotEmpty).join('  •  '),
+      leadingLabel: result.tied
+          ? 'TIE'
+          : result.won
+          ? 'WIN'
+          : 'LOSS',
+      leadingColor: result.tied
+          ? const Color(0xFF7A7F92)
+          : result.won
+          ? const Color(0xFF1F9D61)
+          : const Color(0xFFD24E4E),
+    );
+  }
+
+  final String title;
+  final String subtitle;
+  final String meta;
+  final String leadingLabel;
+  final Color leadingColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: leadingColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              leadingLabel,
+              style: TextStyle(
+                color: leadingColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF4E5368),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  meta,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF8E92A7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationEmptyCard extends StatelessWidget {
+  const _NotificationEmptyCard({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF8E92A7),
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          height: 1.45,
+        ),
+      ),
+    );
+  }
+}
+
+String _notificationResultTimeLabel(DateTime? dateTime) {
+  if (dateTime == null) {
+    return 'Posted recently';
+  }
+  final local = dateTime.toLocal();
+  final time = TimeOfDay.fromDateTime(local);
+  final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final suffix = time.period == DayPeriod.am ? 'AM' : 'PM';
+  return '${local.month}/${local.day}  $hour:$minute $suffix';
 }
 
 class _SearchStrip extends StatelessWidget {
@@ -1065,16 +1389,59 @@ class _SearchResultsBottomSheet<T> extends StatelessWidget {
   }
 }
 
-class _QuickviewSection extends StatelessWidget {
+class _QuickviewSection extends StatefulWidget {
   const _QuickviewSection({required this.controller, required this.teamNumber});
 
   final AppSessionController controller;
   final String teamNumber;
 
   @override
+  State<_QuickviewSection> createState() => _QuickviewSectionState();
+}
+
+class _QuickviewSectionState extends State<_QuickviewSection> {
+  Future<SolarQuickviewSnapshot?>? _quickviewFuture;
+  Future<_QuickviewHeroData>? _heroFuture;
+  String? _heroCacheKey;
+
+  @override
+  void didUpdateWidget(covariant _QuickviewSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller) ||
+        oldWidget.teamNumber != widget.teamNumber) {
+      _quickviewFuture = null;
+      _heroFuture = null;
+      _heroCacheKey = null;
+    }
+  }
+
+  Future<_QuickviewHeroData> _heroDataFor({
+    required EventSummary event,
+    required MatchSummary match,
+    required DivisionSummary division,
+  }) {
+    final cacheKey =
+        '${event.id}:${match.id}:${division.id}:${widget.teamNumber.trim().toUpperCase()}';
+    if (_heroFuture != null && _heroCacheKey == cacheKey) {
+      return _heroFuture!;
+    }
+
+    final future = _loadQuickviewHeroData(
+      controller: widget.controller,
+      event: event,
+      match: match,
+      division: division,
+      teamNumber: widget.teamNumber,
+    );
+    _heroCacheKey = cacheKey;
+    _heroFuture = future;
+    return future;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<SolarQuickviewSnapshot?>(
-      future: controller.fetchQuickviewSnapshot(),
+      future: _quickviewFuture ??= widget.controller.fetchQuickviewSnapshot(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _QuickviewLoadingState();
@@ -1101,22 +1468,28 @@ class _QuickviewSection extends StatelessWidget {
         final remainingMatches = quickview.futureMatches
             .where((match) => match.id != nextMatch.id)
             .toList(growable: false);
+        final currentDivision =
+            widget.controller.currentTeamDivisionForEvent(quickview.event.id) ??
+            nextMatch.division;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            FutureBuilder<SolarMatchPrediction?>(
-              future: controller.predictMatch(
-                match: nextMatch,
+            FutureBuilder<_QuickviewHeroData>(
+              future: _heroDataFor(
                 event: quickview.event,
+                match: nextMatch,
+                division: currentDivision,
               ),
               builder: (context, predictionSnapshot) {
-                final prediction = predictionSnapshot.data;
+                final heroData = predictionSnapshot.data;
                 return _QuickviewHeroCard(
                   event: quickview.event,
                   match: nextMatch,
-                  prediction: prediction,
-                  teamNumber: teamNumber,
+                  prediction: heroData?.prediction,
+                  division: currentDivision,
+                  currentRanking: heroData?.currentRanking,
+                  teamNumber: widget.teamNumber,
                 );
               },
             ),
@@ -1135,14 +1508,14 @@ class _QuickviewSection extends StatelessWidget {
               for (final match in remainingMatches)
                 SolarMatchRow(
                   match: match,
-                  highlightTeamNumber: teamNumber,
+                  highlightTeamNumber: widget.teamNumber,
                   onTap: () {
                     Navigator.of(context).pushNamed(
                       MatchDetailsScreen.routeName,
                       arguments: MatchDetailsScreenArgs(
                         match: match,
                         event: quickview.event,
-                        highlightTeamNumber: teamNumber,
+                        highlightTeamNumber: widget.teamNumber,
                       ),
                     );
                   },
@@ -1168,20 +1541,25 @@ class _QuickviewHeroCard extends StatelessWidget {
     required this.event,
     required this.match,
     required this.prediction,
+    required this.division,
+    required this.currentRanking,
     required this.teamNumber,
   });
 
   final EventSummary event;
   final MatchSummary match;
   final SolarMatchPrediction? prediction;
+  final DivisionSummary division;
+  final RankingRecord? currentRanking;
   final String teamNumber;
 
   @override
   Widget build(BuildContext context) {
+    final palette = _quickviewPaletteFor(match);
     final yourAlliance = _allianceContainingTeam(match, teamNumber);
     final opponents = _opposingAlliance(match, yourAlliance);
     final favoredLabel = prediction == null
-        ? 'Model warming up'
+        ? '$solarizeLabel warming up'
         : '${prediction!.favoredAllianceLabel} ${(prediction!.favoredWinProbability * 100).round()}%';
     final probabilityColor = prediction?.favoredAllianceColor == 'blue'
         ? const Color(0xFF8FB0FF)
@@ -1203,10 +1581,10 @@ class _QuickviewHeroCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: <Color>[Color(0xFF101118), Color(0xFF1F2236)],
+            colors: palette.colors,
           ),
           borderRadius: BorderRadius.circular(32),
           boxShadow: const <BoxShadow>[
@@ -1237,13 +1615,27 @@ class _QuickviewHeroCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        solarMatchScreenLabel(match),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 34,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -1.2,
+                      RichText(
+                        text: TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(
+                              text: solarMatchScreenLabel(match),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -1.2,
+                              ),
+                            ),
+                            TextSpan(
+                              text: '  ${solarMatchTimeLabel(match)}',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.86),
+                                fontSize: 19,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -1258,44 +1650,86 @@ class _QuickviewHeroCard extends StatelessWidget {
                           height: 1.15,
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _quickviewMetaLine(match: match, event: event),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.62),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.25,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.09),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: <Widget>[
-                      Text(
-                        solarMatchTimeLabel(match),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _locationLabel(event.location),
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 4),
+                  child: Icon(
+                    palette.icon,
+                    color: Colors.white.withValues(alpha: 0.28),
+                    size: 26,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              height: 1,
+              color: Colors.white.withValues(alpha: 0.08),
+            ),
+            const SizedBox(height: 14),
+            InkWell(
+              onTap: () {
+                Navigator.of(context).pushNamed(
+                  EventDivisionScreen.routeName,
+                  arguments: EventDivisionScreenArgs(
+                    event: event,
+                    division: division,
+                    highlightTeamNumber: teamNumber,
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      currentRanking == null
+                          ? division.name
+                          : '#${currentRanking!.rank} in ${division.name}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      currentRanking == null
+                          ? 'Tap to open division rankings'
+                          : '${currentRanking!.wins}-${currentRanking!.losses}-${currentRanking!.ties}  •  WP ${_safeInt(currentRanking!.wp)}  •  AP ${_safeInt(currentRanking!.ap)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
             Row(
               children: <Widget>[
                 Expanded(
@@ -1477,6 +1911,92 @@ class _QuickviewEmptyState extends StatelessWidget {
       ),
     );
   }
+}
+
+class _QuickviewHeroData {
+  const _QuickviewHeroData({
+    required this.prediction,
+    required this.currentRanking,
+  });
+
+  final SolarMatchPrediction? prediction;
+  final RankingRecord? currentRanking;
+}
+
+class _QuickviewPalette {
+  const _QuickviewPalette({required this.colors, required this.icon});
+
+  final List<Color> colors;
+  final IconData icon;
+}
+
+Future<_QuickviewHeroData> _loadQuickviewHeroData({
+  required AppSessionController controller,
+  required EventSummary event,
+  required MatchSummary match,
+  required DivisionSummary division,
+  required String teamNumber,
+}) async {
+  final values = await Future.wait<Object?>(<Future<Object?>>[
+    controller
+        .predictMatch(match: match, event: event)
+        .then<Object?>((value) => value),
+    controller
+        .fetchDivisionRankings(eventId: event.id, divisionId: division.id)
+        .then<Object?>((value) => value),
+  ]);
+
+  final prediction = values[0] as SolarMatchPrediction?;
+  final rankings = values[1] as List<RankingRecord>;
+  RankingRecord? currentRanking;
+  final normalizedTeamNumber = teamNumber.trim().toUpperCase();
+  for (final entry in rankings) {
+    if (entry.team.number.trim().toUpperCase() == normalizedTeamNumber) {
+      currentRanking = entry;
+      break;
+    }
+  }
+
+  return _QuickviewHeroData(
+    prediction: prediction,
+    currentRanking: currentRanking,
+  );
+}
+
+String _quickviewMetaLine({
+  required MatchSummary match,
+  required EventSummary event,
+}) {
+  final parts = <String>[
+    if (match.field.trim().isNotEmpty) match.field.trim(),
+    _locationLabel(event.location),
+  ].where((value) => value.trim().isNotEmpty).toList(growable: false);
+  return parts.join('  •  ');
+}
+
+_QuickviewPalette _quickviewPaletteFor(MatchSummary match) {
+  final anchor = match.scheduled ?? match.started ?? DateTime.now();
+  final hour = anchor.hour;
+  if (hour >= 19 || hour < 6) {
+    return const _QuickviewPalette(
+      colors: <Color>[Color(0xFF0D1020), Color(0xFF1C2340)],
+      icon: Icons.nightlight_round,
+    );
+  }
+  if (hour >= 16) {
+    return const _QuickviewPalette(
+      colors: <Color>[Color(0xFF3A1F27), Color(0xFF7A4A32)],
+      icon: Icons.wb_twilight,
+    );
+  }
+  return const _QuickviewPalette(
+    colors: <Color>[Color(0xFF20486A), Color(0xFF5B89B8)],
+    icon: Icons.wb_sunny_rounded,
+  );
+}
+
+String _safeInt(int value) {
+  return value >= 0 ? '$value' : '--';
 }
 
 MatchAlliance? _allianceContainingTeam(MatchSummary match, String teamNumber) {
@@ -1816,255 +2336,6 @@ class _DateBadgeData {
     return _DateBadgeData(
       day: value.day.toString(),
       month: months[value.month - 1],
-    );
-  }
-}
-
-class _TeamStatsPanel extends StatelessWidget {
-  const _TeamStatsPanel({required this.account, required this.teamStats});
-
-  final AppAccount account;
-  final TeamStatsSnapshot teamStats;
-
-  @override
-  Widget build(BuildContext context) {
-    final ccwm = teamStats.ccwm;
-    final winRate = teamStats.winRate;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.97),
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x13000000),
-            blurRadius: 26,
-            offset: Offset(0, 16),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              SolarTeamLinkText(
-                teamNumber: account.team.number,
-                teamId: account.team.id,
-                teamName: account.team.teamName,
-                organization: account.team.organization,
-                robotName: account.team.robotName,
-                grade: account.team.grade,
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 25,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.8,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  account.team.teamName.isEmpty
-                      ? 'Competition profile'
-                      : account.team.teamName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF9FA1B5),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _CompactStatBlock(
-                  label: 'CCWM',
-                  value: ccwm == null ? '--' : ccwm.toStringAsFixed(1),
-                  onTap: () {
-                    openSolarTeamProfileForSummary(context, account.team);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _CompactStatBlock(
-                  label: 'Record',
-                  value: teamStats.recordLabel,
-                  onTap: () {
-                    openSolarTeamProfileForSummary(context, account.team);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _CompactStatBlock(
-                  label: 'Skills',
-                  value: teamStats.skillsRankLabel,
-                  onTap: () {
-                    openSolarTeamProfileForSummary(context, account.team);
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _CompactStatBlock(
-                  label: 'Score',
-                  value: teamStats.skillsScoreLabel,
-                  onTap: () {
-                    openSolarTeamProfileForSummary(context, account.team);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _CompactStatBlock(
-                  label: 'Driver',
-                  value: teamStats.driverScoreLabel,
-                  onTap: () {
-                    openSolarTeamProfileForSummary(context, account.team);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _CompactStatBlock(
-                  label: 'Prog',
-                  value: teamStats.programmingScoreLabel,
-                  onTap: () {
-                    openSolarTeamProfileForSummary(context, account.team);
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 14,
-            runSpacing: 6,
-            children: <Widget>[
-              _InlineMeta(
-                label: 'Win rate',
-                value: winRate == null
-                    ? '--'
-                    : '${winRate.toStringAsFixed(0)}%',
-              ),
-              _InlineMeta(label: 'Ordinal', value: teamStats.ordinalLabel),
-              _InlineMeta(
-                label: 'Status',
-                value: account.team.registered ? 'Live' : 'Pending',
-              ),
-            ],
-          ),
-          if (teamStats.errorMessage != null) ...<Widget>[
-            const SizedBox(height: 10),
-            Text(
-              teamStats.errorMessage!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF8D90A7),
-                fontSize: 12,
-                height: 1.45,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CompactStatBlock extends StatelessWidget {
-  const _CompactStatBlock({
-    required this.label,
-    required this.value,
-    this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8F8FD),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF9FA1B5),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF24243A),
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.7,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InlineMeta extends StatelessWidget {
-  const _InlineMeta({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text(
-          '$label ',
-          style: const TextStyle(
-            color: Color(0xFF9FA1B5),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Color(0xFF24243A),
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
     );
   }
 }

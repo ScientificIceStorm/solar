@@ -26,8 +26,20 @@ class SolarMlRankingService {
         .map((entry) => entry.maxProgrammingScore.toDouble())
         .where((value) => value > 0)
         .toList(growable: false);
+    final worldRankValues = worldSkills
+        .map((entry) => entry.rank.toDouble())
+        .where((value) => value > 0)
+        .toList(growable: false);
+    final muValues = openSkillEntries
+        .map((entry) => entry.openSkillMu)
+        .where((value) => value > 0)
+        .toList(growable: false);
     final ordinalValues = openSkillEntries
         .map((entry) => entry.openSkillOrdinal)
+        .where((value) => value > 0)
+        .toList(growable: false);
+    final sigmaValues = openSkillEntries
+        .map((entry) => entry.openSkillSigma)
         .where((value) => value > 0)
         .toList(growable: false);
     final ccwmValues = openSkillEntries
@@ -64,10 +76,19 @@ class SolarMlRankingService {
                 entry.maxProgrammingScore.toDouble(),
                 programmingValues,
               );
+              final worldRankNorm = entry.rank <= 0
+                  ? 0.5
+                  : _reverseNormalize(entry.rank.toDouble(), worldRankValues);
+              final muNorm = openSkill == null
+                  ? 0.5
+                  : _normalize(openSkill.openSkillMu, muValues);
               final ordinalNorm = _normalize(
                 openSkill?.openSkillOrdinal ?? 0,
                 ordinalValues,
               );
+              final sigmaNorm = openSkill == null
+                  ? 0.34
+                  : _reverseNormalize(openSkill.openSkillSigma, sigmaValues);
               final ccwmNorm = _normalize(openSkill?.ccwm ?? 0, ccwmValues);
               final awpNorm = _normalize(
                 openSkill?.awpPerMatch ?? 0,
@@ -78,23 +99,39 @@ class SolarMlRankingService {
                 (openSkill?.opr ?? 0) - (openSkill?.dpr ?? 0),
                 netValues,
               );
-              final rawScore =
-                  (combinedNorm * 0.28) +
-                  (driverNorm * 0.12) +
-                  (programmingNorm * 0.12) +
-                  (ordinalNorm * 0.18) +
-                  (ccwmNorm * 0.10) +
-                  (awpNorm * 0.08) +
-                  (wpNorm * 0.06) +
-                  (netNorm * 0.06);
+
+              final baseRating =
+                  openSkill?.openSkillOrdinal ??
+                  (18 + (combinedNorm * 5.0) + (worldRankNorm * 2.5));
+              final solarizeAdjustment =
+                  ((muNorm - 0.5) * 2.4) +
+                  ((ccwmNorm - 0.5) * 2.8) +
+                  ((netNorm - 0.5) * 2.4) +
+                  ((wpNorm - 0.5) * 2.0) +
+                  ((awpNorm - 0.5) * 1.6) +
+                  ((combinedNorm - 0.5) * 1.5) +
+                  ((driverNorm - 0.5) * 0.8) +
+                  ((programmingNorm - 0.5) * 0.5) +
+                  ((worldRankNorm - 0.5) * 0.9);
+              final rating = baseRating + solarizeAdjustment;
               final stability = openSkill == null
-                  ? 52.0
+                  ? 46.0
                   : ((1 - (openSkill.openSkillSigma / 12)).clamp(0.25, 1.0) *
                         100);
+              final projectedWinShare =
+                  (48 +
+                          ((ordinalNorm - 0.5) * 28) +
+                          ((ccwmNorm - 0.5) * 12) +
+                          ((wpNorm - 0.5) * 10) +
+                          ((sigmaNorm - 0.5) * 8))
+                      .clamp(28, 88)
+                      .toDouble();
               final ceilingScore =
-                  (entry.combinedScore * 0.58) +
-                  (entry.maxDriverScore * 0.22) +
-                  (entry.maxProgrammingScore * 0.20);
+                  (entry.combinedScore * 0.34) +
+                  (entry.maxDriverScore * 0.18) +
+                  (entry.maxProgrammingScore * 0.08) +
+                  (((openSkill?.opr ?? 0).clamp(0, 90)) * 0.22) +
+                  ((((openSkill?.ccwm ?? 0) + 12).clamp(0, 24)) * 0.18);
 
               return SolarMlRankingEntry(
                 rank: 0,
@@ -105,8 +142,8 @@ class SolarMlRankingService {
                 city: entry.city,
                 region: entry.region,
                 country: entry.country,
-                mlRating: 100 + (rawScore * 100),
-                projectedWinShare: 42 + (rawScore * 48),
+                mlRating: rating,
+                projectedWinShare: projectedWinShare,
                 ceilingScore: ceilingScore,
                 stability: stability,
                 worldRank: entry.rank <= 0 ? null : entry.rank,
@@ -114,6 +151,8 @@ class SolarMlRankingService {
                 programmingScore: entry.programmingScore,
                 driverScore: entry.driverScore,
                 ordinal: openSkill?.openSkillOrdinal,
+                openSkillMu: openSkill?.openSkillMu,
+                openSkillSigma: openSkill?.openSkillSigma,
                 ccwm: openSkill?.ccwm,
                 opr: openSkill?.opr,
                 dpr: openSkill?.dpr,
@@ -149,6 +188,8 @@ class SolarMlRankingService {
         programmingScore: item.programmingScore,
         driverScore: item.driverScore,
         ordinal: item.ordinal,
+        openSkillMu: item.openSkillMu,
+        openSkillSigma: item.openSkillSigma,
         ccwm: item.ccwm,
         opr: item.opr,
         dpr: item.dpr,
@@ -167,5 +208,9 @@ class SolarMlRankingService {
       return 0.5;
     }
     return ((value - minValue) / (maxValue - minValue)).clamp(0.0, 1.0);
+  }
+
+  double _reverseNormalize(double value, List<double> population) {
+    return 1 - _normalize(value, population);
   }
 }

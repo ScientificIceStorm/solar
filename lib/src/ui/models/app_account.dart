@@ -1,5 +1,9 @@
 import '../../models/robot_events_models.dart';
 
+enum AppThemeModePreference { system, light, dark }
+
+enum AppCompetitionPreference { vexV5, vexIQ, vexU, vexAI }
+
 class AppAccount {
   const AppAccount({
     required this.fullName,
@@ -66,6 +70,8 @@ class AppSettings {
     required this.hasCompletedOnboarding,
     this.currentUserEmail,
     this.preferredSeasonId,
+    this.themeModePreference = AppThemeModePreference.system,
+    this.competitionPreference = AppCompetitionPreference.vexV5,
   });
 
   static const empty = AppSettings(hasCompletedOnboarding: false);
@@ -73,11 +79,15 @@ class AppSettings {
   final bool hasCompletedOnboarding;
   final String? currentUserEmail;
   final int? preferredSeasonId;
+  final AppThemeModePreference themeModePreference;
+  final AppCompetitionPreference competitionPreference;
 
   AppSettings copyWith({
     bool? hasCompletedOnboarding,
     String? currentUserEmail,
     int? preferredSeasonId,
+    AppThemeModePreference? themeModePreference,
+    AppCompetitionPreference? competitionPreference,
     bool clearCurrentUserEmail = false,
     bool clearPreferredSeasonId = false,
   }) {
@@ -90,6 +100,9 @@ class AppSettings {
       preferredSeasonId: clearPreferredSeasonId
           ? null
           : preferredSeasonId ?? this.preferredSeasonId,
+      themeModePreference: themeModePreference ?? this.themeModePreference,
+      competitionPreference:
+          competitionPreference ?? this.competitionPreference,
     );
   }
 
@@ -104,6 +117,10 @@ class AppSettings {
       preferredSeasonId: json['preferredSeasonId'] is num
           ? (json['preferredSeasonId'] as num).toInt()
           : null,
+      themeModePreference: _themeModeFromJson(json['themeModePreference']),
+      competitionPreference: _competitionFromJson(
+        json['competitionPreference'],
+      ),
     );
   }
 
@@ -112,6 +129,28 @@ class AppSettings {
       'hasCompletedOnboarding': hasCompletedOnboarding,
       'currentUserEmail': currentUserEmail,
       'preferredSeasonId': preferredSeasonId,
+      'themeModePreference': themeModePreference.name,
+      'competitionPreference': competitionPreference.name,
     };
   }
+}
+
+AppThemeModePreference _themeModeFromJson(Object? value) {
+  final raw = (value as String?)?.trim();
+  for (final mode in AppThemeModePreference.values) {
+    if (mode.name == raw) {
+      return mode;
+    }
+  }
+  return AppThemeModePreference.system;
+}
+
+AppCompetitionPreference _competitionFromJson(Object? value) {
+  final raw = (value as String?)?.trim();
+  for (final competition in AppCompetitionPreference.values) {
+    if (competition.name == raw) {
+      return competition;
+    }
+  }
+  return AppCompetitionPreference.vexV5;
 }
