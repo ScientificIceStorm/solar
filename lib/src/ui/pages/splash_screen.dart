@@ -8,7 +8,6 @@ import '../widgets/solar_screen_background.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 import 'reset_password_screen.dart';
-import 'sign_in_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, this.isBootstrapping = false});
@@ -41,8 +40,6 @@ class _SplashScreenState extends State<SplashScreen> {
           ? const ResetPasswordScreen(forceRecoveryMode: true)
           : controller.isSignedIn
           ? const HomeScreen()
-          : controller.hasCompletedOnboarding
-          ? const SignInScreen()
           : const OnboardingScreen();
 
       Navigator.of(

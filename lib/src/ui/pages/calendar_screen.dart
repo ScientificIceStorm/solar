@@ -1,17 +1,70 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../app/app_session_controller.dart';
 import '../../app/solar_app_scope.dart';
 import '../../models/robot_events_models.dart';
+import '../models/app_account.dart';
 import '../models/team_stats_snapshot.dart';
-import 'event_details_screen.dart';
-import '../widgets/solar_event_photo.dart';
-import '../widgets/solar_page_scaffold.dart';
+import '../models/worlds_schedule_models.dart';
 import '../widgets/solar_navigation.dart';
+import '../widgets/solar_page_scaffold.dart';
+import '../widgets/worlds_schedule_section.dart';
+import 'event_details_screen.dart';
 
-class CalendarScreen extends StatelessWidget {
+enum _CalendarView { team, worlds }
+
+enum _TeamCalendarPresentation { list, calendar }
+
+class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
   static const routeName = '/calendar';
+
+  @override
+  State<CalendarScreen> createState() => _CalendarScreenState();
+}
+
+class _CalendarScreenState extends State<CalendarScreen> {
+  AppSessionController? _sessionController;
+  _CalendarView _selectedView = _CalendarView.team;
+  _TeamCalendarPresentation _teamPresentation =
+      _TeamCalendarPresentation.list;
+  DateTime _focusedMonth = _monthStart(DateTime.now());
+  DateTime _selectedDay = _dateOnly(DateTime.now())!;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = SolarAppScope.of(context);
+    if (!identical(_sessionController, controller)) {
+      _sessionController = controller;
+      unawaited(controller.preloadSearchEvents());
+    }
+  }
+
+  void _shiftMonth(int offset) {
+    final nextMonth = _monthStart(
+      DateTime(_focusedMonth.year, _focusedMonth.month + offset, 1),
+    );
+    final lastDay = DateTime(nextMonth.year, nextMonth.month + 1, 0).day;
+    setState(() {
+      _focusedMonth = nextMonth;
+      _selectedDay = DateTime(
+        nextMonth.year,
+        nextMonth.month,
+        _selectedDay.day.clamp(1, lastDay),
+      );
+    });
+  }
+
+  void _selectDay(DateTime day) {
+    setState(() {
+      _selectedDay = _dateOnly(day)!;
+      _focusedMonth = _monthStart(day);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,28 +83,64 @@ class CalendarScreen extends StatelessWidget {
 
           final teamStats =
               controller.teamStats ?? TeamStatsSnapshot(team: account.team);
+          final teamEvents = _teamCalendarEvents(teamStats);
+          final mergedEvents = _mergeCalendarEvents(
+            teamEvents: teamEvents,
+            allEvents: controller.preloadedSearchEvents,
+          );
 
           return RefreshIndicator(
             color: Colors.black,
-            onRefresh: controller.refreshTeamStats,
+            onRefresh: () async {
+              await controller.refreshTeamStats();
+              await controller.preloadSearchEvents(force: true);
+            },
             child: StretchingOverscrollIndicator(
               axisDirection: AxisDirection.down,
               child: ListView(
                 physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics(),
                 ),
-                padding: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.only(bottom: 28),
                 children: <Widget>[
-                  _CalendarSection(
-                    title: 'Upcoming',
-                    emptyLabel: 'No upcoming events for this team right now.',
-                    events: teamStats.futureEvents,
+                  _CalendarViewBar(
+                    selectedView: _selectedView,
+                    onSelected: (view) {
+                      setState(() {
+                        _selectedView = view;
+                      });
+                    },
                   ),
                   const SizedBox(height: 22),
-                  _CalendarSection(
-                    title: 'Past',
-                    emptyLabel: 'No completed events yet.',
-                    events: teamStats.pastEvents,
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: _selectedView == _CalendarView.team
+                        ? _TeamCalendarBody(
+                            key: const ValueKey<String>('team-calendar'),
+                            teamStats: teamStats,
+                            teamPresentation: _teamPresentation,
+                            onPresentationChanged: (presentation) {
+                              setState(() {
+                                _teamPresentation = presentation;
+                              });
+                            },
+                            focusedMonth: _focusedMonth,
+                            selectedDay: _selectedDay,
+                            mergedEvents: mergedEvents,
+                            isLoadingAllEvents:
+                                controller.isPreloadingSearchEvents &&
+                                controller.preloadedSearchEvents.isEmpty,
+                            onPreviousMonth: () => _shiftMonth(-1),
+                            onNextMonth: () => _shiftMonth(1),
+                            onDaySelected: _selectDay,
+                          )
+                        : _WorldsCalendarBody(
+                            key: const ValueKey<String>('worlds-calendar'),
+                            defaultTrack: _defaultWorldsTrack(
+                              controller.competitionPreference,
+                              teamStats.team.grade,
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -60,6 +149,693 @@ class CalendarScreen extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+class _CalendarViewBar extends StatelessWidget {
+  const _CalendarViewBar({
+    required this.selectedView,
+    required this.onSelected,
+  });
+
+  final _CalendarView selectedView;
+  final ValueChanged<_CalendarView> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F2F6),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: _CalendarView.values.map((view) {
+          final selected = view == selectedView;
+          final label = view == _CalendarView.team ? 'Team' : 'Worlds 2026';
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onSelected(view),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: selected
+                      ? const <BoxShadow>[
+                          BoxShadow(
+                            color: Color(0x0E000000),
+                            blurRadius: 16,
+                            offset: Offset(0, 8),
+                          ),
+                        ]
+                      : const <BoxShadow>[],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF24243A)
+                        : const Color(0xFF7A7F92),
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(growable: false),
+      ),
+    );
+  }
+}
+
+class _TeamCalendarBody extends StatelessWidget {
+  const _TeamCalendarBody({
+    required this.teamStats,
+    required this.teamPresentation,
+    required this.onPresentationChanged,
+    required this.focusedMonth,
+    required this.selectedDay,
+    required this.mergedEvents,
+    required this.isLoadingAllEvents,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.onDaySelected,
+    super.key,
+  });
+
+  final TeamStatsSnapshot teamStats;
+  final _TeamCalendarPresentation teamPresentation;
+  final ValueChanged<_TeamCalendarPresentation> onPresentationChanged;
+  final DateTime focusedMonth;
+  final DateTime selectedDay;
+  final List<_CalendarEventItem> mergedEvents;
+  final bool isLoadingAllEvents;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final ValueChanged<DateTime> onDaySelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _TeamPresentationBar(
+          selectedPresentation: teamPresentation,
+          onSelected: onPresentationChanged,
+        ),
+        const SizedBox(height: 18),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: teamPresentation == _TeamCalendarPresentation.list
+              ? _TeamCalendarListBody(
+                  key: const ValueKey<String>('team-calendar-list'),
+                  teamStats: teamStats,
+                )
+              : _TeamCalendarMonthBody(
+                  key: const ValueKey<String>('team-calendar-month'),
+                  focusedMonth: focusedMonth,
+                  selectedDay: selectedDay,
+                  mergedEvents: mergedEvents,
+                  isLoadingAllEvents: isLoadingAllEvents,
+                  onPreviousMonth: onPreviousMonth,
+                  onNextMonth: onNextMonth,
+                  onDaySelected: onDaySelected,
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeamPresentationBar extends StatelessWidget {
+  const _TeamPresentationBar({
+    required this.selectedPresentation,
+    required this.onSelected,
+  });
+
+  final _TeamCalendarPresentation selectedPresentation;
+  final ValueChanged<_TeamCalendarPresentation> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: _TeamCalendarPresentation.values.map((presentation) {
+        final selected = presentation == selectedPresentation;
+        final label = presentation == _TeamCalendarPresentation.list
+            ? 'List'
+            : 'Calendar';
+        return Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: InkWell(
+            onTap: () => onSelected(presentation),
+            borderRadius: BorderRadius.circular(999),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFF16182C) : Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xFF16182C)
+                      : const Color(0xFFE3E5EF),
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0xFF5F6478),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+}
+
+class _TeamCalendarListBody extends StatelessWidget {
+  const _TeamCalendarListBody({
+    required this.teamStats,
+    super.key,
+  });
+
+  final TeamStatsSnapshot teamStats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _CalendarSection(
+          title: 'Upcoming',
+          emptyLabel: 'No upcoming events for this team right now.',
+          events: teamStats.futureEvents,
+        ),
+        const SizedBox(height: 24),
+        _CalendarSection(
+          title: 'Past',
+          emptyLabel: 'No completed events yet.',
+          events: teamStats.pastEvents,
+        ),
+      ],
+    );
+  }
+}
+
+class _TeamCalendarMonthBody extends StatelessWidget {
+  const _TeamCalendarMonthBody({
+    required this.focusedMonth,
+    required this.selectedDay,
+    required this.mergedEvents,
+    required this.isLoadingAllEvents,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.onDaySelected,
+    super.key,
+  });
+
+  final DateTime focusedMonth;
+  final DateTime selectedDay;
+  final List<_CalendarEventItem> mergedEvents;
+  final bool isLoadingAllEvents;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final ValueChanged<DateTime> onDaySelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final monthBuckets = _bucketEventsByDay(mergedEvents, focusedMonth);
+    final monthDays = _monthGridDays(focusedMonth);
+    final selectedEvents =
+        monthBuckets[_dayKey(selectedDay)] ?? const <_CalendarEventItem>[];
+    final monthEventIds = <int>{
+      for (final events in monthBuckets.values)
+        for (final event in events) event.event.id,
+    };
+    final monthTeamEventIds = <int>{
+      for (final events in monthBuckets.values)
+        for (final event in events)
+          if (event.isTeamEvent) event.event.id,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    _monthYearLabel(focusedMonth),
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${monthTeamEventIds.length} team events • ${monthEventIds.length} VEX events',
+                    style: const TextStyle(
+                      color: Color(0xFF7C8093),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _MonthArrowButton(
+              icon: Icons.chevron_left_rounded,
+              onTap: onPreviousMonth,
+            ),
+            const SizedBox(width: 8),
+            _MonthArrowButton(
+              icon: Icons.chevron_right_rounded,
+              onTap: onNextMonth,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: const Color(0xFFE3E6F0)),
+          ),
+          child: Column(
+            children: <Widget>[
+              const _WeekdayHeader(),
+              const SizedBox(height: 10),
+              ...List<Widget>.generate(6, (rowIndex) {
+                final start = rowIndex * 7;
+                final rowDays = monthDays.skip(start).take(7).toList();
+                return Padding(
+                  padding: EdgeInsets.only(bottom: rowIndex == 5 ? 0 : 6),
+                  child: Row(
+                    children: rowDays.map((day) {
+                      final events = monthBuckets[_dayKey(day)] ??
+                          const <_CalendarEventItem>[];
+                      return Expanded(
+                        child: _CalendarDayCell(
+                          day: day,
+                          focusedMonth: focusedMonth,
+                          selectedDay: selectedDay,
+                          events: events,
+                          onTap: () => onDaySelected(day),
+                        ),
+                      );
+                    }).toList(growable: false),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                _selectedDayLabel(selectedDay),
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            if (isLoadingAllEvents)
+              const Text(
+                'Loading season events...',
+                style: TextStyle(
+                  color: Color(0xFF8E92A7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (selectedEvents.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE3E6F0)),
+            ),
+            child: const Text(
+              'No events scheduled on this day.',
+              style: TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 14,
+                height: 1.45,
+              ),
+            ),
+          )
+        else
+          ...selectedEvents.map(_CalendarAgendaRow.new),
+      ],
+    );
+  }
+}
+
+class _CalendarDayCell extends StatelessWidget {
+  const _CalendarDayCell({
+    required this.day,
+    required this.focusedMonth,
+    required this.selectedDay,
+    required this.events,
+    required this.onTap,
+  });
+
+  final DateTime day;
+  final DateTime focusedMonth;
+  final DateTime selectedDay;
+  final List<_CalendarEventItem> events;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final inMonth =
+        day.month == focusedMonth.month && day.year == focusedMonth.year;
+    final isSelected = _isSameDay(day, selectedDay);
+    final isToday = _isSameDay(day, DateTime.now());
+    final hasTeamEvent = events.any((event) => event.isTeamEvent);
+    final extraEvents = events.length > 2 ? events.length - 2 : 0;
+
+    return AspectRatio(
+      aspectRatio: 0.9,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 7),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFF16182C)
+                  : inMonth
+                  ? const Color(0xFFF8F8FC)
+                  : const Color(0xFFF2F3F7),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isToday && !isSelected
+                    ? const Color(0xFF2A5FFF)
+                    : Colors.transparent,
+                width: 1.4,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.white
+                        : inMonth
+                        ? const Color(0xFF24243A)
+                        : const Color(0xFFADB1C1),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                if (events.isNotEmpty)
+                  Row(
+                    children: <Widget>[
+                      if (hasTeamEvent)
+                        _EventDot(
+                          color: isSelected
+                              ? const Color(0xFF79A8FF)
+                              : const Color(0xFF2A5FFF),
+                        ),
+                      if (events.any((event) => !event.isTeamEvent))
+                        Padding(
+                          padding: EdgeInsets.only(left: hasTeamEvent ? 4 : 0),
+                          child: _EventDot(
+                            color: isSelected
+                                ? const Color(0xFFE8EBF7)
+                                : const Color(0xFF737991),
+                          ),
+                        ),
+                      if (extraEvents > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 5),
+                          child: Text(
+                            '+$extraEvents',
+                            style: TextStyle(
+                              color: isSelected
+                                  ? const Color(0xFFE8EBF7)
+                                  : const Color(0xFF7A8094),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EventDot extends StatelessWidget {
+  const _EventDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+}
+
+class _WeekdayHeader extends StatelessWidget {
+  const _WeekdayHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = <String>['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    return Row(
+      children: labels.map((label) {
+        return Expanded(
+          child: Center(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+}
+
+class _MonthArrowButton extends StatelessWidget {
+  const _MonthArrowButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE3E6F0)),
+        ),
+        child: Icon(icon, color: const Color(0xFF24243A)),
+      ),
+    );
+  }
+}
+
+class _CalendarAgendaRow extends StatelessWidget {
+  const _CalendarAgendaRow(this.item);
+
+  final _CalendarEventItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final event = item.event;
+    return InkWell(
+      onTap: () {
+        Navigator.of(
+          context,
+        ).pushNamed(EventDetailsScreen.routeName, arguments: event);
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE3E6F0)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 10,
+              height: 54,
+              decoration: BoxDecoration(
+                color: item.isTeamEvent
+                    ? const Color(0xFF2A5FFF)
+                    : const Color(0xFF9BA1B5),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    event.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _eventLocation(event.location),
+                    style: const TextStyle(
+                      color: Color(0xFF6E7388),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    _eventSpan(event),
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: item.isTeamEvent
+                        ? const Color(0xFFE8F0FF)
+                        : const Color(0xFFF1F2F6),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    item.isTeamEvent ? 'TEAM' : 'VEX',
+                    style: TextStyle(
+                      color: item.isTeamEvent
+                          ? const Color(0xFF2A5FFF)
+                          : const Color(0xFF697087),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Color(0xFF8E92A7),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorldsCalendarBody extends StatelessWidget {
+  const _WorldsCalendarBody({
+    required this.defaultTrack,
+    super.key,
+  });
+
+  final WorldsScheduleTrack defaultTrack;
+
+  @override
+  Widget build(BuildContext context) {
+    return WorldsScheduleSection(defaultTrack: defaultTrack);
+  }
+}
+
+WorldsScheduleTrack _defaultWorldsTrack(
+  AppCompetitionPreference preference,
+  String grade,
+) {
+  switch (preference) {
+    case AppCompetitionPreference.vexIQ:
+      return WorldsScheduleTrack.viqrc;
+    case AppCompetitionPreference.vexU:
+      return WorldsScheduleTrack.v5rcMiddleSchoolAndVurc;
+    case AppCompetitionPreference.vexAI:
+    case AppCompetitionPreference.vexV5:
+      final normalized = grade.trim().toLowerCase();
+      if (normalized.contains('middle')) {
+        return WorldsScheduleTrack.v5rcMiddleSchoolAndVurc;
+      }
+      return WorldsScheduleTrack.v5rcHighSchool;
   }
 }
 
@@ -95,7 +871,8 @@ class _CalendarSection extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE7E8F1)),
             ),
             child: Text(
               emptyLabel,
@@ -126,114 +903,83 @@ class _CalendarEventTile extends StatelessWidget {
           context,
         ).pushNamed(EventDetailsScreen.routeName, arguments: event);
       },
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        height: 184,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 22,
-              offset: Offset(0, 14),
-            ),
-          ],
+          color: Colors.white.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE7E8F1)),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              SolarEventPhoto(
-                location: event.location,
-                overlay: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: <Color>[
-                        Colors.black.withValues(alpha: 0.06),
-                        Colors.black.withValues(alpha: 0.08),
-                        Colors.black.withValues(alpha: 0.58),
-                      ],
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _CalendarDateChip(date: event.start),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    event.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      height: 1.15,
                     ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _CalendarDateTile(date: event.start, dark: true),
-                    const Spacer(),
-                    Text(
-                      event.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        height: 1.08,
-                        letterSpacing: -0.4,
-                      ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _eventLocation(event.location),
+                    style: const TextStyle(
+                      color: Color(0xFF6E7388),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            _eventLocation(event.location),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _eventSpan(event),
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.72),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _eventSpan(event),
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Color(0xFF8E92A7),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _CalendarDateTile extends StatelessWidget {
-  const _CalendarDateTile({required this.date, this.dark = false});
+class _CalendarDateChip extends StatelessWidget {
+  const _CalendarDateChip({required this.date});
 
   final DateTime? date;
-  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     final label = _eventDateTile(date);
     return Container(
-      width: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      width: 66,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        color: dark
-            ? Colors.white.withValues(alpha: 0.92)
-            : const Color(0xFFF8F8FD),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: <Widget>[
@@ -241,7 +987,7 @@ class _CalendarDateTile extends StatelessWidget {
             label.day,
             style: const TextStyle(
               color: Color(0xFF24243A),
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.w700,
               height: 1,
             ),
@@ -252,7 +998,7 @@ class _CalendarDateTile extends StatelessWidget {
             style: const TextStyle(
               color: Color(0xFF8E92A7),
               fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
             ),
           ),
@@ -293,8 +1039,8 @@ String _eventLocation(LocationSummary location) {
 }
 
 String _eventSpan(EventSummary event) {
-  final start = event.start;
-  final end = event.end;
+  final start = event.start?.toLocal();
+  final end = event.end?.toLocal();
   if (start == null && end == null) {
     return 'Date pending';
   }
@@ -322,4 +1068,192 @@ String _eventSpan(EventSummary event) {
   }
 
   return format(start ?? end!);
+}
+
+class _CalendarEventItem {
+  const _CalendarEventItem({
+    required this.event,
+    required this.isTeamEvent,
+  });
+
+  final EventSummary event;
+  final bool isTeamEvent;
+}
+
+List<EventSummary> _teamCalendarEvents(TeamStatsSnapshot teamStats) {
+  final source = teamStats.allEvents.isNotEmpty
+      ? teamStats.allEvents
+      : <EventSummary>[
+          ...teamStats.futureEvents,
+          ...teamStats.pastEvents,
+        ];
+  final deduped = <int, EventSummary>{};
+  for (final event in source) {
+    if (_isLeagueEvent(event)) {
+      continue;
+    }
+    deduped[event.id] = event;
+  }
+  return deduped.values.toList(growable: false)
+    ..sort((a, b) {
+      final aStart = a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aStart.compareTo(bStart);
+    });
+}
+
+List<_CalendarEventItem> _mergeCalendarEvents({
+  required List<EventSummary> teamEvents,
+  required List<EventSummary> allEvents,
+}) {
+  final teamIds = <int>{for (final event in teamEvents) event.id};
+  final merged = <int, _CalendarEventItem>{
+    for (final event in allEvents)
+      if (!_isLeagueEvent(event))
+      event.id: _CalendarEventItem(
+        event: event,
+        isTeamEvent: teamIds.contains(event.id),
+      ),
+  };
+  for (final event in teamEvents) {
+    if (_isLeagueEvent(event)) {
+      continue;
+    }
+    merged[event.id] = _CalendarEventItem(event: event, isTeamEvent: true);
+  }
+  return merged.values.toList(growable: false)
+    ..sort((a, b) {
+      if (a.isTeamEvent != b.isTeamEvent) {
+        return a.isTeamEvent ? -1 : 1;
+      }
+      final aStart = a.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bStart = b.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dateCompare = aStart.compareTo(bStart);
+      if (dateCompare != 0) {
+        return dateCompare;
+      }
+      return a.event.name.compareTo(b.event.name);
+    });
+}
+
+bool _isLeagueEvent(EventSummary event) {
+  return event.name.trim().toLowerCase().contains('league');
+}
+
+Map<int, List<_CalendarEventItem>> _bucketEventsByDay(
+  List<_CalendarEventItem> events,
+  DateTime month,
+) {
+  final monthStart = _monthStart(month);
+  final monthEnd = DateTime(month.year, month.month + 1, 0);
+  final buckets = <int, List<_CalendarEventItem>>{};
+
+  for (final item in events) {
+    final start = _dateOnly(item.event.start ?? item.event.end);
+    final end = _dateOnly(item.event.end ?? item.event.start);
+    if (start == null || end == null) {
+      continue;
+    }
+
+    var cursor = start.isBefore(monthStart) ? monthStart : start;
+    final last = end.isAfter(monthEnd) ? monthEnd : end;
+    while (!cursor.isAfter(last)) {
+      final key = _dayKey(cursor);
+      final bucket = buckets.putIfAbsent(key, () => <_CalendarEventItem>[]);
+      bucket.add(item);
+      cursor = cursor.add(const Duration(days: 1));
+    }
+  }
+
+  for (final bucket in buckets.values) {
+    bucket.sort((a, b) {
+      if (a.isTeamEvent != b.isTeamEvent) {
+        return a.isTeamEvent ? -1 : 1;
+      }
+      final aStart = a.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bStart = b.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dateCompare = aStart.compareTo(bStart);
+      if (dateCompare != 0) {
+        return dateCompare;
+      }
+      return a.event.name.compareTo(b.event.name);
+    });
+  }
+
+  return buckets;
+}
+
+List<DateTime> _monthGridDays(DateTime month) {
+  final firstOfMonth = _monthStart(month);
+  final leadingDays = firstOfMonth.weekday % 7;
+  final gridStart = firstOfMonth.subtract(Duration(days: leadingDays));
+  return List<DateTime>.generate(
+    42,
+    (index) => gridStart.add(Duration(days: index)),
+    growable: false,
+  );
+}
+
+DateTime _monthStart(DateTime value) {
+  return DateTime(value.year, value.month);
+}
+
+DateTime? _dateOnly(DateTime? value) {
+  if (value == null) {
+    return null;
+  }
+  return DateTime(value.year, value.month, value.day);
+}
+
+bool _isSameDay(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+int _dayKey(DateTime day) {
+  return (day.year * 10000) + (day.month * 100) + day.day;
+}
+
+String _monthYearLabel(DateTime month) {
+  const months = <String>[
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${months[month.month - 1]} ${month.year}';
+}
+
+String _selectedDayLabel(DateTime day) {
+  const weekdays = <String>[
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  const months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${weekdays[day.weekday - 1]}, ${months[day.month - 1]} ${day.day}';
 }

@@ -72,6 +72,10 @@ class AppSettings {
     this.preferredSeasonId,
     this.themeModePreference = AppThemeModePreference.system,
     this.competitionPreference = AppCompetitionPreference.vexV5,
+    this.dismissedWorldsScheduleAnnouncementId,
+    this.notificationCenterSeenAtMillis,
+    this.favoriteTeamNumbers = const <String>[],
+    this.developerScrimmageEnabled = false,
   });
 
   static const empty = AppSettings(hasCompletedOnboarding: false);
@@ -81,6 +85,10 @@ class AppSettings {
   final int? preferredSeasonId;
   final AppThemeModePreference themeModePreference;
   final AppCompetitionPreference competitionPreference;
+  final String? dismissedWorldsScheduleAnnouncementId;
+  final int? notificationCenterSeenAtMillis;
+  final List<String> favoriteTeamNumbers;
+  final bool developerScrimmageEnabled;
 
   AppSettings copyWith({
     bool? hasCompletedOnboarding,
@@ -88,8 +96,14 @@ class AppSettings {
     int? preferredSeasonId,
     AppThemeModePreference? themeModePreference,
     AppCompetitionPreference? competitionPreference,
+    String? dismissedWorldsScheduleAnnouncementId,
+    int? notificationCenterSeenAtMillis,
+    List<String>? favoriteTeamNumbers,
+    bool? developerScrimmageEnabled,
     bool clearCurrentUserEmail = false,
     bool clearPreferredSeasonId = false,
+    bool clearDismissedWorldsScheduleAnnouncementId = false,
+    bool clearNotificationCenterSeenAtMillis = false,
   }) {
     return AppSettings(
       hasCompletedOnboarding:
@@ -103,6 +117,18 @@ class AppSettings {
       themeModePreference: themeModePreference ?? this.themeModePreference,
       competitionPreference:
           competitionPreference ?? this.competitionPreference,
+      dismissedWorldsScheduleAnnouncementId:
+          clearDismissedWorldsScheduleAnnouncementId
+          ? null
+          : dismissedWorldsScheduleAnnouncementId ??
+                this.dismissedWorldsScheduleAnnouncementId,
+      notificationCenterSeenAtMillis: clearNotificationCenterSeenAtMillis
+          ? null
+          : notificationCenterSeenAtMillis ??
+                this.notificationCenterSeenAtMillis,
+      favoriteTeamNumbers: favoriteTeamNumbers ?? this.favoriteTeamNumbers,
+      developerScrimmageEnabled:
+          developerScrimmageEnabled ?? this.developerScrimmageEnabled,
     );
   }
 
@@ -121,6 +147,25 @@ class AppSettings {
       competitionPreference: _competitionFromJson(
         json['competitionPreference'],
       ),
+      dismissedWorldsScheduleAnnouncementId:
+          (json['dismissedWorldsScheduleAnnouncementId'] as String?)
+                  ?.trim()
+                  .isEmpty ??
+              true
+          ? null
+          : (json['dismissedWorldsScheduleAnnouncementId'] as String).trim(),
+      notificationCenterSeenAtMillis:
+          json['notificationCenterSeenAtMillis'] is num
+          ? (json['notificationCenterSeenAtMillis'] as num).toInt()
+          : null,
+      favoriteTeamNumbers:
+          ((json['favoriteTeamNumbers'] as List<Object?>?) ?? const <Object?>[])
+              .whereType<String>()
+              .map((value) => value.trim().toUpperCase())
+              .where((value) => value.isNotEmpty)
+              .toList(growable: false),
+      developerScrimmageEnabled:
+          (json['developerScrimmageEnabled'] as bool?) ?? false,
     );
   }
 
@@ -131,6 +176,11 @@ class AppSettings {
       'preferredSeasonId': preferredSeasonId,
       'themeModePreference': themeModePreference.name,
       'competitionPreference': competitionPreference.name,
+      'dismissedWorldsScheduleAnnouncementId':
+          dismissedWorldsScheduleAnnouncementId,
+      'notificationCenterSeenAtMillis': notificationCenterSeenAtMillis,
+      'favoriteTeamNumbers': favoriteTeamNumbers,
+      'developerScrimmageEnabled': developerScrimmageEnabled,
     };
   }
 }

@@ -31,7 +31,10 @@ Supported keys:
   "robotEventsApiKey": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiMzNkMTc3MWU2YzU3MGUzNWMzMzlkYmQxNTU4MTA3NGFiNzRlMmIwOGQ3Y2E5OGJmMjM4Y2NjZDQ5M2E2ZjcxNGQwZTIxNjdjZGIyM2I0OTUiLCJpYXQiOjE3NjczNzg2NjguOTU2MTkwMSwibmJmIjoxNzY3Mzc4NjY4Ljk1NjE5MTEsImV4cCI6MjcxNDA2MzQ2OC45NTAzNDQxLCJzdWIiOiIxNTAxNjciLCJzY29wZXMiOltdfQ.KdxeT2svi9XmouJ1QQiRbf9cEmmbaL04iGahh79P9cZM4xeUMvQi7veD4ypPWGX5Ay_qt0sPS1Aup83emLZ4-se09Prt7ua4IyKdHfOeFhbfJUrzJoSX09CJDpdAD2Q_HC8AILgkiRWJ7rB-nNHEgbWspbONHgoKw-3hBWl8ylm2NizK4dkAJ0GnGMLCxpAEWTlA4QTx-tEVgmNVz5TopZa-aYIjh-ZjpDoh3LkUT8qi-5ytGRRi_YRk2HhHh_gDWjcQtodYvb6pBbyhnj8hWLdE8LDMlngh7kWNMEVpF0oCj7BrVya6uLSnccq8Lr5JrHwI0NLEphiAuzKXIIb8Wk9_1WalowwHGqesvlJjsQJFk8j2wGiBD3CaNW1LyxlQGlx8ROkOqH5lZ2XhsXKMZ1qqyCZxQ-_Tg5bMmYRZlEJTro6OiMJlqbJykhCMUQcOzXqfPkDurQikqiaImk3z8EkWNP10Zi86JDTH3nlax7lmM4_BsI-UJz1OFaak3XlI-_U0eucc8JWtNFh8Rogsnf6XNlFNCHNfOaJxTO_-TL23tm9WzcQbStQeeawlvZyr8rYVZh7QMloKf1HvhVzBX5lnrUZGxEWvVTRhWSHucSnY3jQAqWd_Fkjwc2aAOaSU2TrpWraMvsXh315mC33YXIihK4qhjKAz7iFcqY0zbQw",
   "robotEventsBaseUrl": "https://www.robotevents.com/api/v2",
   "roboServerBaseUrl": "http://127.0.0.1:8080",
-  "worldSkillsBaseUrl": "https://www.robotevents.com/api"
+  "worldSkillsBaseUrl": "https://www.robotevents.com/api",
+  "supabaseUrl": "https://your-project-ref.supabase.co",
+  "supabaseAnonKey": "sb_publishable_xxx_or_legacy_anon_key",
+  "supabaseRedirectUrl": "dev.minzhang.solarV6://login-callback"
 }
 ```
 
@@ -41,6 +44,14 @@ Environment variable names:
 - `ROBOEVENTS_BASE_URL`
 - `ROBO_SERVER_BASE_URL`
 - `WORLD_SKILLS_BASE_URL`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_KEY`
+- `SUPABASE_REDIRECT_URL`
+
+For mobile email auth and password recovery, add
+`dev.minzhang.solarV6://login-callback` to your Supabase project's redirect URLs.
 
 ## CLI Usage
 
@@ -109,4 +120,24 @@ Run the local checks with:
 flutter test
 flutter analyze
 ```
+
+## Local Website Preview
+
+To preview the rankings in a plain HTML/CSS/JS site on localhost:
+
+```bash
+dart run bin/solar_rankings_site.dart --port 8787
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8787
+```
+
+The site serves:
+
+- `/` for the HTML preview
+- `/api/seasons` for season filters
+- `/api/rankings?seasonId=197&gradeLevel=High%20School` for ranking data
 # solar

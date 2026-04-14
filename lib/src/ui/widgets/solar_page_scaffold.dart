@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/solar_app_scope.dart';
-import '../pages/sign_in_screen.dart';
+import '../pages/onboarding_screen.dart';
 import 'solar_navigation.dart';
 import 'solar_screen_background.dart';
 
@@ -44,9 +44,10 @@ class SolarPageScaffold extends StatelessWidget {
             if (!context.mounted) {
               return;
             }
-            Navigator.of(
-              context,
-            ).pushNamedAndRemoveUntil(SignInScreen.routeName, (route) => false);
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              OnboardingScreen.routeName,
+              (route) => false,
+            );
           },
         ),
         body: SolarScreenBackground(
@@ -101,7 +102,7 @@ class SolarPageScaffold extends StatelessWidget {
               const SizedBox(height: 22),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 114),
+                  padding: const EdgeInsets.only(bottom: 18),
                   child: body,
                 ),
               ),

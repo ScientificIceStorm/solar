@@ -9,6 +9,7 @@ import '../ui/pages/event_details_screen.dart';
 import '../ui/pages/event_schedule_screen.dart';
 import '../ui/pages/event_skills_screen.dart';
 import '../ui/pages/home_screen.dart';
+import '../ui/pages/event_team_screen.dart';
 import '../ui/pages/match_details_screen.dart';
 import '../ui/pages/onboarding_screen.dart';
 import '../ui/pages/profile_screen.dart';
@@ -193,6 +194,13 @@ class _SolarAppState extends State<SolarApp> {
                     return const HomeScreen();
                   }
                   return EventScheduleScreen(event: event);
+                },
+                EventTeamScreen.routeName => (_) {
+                  final args = settings.arguments;
+                  if (args is! EventTeamScreenArgs) {
+                    return const HomeScreen();
+                  }
+                  return EventTeamScreen(args: args);
                 },
                 MatchDetailsScreen.routeName => (_) {
                   final args = settings.arguments;

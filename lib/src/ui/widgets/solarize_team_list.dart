@@ -5,6 +5,7 @@ import '../../models/open_skill_models.dart';
 import '../../models/robot_events_models.dart';
 import '../../models/world_skills_models.dart';
 import '../models/solar_ml_ranking.dart';
+import '../pages/event_team_screen.dart';
 import '../services/solar_ml_ranking_service.dart';
 import 'solar_team_link.dart';
 
@@ -16,6 +17,7 @@ class SolarizeTeamList extends StatelessWidget {
     this.highlightTeamNumber,
     this.emptyLabel = 'No teams available.',
     this.padding = const EdgeInsets.only(bottom: 8),
+    this.event,
   });
 
   final AppSessionController controller;
@@ -23,6 +25,7 @@ class SolarizeTeamList extends StatelessWidget {
   final String? highlightTeamNumber;
   final String emptyLabel;
   final EdgeInsets padding;
+  final EventSummary? event;
 
   static const _solarMlService = SolarMlRankingService();
 
@@ -45,6 +48,7 @@ class SolarizeTeamList extends StatelessWidget {
         !controller.isPreloadingSearchTeams) {
       controller.preloadSearchTeams();
     }
+    controller.ensureSolarizeCoverageForTeams(teams: teams);
 
     return AnimatedBuilder(
       animation: controller,
@@ -72,46 +76,46 @@ class SolarizeTeamList extends StatelessWidget {
             entry.teamNumber.trim().toUpperCase(): entry,
         };
 
-        final rows =
-            teams
-                .map((team) {
-                  final key = team.number.trim().toUpperCase();
-                  final mlEntry = mlByTeam[key];
-                  final openSkillEntry = controller.openSkillEntryForTeam(
-                    team.number,
-                  );
-                  final worldSkillsEntry = worldSkillsByTeam[key];
-                  final sortScore =
-                      mlEntry?.mlRating ??
-                      openSkillEntry?.openSkillOrdinal ??
-                      worldSkillsEntry?.combinedScore.toDouble() ??
-                      0;
+        final rows = teams
+            .map((team) {
+              final key = team.number.trim().toUpperCase();
+              final mlEntry = mlByTeam[key];
+              final openSkillEntry = controller.openSkillEntryForTeam(
+                team.number,
+              );
+              final worldSkillsEntry = worldSkillsByTeam[key];
+              final sortScore =
+                  mlEntry?.solarRating ??
+                  openSkillEntry?.openSkillOrdinal ??
+                  worldSkillsEntry?.combinedScore.toDouble() ??
+                  0;
 
-                  return _SolarizeTeamRowModel(
-                    team: team,
-                    mlEntry: mlEntry,
-                    openSkillEntry: openSkillEntry,
-                    worldSkillsEntry: worldSkillsEntry,
-                    sortScore: sortScore,
-                  );
-                })
-                .toList(growable: false)
-              ..sort((a, b) {
-                final aRank = a.mlEntry?.rank;
-                final bRank = b.mlEntry?.rank;
-                if (aRank != null && bRank != null) {
-                  final rankCompare = aRank.compareTo(bRank);
-                  if (rankCompare != 0) {
-                    return rankCompare;
-                  }
-                }
+              return _SolarizeTeamRowModel(
+                team: team,
+                mlEntry: mlEntry,
+                openSkillEntry: openSkillEntry,
+                worldSkillsEntry: worldSkillsEntry,
+                sortScore: sortScore,
+                event: event,
+              );
+            })
+            .toList(growable: false)
+          ..sort((a, b) {
+            final aRank = a.mlEntry?.rank;
+            final bRank = b.mlEntry?.rank;
+            if (aRank != null && bRank != null) {
+              final rankCompare = aRank.compareTo(bRank);
+              if (rankCompare != 0) {
+                return rankCompare;
+              }
+            }
 
-                final scoreCompare = b.sortScore.compareTo(a.sortScore);
-                if (scoreCompare != 0) {
-                  return scoreCompare;
-                }
-                return a.team.number.compareTo(b.team.number);
-              });
+            final scoreCompare = b.sortScore.compareTo(a.sortScore);
+            if (scoreCompare != 0) {
+              return scoreCompare;
+            }
+            return a.team.number.compareTo(b.team.number);
+          });
 
         return StretchingOverscrollIndicator(
           axisDirection: AxisDirection.down,
@@ -191,6 +195,16 @@ class _SolarizeTeamRow extends StatelessWidget {
                   organization: row.team.organization,
                   robotName: row.team.robotName,
                   grade: row.team.grade,
+                  onTap: row.event == null
+                      ? null
+                      : () {
+                          openSolarEventTeamScreen(
+                            context,
+                            event: row.event!,
+                            team: row.team,
+                            highlightTeamNumber: highlightTeamNumber,
+                          );
+                        },
                   style: TextStyle(
                     color: labelColor,
                     fontSize: 22,
@@ -238,6 +252,7 @@ class _SolarizeTeamRowModel {
     required this.openSkillEntry,
     required this.worldSkillsEntry,
     required this.sortScore,
+    required this.event,
   });
 
   final TeamSummary team;
@@ -245,17 +260,21 @@ class _SolarizeTeamRowModel {
   final OpenSkillCacheEntry? openSkillEntry;
   final WorldSkillsEntry? worldSkillsEntry;
   final double sortScore;
+  final EventSummary? event;
 }
 
 String _metaLabel(_SolarizeTeamRowModel row) {
   final parts = <String>[
     if (row.mlEntry != null) 'Solarize #${row.mlEntry!.rank}',
-    if (row.openSkillEntry != null)
-      'Mu ${row.openSkillEntry!.openSkillMu.toStringAsFixed(1)}',
+    if (row.openSkillEntry != null &&
+        (row.openSkillEntry!.totalWins > 0 ||
+            row.openSkillEntry!.totalLosses > 0 ||
+            row.openSkillEntry!.totalTies > 0))
+      '${row.openSkillEntry!.totalWins}-${row.openSkillEntry!.totalLosses}-${row.openSkillEntry!.totalTies}',
     if (row.worldSkillsEntry != null) 'Skills ${row.worldSkillsEntry!.rank}',
   ];
   if (parts.isEmpty) {
-    return 'Solarize data still loading';
+    return 'Season data pending';
   }
-  return parts.join('  •  ');
+  return parts.join(' | ');
 }

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/solar_app_scope.dart';
+import '../../models/robot_events_models.dart';
 import '../models/team_stats_snapshot.dart';
-import '../widgets/solar_page_scaffold.dart';
 import '../widgets/solar_navigation.dart';
+import '../widgets/solar_page_scaffold.dart';
 import '../widgets/solar_team_overview_card.dart';
 import '../widgets/solar_team_link.dart';
 
@@ -27,8 +30,21 @@ class ProfileScreen extends StatelessWidget {
             return const SizedBox.shrink();
           }
 
+          if (controller.favoriteTeamNumbers.isNotEmpty &&
+              controller.preloadedSearchTeams.isEmpty &&
+              !controller.isPreloadingSearchTeams) {
+            unawaited(controller.preloadSearchTeams());
+          }
+
           final teamStats =
               controller.teamStats ?? TeamStatsSnapshot(team: account.team);
+          final favoriteTeams = controller.favoriteTeams
+              .where(
+                (team) =>
+                    team.number.trim().toUpperCase() !=
+                    account.team.number.trim().toUpperCase(),
+              )
+              .toList(growable: false);
 
           return ListView(
             padding: const EdgeInsets.only(bottom: 14),
@@ -36,47 +52,25 @@ class ProfileScreen extends StatelessWidget {
               SolarTeamOverviewCard(
                 team: account.team,
                 teamStats: teamStats,
-                statusLabel: account.team.registered ? 'REGISTERED' : 'PENDING',
                 onTap: () {
                   openSolarTeamProfileForSummary(context, account.team);
                 },
               ),
-              const SizedBox(height: 22),
-              _InfoCard(
-                title: 'Account',
-                rows: <MapEntry<String, String>>[
-                  MapEntry('Name', account.fullName),
-                  MapEntry('Email', account.email),
-                  MapEntry('Joined', _formatDate(account.createdAt)),
-                  MapEntry(
-                    'Status',
-                    account.team.registered ? 'Registered' : 'Pending',
+              if (favoriteTeams.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 22),
+                _FavoriteTeamsSection(teams: favoriteTeams),
+              ],
+              const SizedBox(height: 20),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'This profile is stored on this device for now.',
+                  style: TextStyle(
+                    color: Color(0xFF8E92A7),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
-              ),
-              _InfoCard(
-                title: 'Team Info',
-                rows: <MapEntry<String, String>>[
-                  MapEntry(
-                    'Team name',
-                    account.team.teamName.isEmpty
-                        ? 'Team profile'
-                        : account.team.teamName,
-                  ),
-                  MapEntry(
-                    'Organization',
-                    account.team.organization.isEmpty
-                        ? 'Not available'
-                        : account.team.organization,
-                  ),
-                  MapEntry(
-                    'Robot name',
-                    account.team.robotName.isEmpty
-                        ? 'Not available'
-                        : account.team.robotName,
-                  ),
-                  MapEntry('Location', teamStats.locationLabel),
-                ],
+                ),
               ),
             ],
           );
@@ -86,11 +80,10 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.title, required this.rows});
+class _FavoriteTeamsSection extends StatelessWidget {
+  const _FavoriteTeamsSection({required this.teams});
 
-  final String title;
-  final List<MapEntry<String, String>> rows;
+  final List<TeamSummary> teams;
 
   @override
   Widget build(BuildContext context) {
@@ -103,67 +96,101 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            title,
-            style: const TextStyle(
+          const Text(
+            'Favorite Teams',
+            style: TextStyle(
               color: Color(0xFF24243A),
               fontSize: 22,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 14),
-          ...rows.map(
-            (row) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  SizedBox(
-                    width: 108,
-                    child: Text(
-                      row.key,
-                      style: const TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      row.value,
-                      style: const TextStyle(
-                        color: Color(0xFF24243A),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          for (var index = 0; index < teams.length; index++)
+            _FavoriteTeamRow(
+              team: teams[index],
+              showDivider: index != teams.length - 1,
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-String _formatDate(DateTime value) {
-  const months = <String>[
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${months[value.month - 1]} ${value.day}, ${value.year}';
+class _FavoriteTeamRow extends StatelessWidget {
+  const _FavoriteTeamRow({
+    required this.team,
+    required this.showDivider,
+  });
+
+  final TeamSummary team;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = <String>[
+      if (team.teamName.trim().isNotEmpty) team.teamName.trim(),
+      if (team.organization.trim().isNotEmpty) team.organization.trim(),
+    ].join(' | ');
+
+    return InkWell(
+      onTap: () {
+        openSolarTeamProfileForSummary(context, team);
+      },
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: showDivider
+            ? const BoxDecoration(
+                border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
+              )
+            : null,
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.star_rounded, color: Color(0xFF24243A), size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SolarTeamLinkText(
+                    teamNumber: team.number,
+                    teamId: team.id,
+                    teamName: team.teamName,
+                    organization: team.organization,
+                    onTap: () {
+                      openSolarTeamProfileForSummary(context, team);
+                    },
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF8E92A7),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Color(0xFF8E92A7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

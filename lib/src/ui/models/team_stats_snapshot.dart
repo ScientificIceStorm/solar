@@ -8,6 +8,7 @@ class TeamStatsSnapshot {
     this.allEvents = const <EventSummary>[],
     this.upcomingEvents = const <EventSummary>[],
     this.rankings = const <RankingRecord>[],
+    this.matchHistory = const <MatchSummary>[],
     this.openSkillEntry,
     this.worldSkillsEntry,
     this.lastUpdated,
@@ -18,10 +19,21 @@ class TeamStatsSnapshot {
   final List<EventSummary> allEvents;
   final List<EventSummary> upcomingEvents;
   final List<RankingRecord> rankings;
+  final List<MatchSummary> matchHistory;
   final OpenSkillCacheEntry? openSkillEntry;
   final WorldSkillsEntry? worldSkillsEntry;
   final DateTime? lastUpdated;
   final String? errorMessage;
+
+  bool get hasLiveSignal {
+    return allEvents.isNotEmpty ||
+        upcomingEvents.isNotEmpty ||
+        rankings.isNotEmpty ||
+        matchHistory.isNotEmpty ||
+        openSkillEntry != null ||
+        worldSkillsEntry != null ||
+        (errorMessage?.trim().isNotEmpty ?? false);
+  }
 
   List<EventSummary> get futureEvents {
     if (allEvents.isEmpty) {
@@ -68,18 +80,30 @@ class TeamStatsSnapshot {
   }
 
   int get totalWins {
+    final matchWins = _completedWins;
+    if (matchWins != null) {
+      return matchWins;
+    }
     return rankings.fold<int>(0, (sum, entry) {
       return sum + (entry.wins > 0 ? entry.wins : 0);
     });
   }
 
   int get totalLosses {
+    final matchLosses = _completedLosses;
+    if (matchLosses != null) {
+      return matchLosses;
+    }
     return rankings.fold<int>(0, (sum, entry) {
       return sum + (entry.losses > 0 ? entry.losses : 0);
     });
   }
 
   int get totalTies {
+    final matchTies = _completedTies;
+    if (matchTies != null) {
+      return matchTies;
+    }
     return rankings.fold<int>(0, (sum, entry) {
       return sum + (entry.ties > 0 ? entry.ties : 0);
     });
@@ -87,7 +111,87 @@ class TeamStatsSnapshot {
 
   int get totalMatches => totalWins + totalLosses + totalTies;
 
+  List<MatchSummary> get completedMatches {
+    return matchHistory.where((match) {
+      return match.alliances.length >= 2 &&
+          match.alliances.every((alliance) => alliance.score >= 0);
+    }).toList(growable: false);
+  }
+
+  int? scoreForTeam(MatchSummary match) {
+    final teamNumber = team.number.trim().toUpperCase();
+    for (final alliance in match.alliances) {
+      final containsTeam = alliance.teams.any((member) {
+        return member.number.trim().toUpperCase() == teamNumber;
+      });
+      if (containsTeam) {
+        return alliance.score >= 0 ? alliance.score : null;
+      }
+    }
+    return null;
+  }
+
+  int? opponentScoreForTeam(MatchSummary match) {
+    final teamNumber = team.number.trim().toUpperCase();
+    MatchAlliance? teamAlliance;
+    for (final alliance in match.alliances) {
+      final containsTeam = alliance.teams.any((member) {
+        return member.number.trim().toUpperCase() == teamNumber;
+      });
+      if (containsTeam) {
+        teamAlliance = alliance;
+        break;
+      }
+    }
+
+    if (teamAlliance == null) {
+      return null;
+    }
+
+    for (final alliance in match.alliances) {
+      if (!identical(alliance, teamAlliance)) {
+        return alliance.score >= 0 ? alliance.score : null;
+      }
+    }
+    return null;
+  }
+
+  double? get scoringMargin {
+    return _robustWeightedAverage(
+      completedMatches.map((match) {
+        final teamScore = scoreForTeam(match);
+        final opponentScore = opponentScoreForTeam(match);
+        if (teamScore == null || opponentScore == null) {
+          return null;
+        }
+        return (teamScore - opponentScore).toDouble();
+      }),
+      signed: true,
+    );
+  }
+
+  double? get averageScored {
+    return _robustWeightedAverage(
+      completedMatches.map((match) {
+        final teamScore = scoreForTeam(match);
+        return teamScore?.toDouble();
+      }),
+    );
+  }
+
+  double? get averageAllowed {
+    return _robustWeightedAverage(
+      completedMatches.map((match) {
+        final opponentScore = opponentScoreForTeam(match);
+        return opponentScore?.toDouble();
+      }),
+    );
+  }
+
   double? get estimatedCcwm {
+    if (scoringMargin != null) {
+      return scoringMargin;
+    }
     final matches = totalMatches;
     if (matches == 0) {
       return null;
@@ -97,9 +201,12 @@ class TeamStatsSnapshot {
     return (momentum / matches) * 10;
   }
 
-  double? get ccwm => openSkillEntry?.ccwm ?? estimatedCcwm;
+  double? get ccwm => estimatedCcwm ?? openSkillEntry?.ccwm;
 
   double? get estimatedOpr {
+    if (averageScored != null) {
+      return averageScored;
+    }
     final ranking = bestRanking;
     if (ranking == null || ranking.averagePoints <= 0) {
       return null;
@@ -107,9 +214,12 @@ class TeamStatsSnapshot {
     return ranking.averagePoints;
   }
 
-  double? get opr => openSkillEntry?.opr ?? estimatedOpr;
+  double? get opr => estimatedOpr ?? openSkillEntry?.opr;
 
   double? get estimatedDpr {
+    if (averageAllowed != null) {
+      return averageAllowed;
+    }
     final estimatedOffense = estimatedOpr;
     final estimatedMargin = estimatedCcwm;
     if (estimatedOffense == null || estimatedMargin == null) {
@@ -120,7 +230,7 @@ class TeamStatsSnapshot {
     return estimate < 0 ? 0 : estimate;
   }
 
-  double? get dpr => openSkillEntry?.dpr ?? estimatedDpr;
+  double? get dpr => estimatedDpr ?? openSkillEntry?.dpr;
 
   String get recordLabel {
     if (totalMatches == 0) {
@@ -168,5 +278,83 @@ class TeamStatsSnapshot {
       if (team.location.country.isNotEmpty) team.location.country,
     ];
     return pieces.isEmpty ? 'Location pending' : pieces.join(', ');
+  }
+
+  int? get _completedWins {
+    final outcomes = _completedOutcomes;
+    if (outcomes == null) {
+      return null;
+    }
+    return outcomes.where((outcome) => outcome > 0).length;
+  }
+
+  int? get _completedLosses {
+    final outcomes = _completedOutcomes;
+    if (outcomes == null) {
+      return null;
+    }
+    return outcomes.where((outcome) => outcome < 0).length;
+  }
+
+  int? get _completedTies {
+    final outcomes = _completedOutcomes;
+    if (outcomes == null) {
+      return null;
+    }
+    return outcomes.where((outcome) => outcome == 0).length;
+  }
+
+  List<int>? get _completedOutcomes {
+    final matches = completedMatches;
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    final outcomes = <int>[];
+    for (final match in matches) {
+      final teamScore = scoreForTeam(match);
+      final opponentScore = opponentScoreForTeam(match);
+      if (teamScore == null || opponentScore == null) {
+        continue;
+      }
+      outcomes.add(teamScore.compareTo(opponentScore));
+    }
+    return outcomes.isEmpty ? null : outcomes;
+  }
+
+  double? _robustWeightedAverage(
+    Iterable<double?> sourceValues, {
+    bool signed = false,
+  }) {
+    final values = sourceValues.whereType<double>().toList(growable: false);
+    if (values.isEmpty) {
+      return null;
+    }
+
+    final sorted = values.toList()..sort();
+    final median = sorted[sorted.length ~/ 2];
+    final deviations = values
+        .map((value) => (value - median).abs())
+        .toList(growable: false)
+      ..sort();
+    final mad = deviations[deviations.length ~/ 2];
+    final guardBand = mad <= 0 ? (signed ? 18.0 : 12.0) : mad * 2.6;
+
+    var weightedTotal = 0.0;
+    var weightTotal = 0.0;
+    for (var index = 0; index < values.length; index++) {
+      final progress = values.length <= 1 ? 1.0 : index / (values.length - 1);
+      final recencyWeight = 0.7 + (progress * 0.9);
+      final lowerBound = median - guardBand;
+      final upperBound = median + guardBand;
+      final dampedValue = values[index].clamp(lowerBound, upperBound);
+      weightedTotal += dampedValue * recencyWeight;
+      weightTotal += recencyWeight;
+    }
+
+    if (weightTotal <= 0) {
+      return null;
+    }
+    return weightedTotal / weightTotal;
   }
 }

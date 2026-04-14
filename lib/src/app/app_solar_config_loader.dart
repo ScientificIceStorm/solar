@@ -44,7 +44,11 @@ class AppSolarConfigLoader {
       supabaseAnonKey: _resolvedOrAsset(
         resolvedValue: baseConfig.supabaseAnonKey,
         defaultValue: SolarConfig.defaults.supabaseAnonKey,
-        assetValue: readString(assetValues['supabaseAnonKey']),
+        assetValue: firstNonEmpty(<String?>[
+          readString(assetValues['supabasePublishableKey']),
+          readString(assetValues['supabaseAnonKey']),
+          readString(assetValues['supabaseKey']),
+        ]),
       ),
       supabaseRedirectUrl: _resolvedOrAsset(
         resolvedValue: baseConfig.supabaseRedirectUrl,

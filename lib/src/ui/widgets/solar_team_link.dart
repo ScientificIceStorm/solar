@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/solar_app_scope.dart';
@@ -8,6 +10,8 @@ Future<void> openSolarTeamProfileForSummary(
   BuildContext context,
   TeamSummary team,
 ) {
+  final controller = SolarAppScope.of(context);
+  unawaited(controller.fetchTeamStatsSnapshot(team));
   return Navigator.of(
     context,
   ).pushNamed(TeamProfileScreen.routeName, arguments: team);
@@ -48,6 +52,7 @@ class SolarTeamLinkText extends StatelessWidget {
     this.maxLines = 1,
     this.overflow = TextOverflow.ellipsis,
     this.padding = EdgeInsets.zero,
+    this.onTap,
   });
 
   final String teamNumber;
@@ -61,21 +66,24 @@ class SolarTeamLinkText extends StatelessWidget {
   final int maxLines;
   final TextOverflow overflow;
   final EdgeInsetsGeometry padding;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {
-        openSolarTeamProfileForReference(
-          context,
-          teamNumber: teamNumber,
-          teamId: teamId,
-          teamName: teamName,
-          organization: organization,
-          robotName: robotName,
-          grade: grade,
-        );
-      },
+      onTap:
+          onTap ??
+          () {
+            openSolarTeamProfileForReference(
+              context,
+              teamNumber: teamNumber,
+              teamId: teamId,
+              teamName: teamName,
+              organization: organization,
+              robotName: robotName,
+              grade: grade,
+            );
+          },
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: padding,

@@ -114,7 +114,7 @@ class SolarMatchPrediction {
       return '$solarizeLabel will grade itself after the match finishes.';
     }
     if (total >= 28 || (predictedCorrectly == false && margin >= 18)) {
-      return 'This was a major swing. Factors like a robot disconnect, tipping, or an auton miss may have changed the shape of the match.';
+      return 'This swung hard from the projection. A disconnect, tip, or auton miss likely changed the result.';
     }
     if (total >= 14 || margin >= 10) {
       return 'The match ran noticeably different than expected, likely because one alliance cycled faster or missed key scoring chances.';

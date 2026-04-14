@@ -8,12 +8,14 @@ class SolarMatchRow extends StatelessWidget {
     required this.match,
     this.highlightTeamNumber,
     this.onTap,
+    this.onTeamTap,
     super.key,
   });
 
   final MatchSummary match;
   final String? highlightTeamNumber;
   final VoidCallback? onTap;
+  final void Function(TeamReference team)? onTeamTap;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +87,7 @@ class SolarMatchRow extends StatelessWidget {
               color: const Color(0xFFFF6B64),
               alignEnd: false,
               highlightTeamNumber: highlightTeamNumber,
+              onTeamTap: onTeamTap,
             ),
           ),
           const SizedBox(width: 8),
@@ -105,6 +108,7 @@ class SolarMatchRow extends StatelessWidget {
               color: const Color(0xFF7A9DFF),
               alignEnd: true,
               highlightTeamNumber: highlightTeamNumber,
+              onTeamTap: onTeamTap,
             ),
           ),
         ],
@@ -186,12 +190,14 @@ class _AllianceColumn extends StatelessWidget {
     required this.color,
     required this.alignEnd,
     required this.highlightTeamNumber,
+    required this.onTeamTap,
   });
 
   final List<TeamReference> teams;
   final Color color;
   final bool alignEnd;
   final String? highlightTeamNumber;
+  final void Function(TeamReference team)? onTeamTap;
 
   @override
   Widget build(BuildContext context) {
@@ -232,6 +238,7 @@ class _AllianceColumn extends StatelessWidget {
                       teamNumber: team.number,
                       teamId: team.id,
                       teamName: team.name,
+                      onTap: onTeamTap == null ? null : () => onTeamTap!(team),
                       textAlign: alignEnd ? TextAlign.right : TextAlign.left,
                       style: TextStyle(
                         color: isHighlighted ? const Color(0xFF191B35) : color,
@@ -271,17 +278,72 @@ String solarMatchScreenLabel(MatchSummary match) {
   switch (match.round) {
     case MatchRound.qualification:
       return 'Q${match.matchNumber > 0 ? match.matchNumber : match.instance}';
+    case MatchRound.round128:
+      return _eliminationLabel(
+        prefix: 'R128',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
+    case MatchRound.round64:
+      return _eliminationLabel(
+        prefix: 'R64',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
+    case MatchRound.round32:
+      return _eliminationLabel(
+        prefix: 'R32',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
+    case MatchRound.round16:
+      return _eliminationLabel(
+        prefix: 'R16',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
     case MatchRound.quarterfinals:
-      return 'QF${match.instance > 0 ? match.instance : match.matchNumber}';
+      return _eliminationLabel(
+        prefix: 'QF',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
     case MatchRound.semifinals:
-      return 'SF${match.instance > 0 ? match.instance : match.matchNumber}';
+      return _eliminationLabel(
+        prefix: 'SF',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
     case MatchRound.finals:
-      return 'F${match.instance > 0 ? match.instance : match.matchNumber}';
+      return _eliminationLabel(
+        prefix: 'F',
+        instance: match.instance,
+        matchNumber: match.matchNumber,
+      );
     case MatchRound.practice:
       return 'P${match.matchNumber > 0 ? match.matchNumber : match.instance}';
     default:
       return match.name;
   }
+}
+
+String _eliminationLabel({
+  required String prefix,
+  required int instance,
+  required int matchNumber,
+}) {
+  final series = instance > 0 ? '$instance' : '';
+  final game = matchNumber > 0 ? '$matchNumber' : '';
+  if (series.isNotEmpty && game.isNotEmpty) {
+    return '$prefix$series-$game';
+  }
+  if (series.isNotEmpty) {
+    return '$prefix$series';
+  }
+  if (game.isNotEmpty) {
+    return '$prefix$game';
+  }
+  return prefix;
 }
 
 String solarMatchScoreLabel(
@@ -337,7 +399,7 @@ TextSpan solarMatchScoreText(
 }
 
 String solarMatchTimeLabel(MatchSummary match) {
-  final date = match.started ?? match.scheduled;
+  final date = (match.started ?? match.scheduled)?.toLocal();
   if (date == null) {
     return 'TBD';
   }

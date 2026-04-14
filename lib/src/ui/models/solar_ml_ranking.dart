@@ -48,4 +48,6 @@ class SolarMlRankingEntry {
   final double? opr;
   final double? dpr;
   final double? awpPerMatch;
+
+  double get solarRating => mlRating;
 }

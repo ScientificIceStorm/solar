@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Match Rankings Localhost</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Localhost Preview</p>
+        <div class="hero-grid">
+          <div>
+            <h1>Solar Match Rankings on localhost.</h1>
+            <p class="hero-copy">
+              This local page now serves the match-only ranking model directly
+              from Solar's RobotEvents pipeline, without mixing in skills or
+              the old Solarize leaderboard.
+            </p>
+          </div>
+          <div class="hero-card">
+            <p class="hero-card-label">Ranking inputs</p>
+            <ul class="hero-list">
+              <li>Match-derived division standings only</li>
+              <li>Stronger fields push ratings higher</li>
+              <li>Signature and championship events count more</li>
+            </ul>
+          </div>
+        </div>
+      </header>
+
+      <main class="panel">
+        <section class="controls">
+          <div class="control">
+            <label for="seasonSelect">Season</label>
+            <select id="seasonSelect"></select>
+          </div>
+          <div class="control">
+            <label for="gradeSelect">Grade</label>
+            <select id="gradeSelect"></select>
+          </div>
+          <div class="control">
+            <label for="regionSelect">Region</label>
+            <select id="regionSelect"></select>
+          </div>
+          <div class="control search-control">
+            <label for="searchInput">Search</label>
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="Team number, school, city, region"
+            />
+          </div>
+        </section>
+
+        <section class="toolbar">
+          <p id="methodologyNote" class="method-note">
+            Match-only rating weighted by opponent strength, elimination depth, and event importance.
+          </p>
+          <div class="toolbar-copy">
+            <strong id="resultsLabel">Loading rankings...</strong>
+            <span id="statusNote">Connecting to the local ranking API.</span>
+          </div>
+        </section>
+
+        <section id="warningBanner" class="warning-banner hidden"></section>
+        <section id="errorBanner" class="error-banner hidden"></section>
+
+        <section class="table-shell">
+          <div class="table-head">
+            <span>Rank</span>
+            <span>Team</span>
+            <span id="metricHeader">Match Rating</span>
+          </div>
+          <div id="loadingState" class="empty-state">Loading live rankings...</div>
+          <div id="rows" class="rows"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

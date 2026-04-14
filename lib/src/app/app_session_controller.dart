@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/solar_config.dart';
 import '../core/solar_competition_scope.dart';
@@ -11,11 +10,11 @@ import '../models/world_skills_models.dart';
 import '../solar_api.dart';
 import 'app_solar_config_loader.dart';
 import 'solar_ios_companion_service.dart';
-import 'solar_supabase_bootstrap.dart';
 import '../ui/models/app_account.dart';
 import '../ui/models/solar_match_prediction.dart';
 import '../ui/models/solar_notification_center_snapshot.dart';
 import '../ui/models/team_stats_snapshot.dart';
+import '../ui/models/worlds_schedule_models.dart';
 import '../ui/services/account_repository.dart';
 import '../ui/services/in_memory_account_repository.dart';
 import '../ui/services/local_account_repository.dart';
@@ -45,8 +44,12 @@ class AppSessionController extends ChangeNotifier {
   static const _scrimmageService = SolarScrimmageService();
   static const _solarizeHistoryService = SolarizeHistoryService();
   static const _iosCompanionService = SolarIosCompanionService();
-  static const _solarizeHistoryTeamLimit = 256;
-  static const _solarizeHistoryBatchSize = 16;
+  static const _solarizeHistoryTeamLimit = 192;
+  static const _solarizeHistoryBatchSize = 12;
+  static const _solarizeMatchHistoryTeamLimit = 128;
+  static const _solarizeMatchHistoryBatchSize = 8;
+  static const _worldsScheduleAnnouncementKey = worldsScheduleAnnouncementId;
+  static const _localAccountDomain = 'solar.local';
 
   AppAccount? _currentAccount;
   TeamStatsSnapshot? _teamStats;
@@ -56,6 +59,10 @@ class AppSessionController extends ChangeNotifier {
   AppThemeModePreference _themeModePreference = AppThemeModePreference.system;
   AppCompetitionPreference _competitionPreference =
       AppCompetitionPreference.vexV5;
+  String? _dismissedWorldsScheduleAnnouncementId;
+  int? _notificationCenterSeenAtMillis;
+  List<String> _favoriteTeamNumbers = const <String>[];
+  bool _developerScrimmageEnabled = false;
   bool _isRefreshingTeamStats = false;
   bool _isPreloadingSearchEvents = false;
   bool _isPreloadingSearchTeams = false;
@@ -91,6 +98,7 @@ class AppSessionController extends ChangeNotifier {
       <String, Future<List<MatchSummary>>>{};
   final Map<String, Future<List<MatchSummary>>> _teamMatchHistoryCache =
       <String, Future<List<MatchSummary>>>{};
+  final Set<String> _solarizeCoverageInflight = <String>{};
   final Map<String, Future<SolarMatchPrediction?>> _matchPredictionCache =
       <String, Future<SolarMatchPrediction?>>{};
   final Map<String, Future<TeamStatsSnapshot>> _teamStatsCache =
@@ -115,6 +123,33 @@ class AppSessionController extends ChangeNotifier {
 
   AppCompetitionPreference get competitionPreference => _competitionPreference;
 
+  int? get notificationCenterSeenAtMillis => _notificationCenterSeenAtMillis;
+
+  List<String> get favoriteTeamNumbers => _favoriteTeamNumbers;
+
+  bool get developerScrimmageEnabled => _developerScrimmageEnabled;
+
+  bool isFavoriteTeam(String teamNumber) {
+    final normalized = teamNumber.trim().toUpperCase();
+    return _favoriteTeamNumbers.contains(normalized);
+  }
+
+  List<TeamSummary> get favoriteTeams {
+    return _favoriteTeamNumbers
+        .map(
+          (teamNumber) => resolveKnownTeamSummary(
+            teamNumber: teamNumber,
+            grade: _currentAccount?.team.grade ?? 'High School',
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  bool get showWorldsScheduleReleaseBanner {
+    return _dismissedWorldsScheduleAnnouncementId !=
+        _worldsScheduleAnnouncementKey;
+  }
+
   bool get isRefreshingTeamStats => _isRefreshingTeamStats;
 
   bool get isPreloadingSearchEvents => _isPreloadingSearchEvents;
@@ -138,13 +173,11 @@ class AppSessionController extends ChangeNotifier {
   static Future<AppSessionController> bootstrap() async {
     final repository = await _openRepository();
     final config = await _loadConfig();
-    await SolarSupabaseBootstrap.ensureInitialized(config);
     final api = SolarApi(config: config);
     final controller = AppSessionController(
       repository: repository,
       teamDirectory: SolarTeamDirectoryService(api: api),
       api: api,
-      authService: _openAuthService(repository: repository, config: config),
     );
     await controller.initialize();
     return controller;
@@ -172,20 +205,6 @@ class AppSessionController extends ChangeNotifier {
       debugPrintStack(stackTrace: stackTrace);
       return SolarConfig.defaults;
     }
-  }
-
-  static SolarAuthService _openAuthService({
-    required AccountRepository repository,
-    required SolarConfig config,
-  }) {
-    if (!config.hasSupabaseConfig) {
-      return LocalSolarAuthService(repository: repository);
-    }
-
-    return SupabaseSolarAuthService(
-      client: Supabase.instance.client,
-      redirectUrl: config.supabaseRedirectUrl,
-    );
   }
 
   Future<void> _handleAuthStateChange(SolarAuthStateChange change) async {
@@ -225,6 +244,11 @@ class AppSessionController extends ChangeNotifier {
     _preferredSeasonId = settings.preferredSeasonId;
     _themeModePreference = settings.themeModePreference;
     _competitionPreference = settings.competitionPreference;
+    _dismissedWorldsScheduleAnnouncementId =
+        settings.dismissedWorldsScheduleAnnouncementId;
+    _notificationCenterSeenAtMillis = settings.notificationCenterSeenAtMillis;
+    _favoriteTeamNumbers = settings.favoriteTeamNumbers;
+    _developerScrimmageEnabled = settings.developerScrimmageEnabled;
     _authStateSubscription = _authService.authStateChanges.listen((change) {
       unawaited(_handleAuthStateChange(change));
     });
@@ -259,6 +283,46 @@ class AppSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> createLocalAccount({
+    required String teamNumber,
+    String? fullName,
+    AppCompetitionPreference? competitionPreference,
+  }) async {
+    final normalizedTeamNumber = teamNumber.trim().toUpperCase();
+    if (normalizedTeamNumber.isEmpty) {
+      throw const FormatException('Enter your team number.');
+    }
+
+    final activeSeasonId = await _resolveActiveSeasonId();
+    final validatedTeam = await _teamDirectory.validateTeamNumber(
+      normalizedTeamNumber,
+      preferredSeasonId: activeSeasonId,
+    );
+    final normalizedName = fullName?.trim() ?? '';
+    final displayName = normalizedName.isNotEmpty
+        ? normalizedName
+        : (validatedTeam.teamName.trim().isNotEmpty
+              ? validatedTeam.teamName.trim()
+              : 'Team ${validatedTeam.number}');
+    final existingAccount = _currentAccount;
+    final account = AppAccount(
+      fullName: displayName,
+      email:
+          existingAccount?.normalizedEmail ??
+          _localAccountEmailForTeam(validatedTeam.number),
+      password: '',
+      team: validatedTeam,
+      createdAt: existingAccount?.createdAt ?? DateTime.now(),
+    );
+
+    if (competitionPreference != null) {
+      _competitionPreference = competitionPreference;
+    }
+
+    await _setSignedInAccount(account);
+    await refreshTeamStats();
+  }
+
   Future<void> setThemeModePreference(AppThemeModePreference value) async {
     if (_themeModePreference == value) {
       return;
@@ -273,6 +337,35 @@ class AppSessionController extends ChangeNotifier {
       return;
     }
     _competitionPreference = value;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> setDeveloperScrimmageEnabled(bool value) async {
+    if (_developerScrimmageEnabled == value) {
+      return;
+    }
+    _developerScrimmageEnabled = value;
+    _clearTeamDerivedCaches();
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> toggleFavoriteTeam(TeamSummary team) async {
+    final normalized = team.number.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final nextFavorites = _favoriteTeamNumbers.toList(growable: true);
+    if (nextFavorites.contains(normalized)) {
+      nextFavorites.remove(normalized);
+    } else {
+      nextFavorites.add(normalized);
+      nextFavorites.sort();
+    }
+
+    _favoriteTeamNumbers = nextFavorites.toList(growable: false);
     await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
     notifyListeners();
   }
@@ -349,9 +442,19 @@ class AppSessionController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final activeSeasonId = await _resolveActiveSeasonId();
+      final normalizedTeamNumber = account.team.number.trim().toUpperCase();
       final snapshot = await _teamDirectory.loadTeamStats(
         account.team,
-        preferredSeasonId: await _resolveActiveSeasonId(),
+        preferredSeasonId: activeSeasonId,
+        seedWorldSkillsEntry: _seedWorldSkillsEntryForTeam(
+          teamNumber: normalizedTeamNumber,
+          teamId: account.team.id,
+        ),
+        seedOpenSkillEntry: _seedOpenSkillEntryForTeam(
+          teamNumber: normalizedTeamNumber,
+          teamId: account.team.id,
+        ),
       );
       if (_currentAccount?.normalizedEmail != account.normalizedEmail) {
         return;
@@ -518,6 +621,111 @@ class AppSessionController extends ChangeNotifier {
     return _preloadedOpenSkillEntriesByTeam[teamNumber.trim().toUpperCase()];
   }
 
+  Future<void> ensureSolarizeCoverageForTeams({
+    required Iterable<TeamSummary> teams,
+    bool force = false,
+  }) async {
+    final teamMap = <String, TeamSummary>{};
+    for (final team in teams) {
+      final key = team.number.trim().toUpperCase();
+      if (key.isNotEmpty) {
+        teamMap[key] = team;
+      }
+    }
+    if (teamMap.isEmpty) {
+      return;
+    }
+
+    final seasonId = await _resolveActiveSeasonId();
+    if (seasonId == null) {
+      return;
+    }
+
+    if (_preloadedWorldSkillsRankings.isEmpty &&
+        _currentAccount != null &&
+        !_isPreloadingSearchTeams) {
+      await preloadSearchTeams();
+    }
+
+    final selectedEntries = <WorldSkillsEntry>[];
+    final inflightKeys = <String>{};
+    for (final team in teamMap.values) {
+      final key = team.number.trim().toUpperCase();
+      if (!force && _preloadedOpenSkillEntriesByTeam.containsKey(key)) {
+        continue;
+      }
+      final worldSkillsEntry = _seedWorldSkillsEntryForTeam(
+        teamNumber: key,
+        teamId: team.id,
+      );
+      if (worldSkillsEntry == null) {
+        continue;
+      }
+      final inflightKey = '$seasonId|$key';
+      if (!force && !_solarizeCoverageInflight.add(inflightKey)) {
+        continue;
+      }
+      inflightKeys.add(inflightKey);
+      selectedEntries.add(worldSkillsEntry);
+    }
+
+    if (selectedEntries.isEmpty) {
+      return;
+    }
+
+    try {
+      final results = await Future.wait<Object>(<Future<Object>>[
+        _loadSolarizeTeamRankings(
+          selectedEntries,
+          seasonId: seasonId,
+          force: force,
+          limit: selectedEntries.length,
+        ).then<Object>((value) => value),
+        _loadSolarizeTeamMatches(
+          selectedEntries,
+          seasonId: seasonId,
+          force: force,
+          limit: selectedEntries.length,
+        ).then<Object>((value) => value),
+      ]);
+      final rankingsByTeam = results[0] as Map<String, List<RankingRecord>>;
+      final matchesByTeam = results[1] as Map<String, List<MatchSummary>>;
+      final hydratedEntries = _solarizeHistoryService.build(
+        worldSkills: selectedEntries,
+        rankingsByTeam: rankingsByTeam,
+        matchesByTeam: matchesByTeam,
+      );
+      final mergedEntries = <String, OpenSkillCacheEntry>{
+        ..._preloadedOpenSkillEntriesByTeam,
+      };
+      for (final entry in hydratedEntries) {
+        mergedEntries[entry.teamNumber.trim().toUpperCase()] = entry;
+      }
+
+      final mergedWorldSkills = <String, WorldSkillsEntry>{
+        for (final entry in _preloadedWorldSkillsRankings)
+          entry.teamNumber.trim().toUpperCase(): entry,
+      };
+      for (final entry in selectedEntries) {
+        mergedWorldSkills[entry.teamNumber.trim().toUpperCase()] = entry;
+      }
+
+      _preloadedOpenSkillEntriesByTeam = mergedEntries;
+      _preloadedWorldSkillsRankings = mergedWorldSkills.values.toList(
+        growable: false,
+      )..sort((a, b) {
+        final aRank = a.rank <= 0 ? 999999 : a.rank;
+        final bRank = b.rank <= 0 ? 999999 : b.rank;
+        return aRank.compareTo(bRank);
+      });
+      notifyListeners();
+    } finally {
+      for (final key in inflightKeys) {
+        _solarizeCoverageInflight.remove(key);
+      }
+    }
+  }
+
   Future<int?> resolveDefaultWorldSkillsSeasonId() {
     return _resolveActiveSeasonId();
   }
@@ -616,14 +824,24 @@ class AppSessionController extends ChangeNotifier {
         return const <OpenSkillCacheEntry>[];
       }
 
-      final rankingsByTeam = await _loadSolarizeTeamRankings(
-        worldSkills,
-        seasonId: seasonId,
-        force: force,
-      );
+      final results = await Future.wait<Object>(<Future<Object>>[
+        _loadSolarizeTeamRankings(
+          worldSkills,
+          seasonId: seasonId,
+          force: force,
+        ).then<Object>((value) => value),
+        _loadSolarizeTeamMatches(
+          worldSkills,
+          seasonId: seasonId,
+          force: force,
+        ).then<Object>((value) => value),
+      ]);
+      final rankingsByTeam = results[0] as Map<String, List<RankingRecord>>;
+      final matchesByTeam = results[1] as Map<String, List<MatchSummary>>;
       return _solarizeHistoryService.build(
         worldSkills: worldSkills,
         rankingsByTeam: rankingsByTeam,
+        matchesByTeam: matchesByTeam,
       );
     });
   }
@@ -699,6 +917,39 @@ class AppSessionController extends ChangeNotifier {
     return teams.take(limit).toList(growable: false);
   }
 
+  TeamStatsSnapshot previewTeamStatsSnapshot(TeamSummary team) {
+    final normalizedKey = team.number.trim().toUpperCase();
+    final currentTeam = _currentAccount?.team;
+    if (currentTeam != null &&
+        currentTeam.number.trim().toUpperCase() == normalizedKey &&
+        _teamStats != null) {
+      return _teamStats!;
+    }
+
+    final worldSkillsEntry = _seedWorldSkillsEntryForTeam(
+      teamNumber: normalizedKey,
+      teamId: team.id,
+    );
+    final openSkillEntry = _seedOpenSkillEntryForTeam(
+      teamNumber: normalizedKey,
+      teamId: team.id,
+    );
+    return TeamStatsSnapshot(
+      team: _bestKnownTeamSummary(
+        team,
+        worldSkillsEntry: worldSkillsEntry,
+        openSkillEntry: openSkillEntry,
+      ),
+      openSkillEntry: openSkillEntry,
+      worldSkillsEntry: worldSkillsEntry,
+      lastUpdated:
+          currentTeam != null &&
+              currentTeam.number.trim().toUpperCase() == normalizedKey
+          ? _teamStats?.lastUpdated
+          : null,
+    );
+  }
+
   Future<TeamStatsSnapshot> fetchTeamStatsSnapshot(
     TeamSummary team, {
     bool force = false,
@@ -723,11 +974,30 @@ class AppSessionController extends ChangeNotifier {
     }
 
     return _teamStatsCache.putIfAbsent(cacheKey, () async {
+      final seedWorldSkillsEntry = _seedWorldSkillsEntryForTeam(
+        teamNumber: normalizedKey,
+        teamId: team.id,
+      );
+      final seedOpenSkillEntry = _seedOpenSkillEntryForTeam(
+        teamNumber: normalizedKey,
+        teamId: team.id,
+      );
       return _teamDirectory.loadTeamStats(
         team,
         preferredSeasonId: activeSeasonId,
+        seedWorldSkillsEntry: seedWorldSkillsEntry,
+        seedOpenSkillEntry: seedOpenSkillEntry,
       );
     });
+  }
+
+  Future<void> dismissWorldsScheduleReleaseBanner() async {
+    if (!showWorldsScheduleReleaseBanner) {
+      return;
+    }
+    _dismissedWorldsScheduleAnnouncementId = _worldsScheduleAnnouncementKey;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
   }
 
   Future<int?> _resolveSearchSeasonId() async {
@@ -781,8 +1051,12 @@ class AppSessionController extends ChangeNotifier {
     List<WorldSkillsEntry> worldSkills, {
     required int seasonId,
     required bool force,
+    int? limit,
   }) async {
-    final prioritized = _prioritizedSolarizeTeams(worldSkills);
+    final prioritized = _prioritizedSolarizeTeams(
+      worldSkills,
+      limit: limit ?? _solarizeHistoryTeamLimit,
+    );
     final results = <String, List<RankingRecord>>{};
 
     for (
@@ -817,9 +1091,58 @@ class AppSessionController extends ChangeNotifier {
     return results;
   }
 
+  Future<Map<String, List<MatchSummary>>> _loadSolarizeTeamMatches(
+    List<WorldSkillsEntry> worldSkills, {
+    required int seasonId,
+    required bool force,
+    int? limit,
+  }) async {
+    final prioritized = _prioritizedSolarizeTeams(
+      worldSkills,
+      limit: limit ?? _solarizeMatchHistoryTeamLimit,
+    );
+    final results = <String, List<MatchSummary>>{};
+
+    for (
+      var index = 0;
+      index < prioritized.length;
+      index += _solarizeMatchHistoryBatchSize
+    ) {
+      final batch = prioritized
+          .skip(index)
+          .take(_solarizeMatchHistoryBatchSize)
+          .toList(growable: false);
+      final batchResults =
+          await Future.wait<MapEntry<String, List<MatchSummary>>>(
+            batch.map((entry) async {
+              final matches = await fetchTeamMatchesForReference(
+                TeamReference(
+                  id: entry.teamId,
+                  number: entry.teamNumber,
+                  name: entry.teamName,
+                ),
+                season: seasonId,
+                force: force,
+              );
+              return MapEntry<String, List<MatchSummary>>(
+                entry.teamNumber.trim().toUpperCase(),
+                matches,
+              );
+            }),
+          );
+
+      for (final result in batchResults) {
+        results[result.key] = result.value;
+      }
+    }
+
+    return results;
+  }
+
   List<WorldSkillsEntry> _prioritizedSolarizeTeams(
-    List<WorldSkillsEntry> worldSkills,
-  ) {
+    List<WorldSkillsEntry> worldSkills, {
+    int limit = _solarizeHistoryTeamLimit,
+  }) {
     final ordered = List<WorldSkillsEntry>.from(worldSkills)
       ..sort((a, b) {
         final aRank = a.rank <= 0 ? 999999 : a.rank;
@@ -840,7 +1163,7 @@ class AppSessionController extends ChangeNotifier {
       }
     }
 
-    for (final entry in ordered.take(_solarizeHistoryTeamLimit)) {
+    for (final entry in ordered.take(limit)) {
       addEntry(entry);
     }
 
@@ -1381,6 +1704,39 @@ class AppSessionController extends ChangeNotifier {
     );
   }
 
+  Future<void> markNotificationCenterSeen({
+    SolarNotificationCenterSnapshot? snapshot,
+  }) async {
+    final resolvedSnapshot = snapshot ?? await fetchNotificationCenterSnapshot();
+    final anchors = <int>[
+      DateTime.now().millisecondsSinceEpoch,
+      if (resolvedSnapshot.upcomingMatch != null)
+        ((resolvedSnapshot.upcomingMatch!.scheduled ??
+                        resolvedSnapshot.upcomingMatch!.started)
+                    ?.millisecondsSinceEpoch ??
+                0) +
+            1,
+      for (final result in resolvedSnapshot.recentResults)
+        (result.completedAt?.millisecondsSinceEpoch ?? 0) + 1,
+    ];
+    final now = anchors.reduce((current, value) => value > current ? value : current);
+    if (_notificationCenterSeenAtMillis != null &&
+        _notificationCenterSeenAtMillis! >= now) {
+      return;
+    }
+
+    _notificationCenterSeenAtMillis = now;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+
+    if (_currentAccount != null) {
+      await _iosCompanionService.sync(
+        teamNumber: _currentAccount!.team.number,
+        snapshot: resolvedSnapshot,
+      );
+    }
+  }
+
   Future<SolarQuickviewSnapshot?> _loadQuickviewSnapshot() async {
     if (_preloadedWorldSkillsRankings.isEmpty &&
         _currentAccount != null &&
@@ -1584,6 +1940,10 @@ class AppSessionController extends ChangeNotifier {
   }
 
   TeamStatsSnapshot _withLocalScrimmage(TeamStatsSnapshot snapshot) {
+    if (!_developerScrimmageEnabled) {
+      return snapshot;
+    }
+
     final scrimmage = _scrimmagePackageForTeam(snapshot.team);
     if (scrimmage == null) {
       return snapshot;
@@ -1806,6 +2166,160 @@ class AppSessionController extends ChangeNotifier {
     _scrimmageTeamKey = null;
   }
 
+  WorldSkillsEntry? _seedWorldSkillsEntryForTeam({
+    required String teamNumber,
+    int? teamId,
+  }) {
+    final currentEntry = _teamStats?.worldSkillsEntry;
+    if (_matchesSeedTeam(
+      teamNumber: teamNumber,
+      teamId: teamId,
+      candidateTeamNumber: currentEntry?.teamNumber,
+      candidateTeamId: currentEntry?.teamId,
+    )) {
+      return currentEntry;
+    }
+
+    for (final entry in _preloadedWorldSkillsRankings) {
+      if (_matchesSeedTeam(
+        teamNumber: teamNumber,
+        teamId: teamId,
+        candidateTeamNumber: entry.teamNumber,
+        candidateTeamId: entry.teamId,
+      )) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  OpenSkillCacheEntry? _seedOpenSkillEntryForTeam({
+    required String teamNumber,
+    int? teamId,
+  }) {
+    final normalizedTeamNumber = teamNumber.trim().toUpperCase();
+    final currentEntry = _teamStats?.openSkillEntry;
+    if (_matchesSeedTeam(
+      teamNumber: normalizedTeamNumber,
+      teamId: teamId,
+      candidateTeamNumber: currentEntry?.teamNumber,
+      candidateTeamId: currentEntry?.id,
+    )) {
+      return currentEntry;
+    }
+
+    final seeded = _preloadedOpenSkillEntriesByTeam[normalizedTeamNumber];
+    if (_matchesSeedTeam(
+      teamNumber: normalizedTeamNumber,
+      teamId: teamId,
+      candidateTeamNumber: seeded?.teamNumber,
+      candidateTeamId: seeded?.id,
+    )) {
+      return seeded;
+    }
+    return null;
+  }
+
+  bool _matchesSeedTeam({
+    required String teamNumber,
+    required int? teamId,
+    required String? candidateTeamNumber,
+    required int? candidateTeamId,
+  }) {
+    if (candidateTeamNumber != null &&
+        candidateTeamNumber.trim().toUpperCase() == teamNumber) {
+      return true;
+    }
+    return teamId != null && teamId > 0 && candidateTeamId == teamId;
+  }
+
+  TeamSummary _bestKnownTeamSummary(
+    TeamSummary team, {
+    WorldSkillsEntry? worldSkillsEntry,
+    OpenSkillCacheEntry? openSkillEntry,
+  }) {
+    final normalizedKey = team.number.trim().toUpperCase();
+    final currentTeam = _currentAccount?.team;
+    if (currentTeam != null &&
+        (currentTeam.number.trim().toUpperCase() == normalizedKey ||
+            (team.id > 0 && currentTeam.id == team.id))) {
+      return _mergeTeamSummary(team, currentTeam);
+    }
+
+    for (final candidate in _preloadedSearchTeams) {
+      if (candidate.number.trim().toUpperCase() == normalizedKey ||
+          (team.id > 0 && candidate.id == team.id)) {
+        return _mergeTeamSummary(team, candidate);
+      }
+    }
+
+    if (worldSkillsEntry != null) {
+      return _mergeTeamSummary(
+        team,
+        _teamFromWorldSkills(worldSkillsEntry, _resolvedGradeFor(team.grade)),
+      );
+    }
+
+    if (openSkillEntry != null) {
+      return _mergeTeamSummary(
+        team,
+        _teamFromOpenSkill(openSkillEntry, _resolvedGradeFor(team.grade)),
+      );
+    }
+
+    return team;
+  }
+
+  TeamSummary _mergeTeamSummary(TeamSummary primary, TeamSummary overlay) {
+    return TeamSummary(
+      id: primary.id > 0 ? primary.id : overlay.id,
+      number: primary.number.trim().isNotEmpty
+          ? primary.number
+          : overlay.number,
+      teamName: primary.teamName.trim().isNotEmpty
+          ? primary.teamName
+          : overlay.teamName,
+      organization: primary.organization.trim().isNotEmpty
+          ? primary.organization
+          : overlay.organization,
+      robotName: primary.robotName.trim().isNotEmpty
+          ? primary.robotName
+          : overlay.robotName,
+      location: _mergeLocationSummary(primary.location, overlay.location),
+      grade: primary.grade.trim().isNotEmpty ? primary.grade : overlay.grade,
+      registered: primary.registered || overlay.registered,
+    );
+  }
+
+  LocationSummary _mergeLocationSummary(
+    LocationSummary primary,
+    LocationSummary overlay,
+  ) {
+    return LocationSummary(
+      venue: primary.venue.trim().isNotEmpty ? primary.venue : overlay.venue,
+      address1: primary.address1.trim().isNotEmpty
+          ? primary.address1
+          : overlay.address1,
+      city: primary.city.trim().isNotEmpty ? primary.city : overlay.city,
+      region: primary.region.trim().isNotEmpty
+          ? primary.region
+          : overlay.region,
+      postcode: primary.postcode.trim().isNotEmpty
+          ? primary.postcode
+          : overlay.postcode,
+      country: primary.country.trim().isNotEmpty
+          ? primary.country
+          : overlay.country,
+    );
+  }
+
+  String _resolvedGradeFor(String grade) {
+    if (grade.trim().isNotEmpty) {
+      return grade;
+    }
+    return _currentAccount?.team.grade ?? 'High School';
+  }
+
   TeamSummary _teamFromWorldSkills(WorldSkillsEntry entry, String gradeLevel) {
     return TeamSummary(
       id: entry.teamId,
@@ -1850,9 +2364,6 @@ class AppSessionController extends ChangeNotifier {
     final normalized = grade.trim().toLowerCase();
     if (normalized.contains('middle')) {
       return 'Middle School';
-    }
-    if (normalized.contains('college')) {
-      return 'College';
     }
     return 'High School';
   }
@@ -1903,6 +2414,11 @@ class AppSessionController extends ChangeNotifier {
         preferredSeasonId: _preferredSeasonId,
         themeModePreference: _themeModePreference,
         competitionPreference: _competitionPreference,
+        dismissedWorldsScheduleAnnouncementId:
+            _dismissedWorldsScheduleAnnouncementId,
+        notificationCenterSeenAtMillis: _notificationCenterSeenAtMillis,
+        favoriteTeamNumbers: _favoriteTeamNumbers,
+        developerScrimmageEnabled: _developerScrimmageEnabled,
       ),
     );
   }
@@ -1913,6 +2429,16 @@ class AppSessionController extends ChangeNotifier {
       throw const FormatException('Enter a valid email address.');
     }
     return normalizedEmail;
+  }
+
+  String _localAccountEmailForTeam(String teamNumber) {
+    final sanitized = teamNumber
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final localPart = sanitized.isEmpty ? 'device-user' : 'team-$sanitized';
+    return '$localPart@$_localAccountDomain';
   }
 
   Future<void> _setSignedInAccount(

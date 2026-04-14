@@ -11,6 +11,10 @@ const _worldSkillsBaseUrlDefine = String.fromEnvironment(
 );
 const _supabaseUrlDefine = String.fromEnvironment('SUPABASE_URL');
 const _supabaseAnonKeyDefine = String.fromEnvironment('SUPABASE_ANON_KEY');
+const _supabasePublishableKeyDefine = String.fromEnvironment(
+  'SUPABASE_PUBLISHABLE_KEY',
+);
+const _supabaseKeyDefine = String.fromEnvironment('SUPABASE_KEY');
 const _supabaseRedirectUrlDefine = String.fromEnvironment(
   'SUPABASE_REDIRECT_URL',
 );
@@ -94,9 +98,15 @@ class SolarConfig {
         readString(fileValues['supabaseURL']),
       ]),
       supabaseAnonKey: firstNonEmpty(<String?>[
+        _supabasePublishableKeyDefine,
         _supabaseAnonKeyDefine,
+        _supabaseKeyDefine,
+        environment['SUPABASE_PUBLISHABLE_KEY'],
         environment['SUPABASE_ANON_KEY'],
+        environment['SUPABASE_KEY'],
+        readString(fileValues['supabasePublishableKey']),
         readString(fileValues['supabaseAnonKey']),
+        readString(fileValues['supabaseKey']),
       ]),
       supabaseRedirectUrl: firstNonEmpty(<String?>[
         _supabaseRedirectUrlDefine,

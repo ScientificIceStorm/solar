@@ -15,6 +15,8 @@ abstract class TeamDirectoryService {
   Future<TeamStatsSnapshot> loadTeamStats(
     TeamSummary team, {
     int? preferredSeasonId,
+    WorldSkillsEntry? seedWorldSkillsEntry,
+    OpenSkillCacheEntry? seedOpenSkillEntry,
   });
 }
 
@@ -22,11 +24,16 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
   SolarTeamDirectoryService({required SolarApi api}) : _api = api;
 
   final SolarApi _api;
+  static const _eventsTimeout = Duration(seconds: 8);
+  static const _statsTimeout = Duration(seconds: 6);
+  static const _openSkillTimeout = Duration(seconds: 3);
 
   @override
   Future<TeamStatsSnapshot> loadTeamStats(
     TeamSummary team, {
     int? preferredSeasonId,
+    WorldSkillsEntry? seedWorldSkillsEntry,
+    OpenSkillCacheEntry? seedOpenSkillEntry,
   }) async {
     if (!_api.config.hasRobotEventsApiKey) {
       return TeamStatsSnapshot(
@@ -37,32 +44,78 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     }
 
     try {
-      final allEvents = await _loadAllEvents(team.id);
-      final seasonId = await _resolveSeasonId(
-        allEvents,
-        preferredSeasonId: preferredSeasonId,
-      );
+      final allEventsFuture = team.id <= 0
+          ? Future<List<EventSummary>>.value(const <EventSummary>[])
+          : _safeFuture<List<EventSummary>>(
+              _loadAllEvents(team.id),
+              fallback: const <EventSummary>[],
+              timeout: _eventsTimeout,
+            );
+      var seasonId = preferredSeasonId;
+      seasonId ??= await _resolveSeasonIdOrNull(await allEventsFuture);
+
+      final allEvents = await allEventsFuture;
       final upcomingEvents = _upcomingEventsFrom(allEvents);
-      final rankings = await _loadRankings(team.id, seasonId: seasonId);
       final gradeLevel = _worldSkillsGradeLevel(team.grade);
-      final worldSkillsEntry = await _loadWorldSkillsEntry(
-        seasonId: seasonId,
-        gradeLevel: gradeLevel,
-        team: team,
-      );
-      final openSkillEntry = await _loadOpenSkillEntry(
-        seasonId: seasonId,
-        gradeLevel: gradeLevel,
-        team: team,
-      );
+      final rankingsFuture = seasonId == null || team.id <= 0
+          ? Future<List<RankingRecord>>.value(const <RankingRecord>[])
+          : _safeFuture<List<RankingRecord>>(
+              _loadRankings(team.id, seasonId: seasonId),
+              fallback: const <RankingRecord>[],
+            );
+      final matchHistoryFuture = seasonId == null || team.id <= 0
+          ? Future<List<MatchSummary>>.value(const <MatchSummary>[])
+          : _safeFuture<List<MatchSummary>>(
+              _loadMatchHistory(team.id, seasonId: seasonId),
+              fallback: const <MatchSummary>[],
+            );
+      final worldSkillsFuture = seedWorldSkillsEntry != null || seasonId == null
+          ? Future<WorldSkillsEntry?>.value(seedWorldSkillsEntry)
+          : _safeNullableFuture<WorldSkillsEntry>(
+              _loadWorldSkillsEntry(
+                seasonId: seasonId,
+                gradeLevel: gradeLevel,
+                team: team,
+              ),
+            );
+      final openSkillFuture = seedOpenSkillEntry != null || seasonId == null
+          ? Future<OpenSkillCacheEntry?>.value(seedOpenSkillEntry)
+          : _safeNullableFuture<OpenSkillCacheEntry>(
+              _loadOpenSkillEntry(
+                seasonId: seasonId,
+                gradeLevel: gradeLevel,
+                team: team,
+              ),
+              timeout: _openSkillTimeout,
+            );
+      final results = await Future.wait<Object?>(<Future<Object?>>[
+        rankingsFuture.then<Object?>((value) => value),
+        matchHistoryFuture.then<Object?>((value) => value),
+        worldSkillsFuture.then<Object?>((value) => value),
+        openSkillFuture.then<Object?>((value) => value),
+      ]);
+      final rankings = results[0] as List<RankingRecord>;
+      final matchHistory = results[1] as List<MatchSummary>;
+      final worldSkillsEntry = results[2] as WorldSkillsEntry?;
+      final openSkillEntry = results[3] as OpenSkillCacheEntry?;
+      final hasLiveStats =
+          allEvents.isNotEmpty ||
+          rankings.isNotEmpty ||
+          matchHistory.isNotEmpty ||
+          worldSkillsEntry != null ||
+          openSkillEntry != null;
       return TeamStatsSnapshot(
         team: team,
         allEvents: allEvents,
         upcomingEvents: upcomingEvents,
         rankings: rankings,
+        matchHistory: matchHistory,
         openSkillEntry: openSkillEntry,
         worldSkillsEntry: worldSkillsEntry,
         lastUpdated: DateTime.now(),
+        errorMessage: hasLiveStats
+            ? null
+            : 'Live team stats are taking longer than usual. Pull to retry.',
       );
     } on SolarApiException catch (error) {
       return TeamStatsSnapshot(team: team, errorMessage: error.message);
@@ -178,6 +231,24 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     return rankings;
   }
 
+  Future<List<MatchSummary>> _loadMatchHistory(
+    int teamId, {
+    required int seasonId,
+  }) async {
+    final matches = await _api.robotEvents.fetchTeamMatches(
+      teamId,
+      season: seasonId,
+    );
+    matches.sort((a, b) {
+      final aDate =
+          a.started ?? a.scheduled ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate =
+          b.started ?? b.scheduled ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aDate.compareTo(bDate);
+    });
+    return matches;
+  }
+
   Future<int> _resolveSeasonId(
     List<EventSummary> allEvents, {
     int? preferredSeasonId,
@@ -211,6 +282,14 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
       );
     });
     return seasons.first.id;
+  }
+
+  Future<int?> _resolveSeasonIdOrNull(List<EventSummary> allEvents) async {
+    try {
+      return await _resolveSeasonId(allEvents).timeout(_statsTimeout);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<WorldSkillsEntry?> _loadWorldSkillsEntry({
@@ -266,13 +345,33 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     return null;
   }
 
+  Future<T> _safeFuture<T>(
+    Future<T> future, {
+    required T fallback,
+    Duration timeout = _statsTimeout,
+  }) async {
+    try {
+      return await future.timeout(timeout);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  Future<T?> _safeNullableFuture<T>(
+    Future<T?> future, {
+    Duration timeout = _statsTimeout,
+  }) async {
+    try {
+      return await future.timeout(timeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
   String _worldSkillsGradeLevel(String grade) {
     final normalized = grade.trim().toLowerCase();
     if (normalized.contains('middle')) {
       return 'Middle School';
-    }
-    if (normalized.contains('college')) {
-      return 'College';
     }
     return 'High School';
   }
@@ -297,6 +396,8 @@ class FakeTeamDirectoryService implements TeamDirectoryService {
   Future<TeamStatsSnapshot> loadTeamStats(
     TeamSummary team, {
     int? preferredSeasonId,
+    WorldSkillsEntry? seedWorldSkillsEntry,
+    OpenSkillCacheEntry? seedOpenSkillEntry,
   }) async {
     return _snapshotsByTeamId[team.id] ?? TeamStatsSnapshot(team: team);
   }

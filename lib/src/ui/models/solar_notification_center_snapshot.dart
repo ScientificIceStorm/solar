@@ -14,6 +14,27 @@ class SolarNotificationCenterSnapshot {
   bool get hasItems => upcomingMatch != null || recentResults.isNotEmpty;
 
   int get itemCount => (upcomingMatch == null ? 0 : 1) + recentResults.length;
+
+  int unreadCount(int? seenAtMillis) {
+    if (seenAtMillis == null) {
+      return itemCount;
+    }
+
+    final seenAt = DateTime.fromMillisecondsSinceEpoch(seenAtMillis);
+    var unread = 0;
+    final upcomingAnchor = upcomingMatch?.scheduled ?? upcomingMatch?.started;
+    if (upcomingAnchor != null && upcomingAnchor.isAfter(seenAt)) {
+      unread += 1;
+    }
+
+    for (final result in recentResults) {
+      final completedAt = result.completedAt;
+      if (completedAt != null && completedAt.isAfter(seenAt)) {
+        unread += 1;
+      }
+    }
+    return unread;
+  }
 }
 
 class SolarRecentMatchResult {

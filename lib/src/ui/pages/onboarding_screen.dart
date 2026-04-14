@@ -4,7 +4,8 @@ import '../../app/solar_app_scope.dart';
 import '../models/app_account.dart';
 import '../models/onboarding_slide.dart';
 import '../widgets/solar_screen_background.dart';
-import 'sign_in_screen.dart';
+import '../widgets/solar_text_field.dart';
+import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({
@@ -28,6 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Everything Solar has right now',
       description:
           'Quickview, Solarize rankings, calendars, division tabs, team pages, match predictions, event photos, widgets, live activities, and notifications are all already in this build.',
+      imageAsset: 'assets/images/onboarding_1.png',
       highlights: <String>[
         'Quickview',
         'Solarize',
@@ -44,6 +46,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Move through comp day faster',
       description:
           'Jump from your next match into the right division, event, ranking, or team page without bouncing around different menus.',
+      imageAsset: 'assets/images/onboarding_2.png',
       highlights: <String>[
         'Next match',
         'Division standings',
@@ -56,12 +59,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Set Solar up your way',
       description:
           'Tell Solar which competition family you are in so the app defaults to the right teams, events, and rankings before you finish.',
+      imageAsset: 'assets/images/onboarding_3.png',
     ),
   ];
 
   final PageController _pageController = PageController();
+  final TextEditingController _teamController = TextEditingController();
   int _currentIndex = 0;
   AppCompetitionPreference _competition = AppCompetitionPreference.vexV5;
+  bool _isFinishing = false;
 
   @override
   void initState() {
@@ -73,23 +79,50 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _teamController.dispose();
     super.dispose();
   }
 
   Future<void> _finishFlow() async {
-    await SolarAppScope.of(
-      context,
-    ).completeOnboarding(competitionPreference: _competition);
-    if (!mounted) {
-      return;
-    }
     if (widget.previewOnly) {
       Navigator.of(context).pop();
       return;
     }
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const SignInScreen()),
-    );
+
+    setState(() {
+      _isFinishing = true;
+    });
+
+    try {
+      final controller = SolarAppScope.of(context);
+      await controller.createLocalAccount(
+        teamNumber: _teamController.text,
+        competitionPreference: _competition,
+      );
+      await controller.completeOnboarding(
+        competitionPreference: _competition,
+      );
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        HomeScreen.routeName,
+        (route) => false,
+      );
+    } on FormatException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFinishing = false;
+        });
+      }
+    }
   }
 
   Future<void> _nextPage() async {
@@ -99,6 +132,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
 
     await _pageController.nextPage(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Future<void> _handleSkip() async {
+    if (widget.previewOnly || _currentIndex == _slides.length - 1) {
+      await _finishFlow();
+      return;
+    }
+
+    await _pageController.animateToPage(
+      _slides.length - 1,
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
     );
@@ -123,7 +169,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   });
                 },
                 itemBuilder: (context, index) {
-                  return const SizedBox.expand();
+                  final slide = _slides[index];
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 36, 24, 22),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                        child: Image.asset(
+                          slide.imageAsset,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  );
                 },
               ),
             ),
@@ -215,12 +276,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         });
                       },
                     ),
+                    const SizedBox(height: 14),
+                    SolarTextField(
+                      controller: _teamController,
+                      hintText: 'Team number',
+                      icon: Icons.tag_rounded,
+                      textInputAction: TextInputAction.done,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your team will be stored locally on this device.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.68),
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 28),
                   Row(
                     children: <Widget>[
                       TextButton(
-                        onPressed: _finishFlow,
+                        onPressed: _isFinishing ? null : _handleSkip,
                         child: Text(
                           widget.previewOnly ? 'Close' : 'Skip',
                           style: TextStyle(color: Colors.white),
@@ -245,11 +322,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                       ),
                       const Spacer(),
-                      TextButton(
-                        onPressed: _nextPage,
-                        child: Text(
+                      TextButton.icon(
+                        onPressed: _isFinishing ? null : _nextPage,
+                        icon: _isFinishing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                        label: Text(
                           _currentIndex == _slides.length - 1 ? 'Done' : 'Next',
-                          style: TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                     ],

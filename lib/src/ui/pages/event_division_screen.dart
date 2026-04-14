@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../app/app_session_controller.dart';
 import '../../app/solar_app_scope.dart';
+import '../../models/open_skill_models.dart';
 import '../../models/robot_events_models.dart';
-import 'match_details_screen.dart';
+import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_team_link.dart';
-import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solarize_team_list.dart';
+import 'event_team_screen.dart';
+import 'match_details_screen.dart';
 
 class EventDivisionScreenArgs {
   const EventDivisionScreenArgs({
@@ -38,9 +41,10 @@ class EventDivisionScreen extends StatelessWidget {
       eventId: args.event.id,
       divisionId: args.division.id,
     );
+    final eventTeamsFuture = controller.fetchEventTeams(args.event.id);
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: SolarEventSubpageScaffold(
         title: args.division.name,
         subtitle: args.event.name,
@@ -52,6 +56,7 @@ class EventDivisionScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const TabBar(
+                isScrollable: true,
                 indicatorColor: Color(0xFF5A67F3),
                 labelColor: Color(0xFF24243A),
                 unselectedLabelColor: Color(0xFF8E92A7),
@@ -59,6 +64,7 @@ class EventDivisionScreen extends StatelessWidget {
                   Tab(text: 'Rankings'),
                   Tab(text: 'Matches'),
                   Tab(text: 'Teams'),
+                  Tab(text: 'Predictions'),
                 ],
               ),
             ),
@@ -70,6 +76,7 @@ class EventDivisionScreen extends StatelessWidget {
                     future: Future.wait<Object>(<Future<Object>>[
                       rankingsFuture.then<Object>((value) => value),
                       matchesFuture.then<Object>((value) => value),
+                      eventTeamsFuture.then<Object>((value) => value),
                     ]),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
@@ -79,6 +86,7 @@ class EventDivisionScreen extends StatelessWidget {
                       final values = snapshot.data!;
                       final rankings = values[0] as List<RankingRecord>;
                       final matches = values[1] as List<MatchSummary>;
+                      final eventTeams = values[2] as List<TeamSummary>;
                       if (rankings.isEmpty) {
                         return const _EmptyEventState(
                           title: 'No rankings yet',
@@ -87,6 +95,11 @@ class EventDivisionScreen extends StatelessWidget {
                         );
                       }
 
+                      final teamsByKey = _eventTeamsByKey(
+                        controller: controller,
+                        rankings: rankings,
+                        eventTeams: eventTeams,
+                      );
                       final performanceTable =
                           _DivisionPerformanceTable.fromMatches(matches);
 
@@ -95,24 +108,35 @@ class EventDivisionScreen extends StatelessWidget {
                         child: ListView.builder(
                           padding: const EdgeInsets.only(bottom: 8),
                           itemCount: rankings.length,
-                          itemBuilder: (context, index) => _RankingCard(
-                            ranking: rankings[index],
-                            highlightTeamNumber: args.highlightTeamNumber,
-                            metrics: performanceTable.forTeam(
-                              rankings[index].team.number,
-                            ),
-                          ),
+                          itemBuilder: (context, index) {
+                            final ranking = rankings[index];
+                            final team =
+                                teamsByKey[ranking.team.number.trim().toUpperCase()] ??
+                                _teamFromRanking(controller, ranking);
+                            return _RankingCard(
+                              event: args.event,
+                              ranking: ranking,
+                              team: team,
+                              highlightTeamNumber: args.highlightTeamNumber,
+                              metrics: performanceTable.forTeam(team.number),
+                            );
+                          },
                         ),
                       );
                     },
                   ),
-                  FutureBuilder<List<MatchSummary>>(
-                    future: matchesFuture,
+                  FutureBuilder<List<Object>>(
+                    future: Future.wait<Object>(<Future<Object>>[
+                      matchesFuture.then<Object>((value) => value),
+                      eventTeamsFuture.then<Object>((value) => value),
+                    ]),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
                         return const _CenteredLoader();
                       }
-                      final matches = snapshot.data!;
+                      final values = snapshot.data!;
+                      final matches = values[0] as List<MatchSummary>;
+                      final eventTeams = values[1] as List<TeamSummary>;
                       if (matches.isEmpty) {
                         return const _EmptyEventState(
                           title: 'No matches yet',
@@ -120,6 +144,12 @@ class EventDivisionScreen extends StatelessWidget {
                               'When division match data is available, it will show up here.',
                         );
                       }
+
+                      final teamsByKey = <String, TeamSummary>{
+                        for (final team in eventTeams)
+                          team.number.trim().toUpperCase(): team,
+                      };
+
                       return StretchingOverscrollIndicator(
                         axisDirection: AxisDirection.down,
                         child: ListView.builder(
@@ -138,6 +168,22 @@ class EventDivisionScreen extends StatelessWidget {
                                 ),
                               );
                             },
+                            onTeamTap: (team) {
+                              final resolvedTeam =
+                                  teamsByKey[team.number.trim().toUpperCase()] ??
+                                  controller.resolveKnownTeamSummary(
+                                    teamNumber: team.number,
+                                    teamId: team.id,
+                                    teamName: team.name,
+                                    grade: 'High School',
+                                  );
+                              openSolarEventTeamScreen(
+                                context,
+                                event: args.event,
+                                team: resolvedTeam,
+                                highlightTeamNumber: args.highlightTeamNumber,
+                              );
+                            },
                           ),
                         ),
                       );
@@ -146,27 +192,35 @@ class EventDivisionScreen extends StatelessWidget {
                   FutureBuilder<List<Object>>(
                     future: Future.wait<Object>(<Future<Object>>[
                       rankingsFuture.then<Object>((value) => value),
+                      eventTeamsFuture.then<Object>((value) async {
+                        await controller.ensureSolarizeCoverageForTeams(
+                          teams: value,
+                        );
+                        return value;
+                      }),
                     ]),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
                         return const _CenteredLoader();
                       }
 
-                      final rankings =
-                          snapshot.data!.first as List<RankingRecord>;
+                      final values = snapshot.data!;
+                      final rankings = values[0] as List<RankingRecord>;
+                      final eventTeams = values[1] as List<TeamSummary>;
                       final teams = rankings
-                          .map(
-                            (ranking) => TeamSummary(
-                              id: ranking.team.id,
-                              number: ranking.team.number,
-                              teamName: ranking.team.name,
-                              organization: '',
-                              robotName: '',
-                              location: args.event.location,
-                              grade: 'High School',
-                              registered: true,
-                            ),
-                          )
+                          .map((ranking) {
+                            TeamSummary? knownTeam;
+                            for (final team in eventTeams) {
+                              if (team.number.trim().toUpperCase() ==
+                                      ranking.team.number.trim().toUpperCase() ||
+                                  team.id == ranking.team.id) {
+                                knownTeam = team;
+                                break;
+                              }
+                            }
+                            return knownTeam ??
+                                _teamFromRanking(controller, ranking);
+                          })
                           .toList(growable: false);
 
                       return SolarizeTeamList(
@@ -174,6 +228,63 @@ class EventDivisionScreen extends StatelessWidget {
                         teams: teams,
                         highlightTeamNumber: args.highlightTeamNumber,
                         emptyLabel: 'No division teams available.',
+                        event: args.event,
+                      );
+                    },
+                  ),
+                  FutureBuilder<List<Object>>(
+                    future: Future.wait<Object>(<Future<Object>>[
+                      rankingsFuture.then<Object>((value) => value),
+                      matchesFuture.then<Object>((value) => value),
+                      eventTeamsFuture.then<Object>((value) => value),
+                    ]),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const _CenteredLoader();
+                      }
+
+                      final values = snapshot.data!;
+                      final rankings = values[0] as List<RankingRecord>;
+                      final matches = values[1] as List<MatchSummary>;
+                      final eventTeams = values[2] as List<TeamSummary>;
+                      if (rankings.isEmpty) {
+                        return const _EmptyEventState(
+                          title: 'No ranking data yet',
+                          body:
+                              'Alliance forecasts open up once the division publishes rankings.',
+                        );
+                      }
+
+                      final teamsByKey = _eventTeamsByKey(
+                        controller: controller,
+                        rankings: rankings,
+                        eventTeams: eventTeams,
+                      );
+                      final performanceTable =
+                          _DivisionPerformanceTable.fromMatches(matches);
+                      final predictions = _PredictedAllianceSelection.build(
+                        rankings: rankings,
+                        teamsByKey: teamsByKey,
+                        performanceTable: performanceTable,
+                        openSkillByTeam: <String, OpenSkillCacheEntry>{
+                          for (final team in teamsByKey.values)
+                            if (controller.openSkillEntryForTeam(team.number) !=
+                                null)
+                              team.number.trim().toUpperCase():
+                                  controller.openSkillEntryForTeam(team.number)!,
+                        },
+                      );
+
+                      return _PredictionsTab(
+                        predictions: predictions,
+                        onOpenTeam: (team) {
+                          openSolarEventTeamScreen(
+                            context,
+                            event: args.event,
+                            team: team,
+                            highlightTeamNumber: args.highlightTeamNumber,
+                          );
+                        },
                       );
                     },
                   ),
@@ -187,14 +298,45 @@ class EventDivisionScreen extends StatelessWidget {
   }
 }
 
+Map<String, TeamSummary> _eventTeamsByKey({
+  required AppSessionController controller,
+  required List<RankingRecord> rankings,
+  required List<TeamSummary> eventTeams,
+}) {
+  final teamsByKey = <String, TeamSummary>{
+    for (final team in eventTeams) team.number.trim().toUpperCase(): team,
+  };
+  for (final ranking in rankings) {
+    final key = ranking.team.number.trim().toUpperCase();
+    teamsByKey.putIfAbsent(key, () => _teamFromRanking(controller, ranking));
+  }
+  return teamsByKey;
+}
+
+TeamSummary _teamFromRanking(
+  AppSessionController controller,
+  RankingRecord ranking,
+) {
+  return controller.resolveKnownTeamSummary(
+    teamNumber: ranking.team.number,
+    teamId: ranking.team.id,
+    teamName: ranking.team.name,
+    grade: 'High School',
+  );
+}
+
 class _RankingCard extends StatelessWidget {
   const _RankingCard({
+    required this.event,
     required this.ranking,
+    required this.team,
     required this.highlightTeamNumber,
     required this.metrics,
   });
 
+  final EventSummary event;
   final RankingRecord ranking;
+  final TeamSummary team;
   final String? highlightTeamNumber;
   final _DivisionPerformanceMetrics? metrics;
 
@@ -237,9 +379,18 @@ class _RankingCard extends StatelessWidget {
                   children: <Widget>[
                     Expanded(
                       child: SolarTeamLinkText(
-                        teamNumber: ranking.team.number,
-                        teamId: ranking.team.id,
-                        teamName: ranking.team.name,
+                        teamNumber: team.number,
+                        teamId: team.id,
+                        teamName: team.teamName,
+                        organization: team.organization,
+                        onTap: () {
+                          openSolarEventTeamScreen(
+                            context,
+                            event: event,
+                            team: team,
+                            highlightTeamNumber: highlightTeamNumber,
+                          );
+                        },
                         style: TextStyle(
                           color: labelColor,
                           fontSize: 24,
@@ -264,8 +415,8 @@ class _RankingCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _teamSubtitle(ranking.team.name),
-                  maxLines: 1,
+                  _teamSubtitle(team),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF8E92A7),
@@ -275,7 +426,7 @@ class _RankingCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${_recordLabel(ranking)}  •  WP ${_intLabel(ranking.wp)}  •  AP ${_intLabel(ranking.ap)}',
+                  '${_rankingRecordLabel(ranking, metrics)}  •  WP ${_intLabel(ranking.wp)}  •  AP ${_intLabel(ranking.ap)}',
                   style: const TextStyle(
                     color: Color(0xFF8E92A7),
                     fontSize: 12,
@@ -300,9 +451,15 @@ class _RankingCard extends StatelessWidget {
   }
 }
 
-String _teamSubtitle(String teamName) {
-  final label = teamName.trim();
-  return label.isEmpty ? 'Team profile pending' : label;
+String _teamSubtitle(TeamSummary team) {
+  final parts = <String>[
+    if (team.teamName.trim().isNotEmpty) team.teamName.trim(),
+    if (team.organization.trim().isNotEmpty) team.organization.trim(),
+  ];
+  if (parts.isNotEmpty) {
+    return parts.join('  •  ');
+  }
+return 'Team profile pending';
 }
 
 class _DivisionPerformanceTable {
@@ -361,12 +518,22 @@ class _DivisionPerformanceTable {
       accumulator.offenseTotal += alliance.score;
       accumulator.defenseTotal += opponent.score;
       accumulator.marginTotal += alliance.score - opponent.score;
+      if (alliance.score > opponent.score) {
+        accumulator.wins += 1;
+      } else if (alliance.score < opponent.score) {
+        accumulator.losses += 1;
+      } else {
+        accumulator.ties += 1;
+      }
     }
   }
 }
 
 class _TeamPerformanceAccumulator {
   int matches = 0;
+  int wins = 0;
+  int losses = 0;
+  int ties = 0;
   double offenseTotal = 0;
   double defenseTotal = 0;
   double marginTotal = 0;
@@ -377,6 +544,10 @@ class _TeamPerformanceAccumulator {
         opr: null,
         dpr: null,
         ccwm: null,
+        wins: 0,
+        losses: 0,
+        ties: 0,
+        matches: 0,
       );
     }
 
@@ -384,6 +555,10 @@ class _TeamPerformanceAccumulator {
       opr: offenseTotal / matches,
       dpr: defenseTotal / matches,
       ccwm: marginTotal / matches,
+      wins: wins,
+      losses: losses,
+      ties: ties,
+      matches: matches,
     );
   }
 }
@@ -393,15 +568,413 @@ class _DivisionPerformanceMetrics {
     required this.opr,
     required this.dpr,
     required this.ccwm,
+    required this.wins,
+    required this.losses,
+    required this.ties,
+    required this.matches,
   });
 
   final double? opr;
   final double? dpr;
   final double? ccwm;
+  final int wins;
+  final int losses;
+  final int ties;
+  final int matches;
 
   String get oprLabel => _decimalLabel(opr);
   String get dprLabel => _decimalLabel(dpr);
   String get ccwmLabel => _decimalLabel(ccwm, signed: true);
+  String get recordLabel =>
+      matches == 0 ? 'Record pending' : '$wins-$losses-$ties';
+}
+
+String _rankingRecordLabel(
+  RankingRecord ranking,
+  _DivisionPerformanceMetrics? metrics,
+) {
+  final liveMetrics = metrics;
+  if (liveMetrics != null && liveMetrics.matches > 0) {
+    final officialHasRecord =
+        ranking.wins > 0 || ranking.losses > 0 || ranking.ties > 0;
+    if (!officialHasRecord) {
+      return liveMetrics.recordLabel;
+    }
+  }
+  if (ranking.wins < 0 || ranking.losses < 0 || ranking.ties < 0) {
+    return 'Record pending';
+  }
+  return '${ranking.wins}-${ranking.losses}-${ranking.ties}';
+}
+
+class _PredictionsTab extends StatelessWidget {
+  const _PredictionsTab({
+    required this.predictions,
+    required this.onOpenTeam,
+  });
+
+  final List<_PredictedAllianceSelection> predictions;
+  final ValueChanged<TeamSummary> onOpenTeam;
+
+  @override
+  Widget build(BuildContext context) {
+    if (predictions.isEmpty) {
+      return const _EmptyEventState(
+        title: 'Not enough data yet',
+        body:
+            'Predicted alliances will appear here once the division has enough ranked teams to model selection order.',
+      );
+    }
+
+    return StretchingOverscrollIndicator(
+      axisDirection: AxisDirection.down,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 8),
+        children: <Widget>[
+          const Text(
+            'Predicted Alliances',
+            style: TextStyle(
+              color: Color(0xFF24243A),
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.7,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Lightweight forecast from live seed order, event record, and in-division scoring. Strong captains can still decline if holding their own slot looks better.',
+            style: TextStyle(
+              color: Color(0xFF8E92A7),
+              fontSize: 14,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (var index = 0; index < predictions.length; index++)
+            _PredictionRow(
+              prediction: predictions[index],
+              showDivider: index != predictions.length - 1,
+              onOpenTeam: onOpenTeam,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PredictionRow extends StatelessWidget {
+  const _PredictionRow({
+    required this.prediction,
+    required this.showDivider,
+    required this.onOpenTeam,
+  });
+
+  final _PredictedAllianceSelection prediction;
+  final bool showDivider;
+  final ValueChanged<TeamSummary> onOpenTeam;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = prediction.wasDeclined
+        ? const Color(0xFFB26828)
+        : const Color(0xFF1F8A52);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Text(
+                '${prediction.seed}',
+                style: const TextStyle(
+                  color: Color(0xFF16182C),
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.9,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _PredictionTeamChip(
+                      team: prediction.captain,
+                      emphasized: true,
+                      onTap: () => onOpenTeam(prediction.captain),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Color(0xFF8E92A7),
+                      size: 18,
+                    ),
+                    _PredictionTeamChip(
+                      team: prediction.pick,
+                      emphasized: false,
+                      onTap: () => onOpenTeam(prediction.pick),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  prediction.wasDeclined ? 'Pivot' : 'Accept',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            prediction.summary,
+            style: const TextStyle(
+              color: Color(0xFF5F6478),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          if (prediction.declinedTarget != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              'First look: ${prediction.declinedTarget!.number} likely says no and protects its own captain slot.',
+              style: const TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PredictionTeamChip extends StatelessWidget {
+  const _PredictionTeamChip({
+    required this.team,
+    required this.emphasized,
+    required this.onTap,
+  });
+
+  final TeamSummary team;
+  final bool emphasized;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: emphasized ? const Color(0xFF16182C) : Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: emphasized ? null : Border.all(color: const Color(0xFFE4E5EE)),
+        ),
+        child: Text(
+          team.number,
+          style: TextStyle(
+            color: emphasized ? Colors.white : const Color(0xFF16182C),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PredictedAllianceSelection {
+  const _PredictedAllianceSelection({
+    required this.seed,
+    required this.captain,
+    required this.pick,
+    required this.summary,
+    required this.wasDeclined,
+    this.declinedTarget,
+  });
+
+  final int seed;
+  final TeamSummary captain;
+  final TeamSummary pick;
+  final String summary;
+  final bool wasDeclined;
+  final TeamSummary? declinedTarget;
+
+  static List<_PredictedAllianceSelection> build({
+    required List<RankingRecord> rankings,
+    required Map<String, TeamSummary> teamsByKey,
+    required _DivisionPerformanceTable performanceTable,
+    required Map<String, OpenSkillCacheEntry> openSkillByTeam,
+  }) {
+    final rankedTeams = rankings
+        .where((ranking) => ranking.rank > 0)
+        .toList(growable: false)
+      ..sort((a, b) => a.rank.compareTo(b.rank));
+    if (rankedTeams.length < 8) {
+      return const <_PredictedAllianceSelection>[];
+    }
+
+    final predicted = <_PredictedAllianceSelection>[];
+    final captains = rankedTeams.take(8).map((entry) => entry.team.number).toList();
+    var nextCaptainIndex = 8;
+    final unavailable = <String>{};
+
+    TeamSummary teamForNumber(String teamNumber) {
+      return teamsByKey[teamNumber.trim().toUpperCase()]!;
+    }
+
+    double captainScore(RankingRecord ranking) {
+      final metrics = performanceTable.forTeam(ranking.team.number);
+      final openSkill = openSkillByTeam[ranking.team.number.trim().toUpperCase()];
+      final recordStrength =
+          ((ranking.wins + (ranking.ties * 0.5)) - ranking.losses) * 1.35;
+      final liveMargin = metrics?.ccwm ?? 0;
+      final liveOffense = metrics?.opr ?? ranking.averagePoints;
+      final openSkillBoost =
+          openSkill == null ? 0.0 : (openSkill.openSkillOrdinal / 6.2);
+      return ((100 - ranking.rank.clamp(1, 100)) * 0.46) +
+          recordStrength +
+          (liveMargin * 1.2) +
+          (liveOffense * 0.08) +
+          openSkillBoost;
+    }
+
+    double partnerFit(
+      RankingRecord captain,
+      RankingRecord candidate,
+    ) {
+      final captainMetrics = performanceTable.forTeam(captain.team.number);
+      final candidateMetrics = performanceTable.forTeam(candidate.team.number);
+      final openSkill = openSkillByTeam[candidate.team.number.trim().toUpperCase()];
+      final candidateScore = captainScore(candidate);
+      final captainOffense = captainMetrics?.opr ?? captain.averagePoints;
+      final candidateDefense = candidateMetrics?.dpr ?? 0;
+      final candidateMargin = candidateMetrics?.ccwm ?? 0;
+      final complement =
+          (captainOffense >= 55 ? candidateDefense * 0.05 : 0) +
+          (candidateMargin * 0.9) +
+          ((openSkill?.awpPerMatch ?? 0.4) * 3.2);
+      return candidateScore + complement;
+    }
+
+    bool wouldDecline(
+      RankingRecord captain,
+      RankingRecord candidate,
+    ) {
+      final candidateScore = captainScore(candidate);
+      final captainSeedScore = captainScore(captain);
+      if (candidate.rank < captain.rank) {
+        return true;
+      }
+      if (candidate.rank <= 4 && candidateScore >= captainSeedScore - 0.6) {
+        return true;
+      }
+      return candidateScore >= captainSeedScore + 0.8;
+    }
+
+    for (var seedIndex = 0; seedIndex < 8; seedIndex++) {
+      final captainNumber = captains[seedIndex].trim().toUpperCase();
+      if (unavailable.contains(captainNumber)) {
+        continue;
+      }
+
+      final captainRanking = rankedTeams.firstWhere(
+        (entry) => entry.team.number.trim().toUpperCase() == captainNumber,
+      );
+      unavailable.add(captainNumber);
+
+      RankingRecord? acceptedCandidate;
+      RankingRecord? declinedCandidate;
+      final candidates = rankedTeams
+          .where((candidate) {
+            final key = candidate.team.number.trim().toUpperCase();
+            return !unavailable.contains(key) && key != captainNumber;
+          })
+          .toList(growable: false)
+        ..sort((a, b) {
+          final fitCompare =
+              partnerFit(captainRanking, b).compareTo(partnerFit(captainRanking, a));
+          if (fitCompare != 0) {
+            return fitCompare;
+          }
+          return a.rank.compareTo(b.rank);
+        });
+
+      for (final candidate in candidates.take(12)) {
+        final candidateKey = candidate.team.number.trim().toUpperCase();
+        final candidateIsCaptain = captains.any(
+          (captain) => captain.trim().toUpperCase() == candidateKey,
+        );
+        if (candidateIsCaptain && wouldDecline(captainRanking, candidate)) {
+          declinedCandidate ??= candidate;
+          continue;
+        }
+        acceptedCandidate = candidate;
+        unavailable.add(candidateKey);
+        if (candidateIsCaptain) {
+          while (nextCaptainIndex < rankedTeams.length) {
+            final promoted = rankedTeams[nextCaptainIndex];
+            nextCaptainIndex += 1;
+            final promotedKey = promoted.team.number.trim().toUpperCase();
+            if (!unavailable.contains(promotedKey) &&
+                !captains.any(
+                  (captain) => captain.trim().toUpperCase() == promotedKey,
+                )) {
+              captains.add(promoted.team.number);
+              break;
+            }
+          }
+        }
+        break;
+      }
+
+      if (acceptedCandidate == null) {
+        continue;
+      }
+
+      final captainTeam = teamForNumber(captainRanking.team.number);
+      final pickTeam = teamForNumber(acceptedCandidate.team.number);
+      final pickMetrics = performanceTable.forTeam(pickTeam.number);
+      final summary =
+          '${captainTeam.number} leans toward ${pickTeam.number} for ${(pickMetrics?.ccwm ?? 0).toStringAsFixed(1)} CCWM and ${(pickMetrics?.opr ?? acceptedCandidate.averagePoints).toStringAsFixed(1)} average offense.';
+
+      predicted.add(
+        _PredictedAllianceSelection(
+          seed: seedIndex + 1,
+          captain: captainTeam,
+          pick: pickTeam,
+          summary: summary,
+          wasDeclined: declinedCandidate != null,
+          declinedTarget: declinedCandidate == null
+              ? null
+              : teamForNumber(declinedCandidate.team.number),
+        ),
+      );
+    }
+
+    return predicted;
+  }
 }
 
 class _CenteredLoader extends StatelessWidget {
@@ -464,13 +1037,6 @@ class _EmptyEventState extends StatelessWidget {
       ),
     );
   }
-}
-
-String _recordLabel(RankingRecord ranking) {
-  if (ranking.wins < 0 || ranking.losses < 0 || ranking.ties < 0) {
-    return 'Record pending';
-  }
-  return '${ranking.wins}-${ranking.losses}-${ranking.ties}';
 }
 
 String _intLabel(int value) => value < 0 ? '--' : '$value';

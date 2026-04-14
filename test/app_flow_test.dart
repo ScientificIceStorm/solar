@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:solar_v6/src/app/app_session_controller.dart';
+import 'package:solar_v6/src/models/open_skill_models.dart';
 import 'package:solar_v6/src/app/solar_app.dart';
 import 'package:solar_v6/src/models/robot_events_models.dart';
+import 'package:solar_v6/src/models/world_skills_models.dart';
 import 'package:solar_v6/src/ui/models/app_account.dart';
 import 'package:solar_v6/src/ui/models/team_stats_snapshot.dart';
 import 'package:solar_v6/src/ui/pages/settings_screen.dart';
@@ -73,7 +75,7 @@ void main() {
     expect(teamDirectory.lastLoadedPreferredSeasonId, 190);
   });
 
-  testWidgets('splash advances to onboarding and skip opens sign in', (
+  testWidgets('splash advances to onboarding and skip jumps to local setup', (
     tester,
   ) async {
     await tester.pumpWidget(SolarApp(controller: await _buildTestController()));
@@ -89,11 +91,11 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sign in'), findsWidgets);
-    expect(find.text('Forgot Password?'), findsOneWidget);
+    expect(find.text('Competition'), findsOneWidget);
+    expect(find.text('Team number'), findsOneWidget);
   });
 
-  testWidgets('sign up persists account and sign in opens the menu home', (
+  testWidgets('onboarding creates a local team profile and opens home', (
     tester,
   ) async {
     await tester.pumpWidget(SolarApp(controller: await _buildTestController()));
@@ -104,29 +106,8 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Sign up'));
-    await tester.tap(find.text('Sign up'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(TextField).at(0), 'Bob Smith');
-    await tester.enterText(find.byType(TextField).at(1), 'bob@solar.test');
-    await tester.enterText(find.byType(TextField).at(2), '98601Y');
-    await tester.enterText(find.byType(TextField).at(3), 'password123');
-    await tester.enterText(find.byType(TextField).at(4), 'password123');
-
-    await tester.ensureVisible(find.text('SIGN UP'));
-    await tester.tap(find.text('SIGN UP'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Verification'), findsOneWidget);
-
-    await tester.tap(find.text('BACK TO SIGN IN'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(TextField).at(0), 'bob@solar.test');
-    await tester.enterText(find.byType(TextField).at(1), 'password123');
-
-    await tester.tap(find.text('SIGN IN'));
+    await tester.enterText(find.byType(TextField).first, '98601Y');
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
     expect(find.text('Quickview'), findsOneWidget);
@@ -345,6 +326,8 @@ class _RecordingTeamDirectoryService extends FakeTeamDirectoryService {
   Future<TeamStatsSnapshot> loadTeamStats(
     TeamSummary team, {
     int? preferredSeasonId,
+    WorldSkillsEntry? seedWorldSkillsEntry,
+    OpenSkillCacheEntry? seedOpenSkillEntry,
   }) async {
     lastLoadedPreferredSeasonId = preferredSeasonId;
     return super.loadTeamStats(team, preferredSeasonId: preferredSeasonId);

@@ -408,7 +408,7 @@ class SolarMatchPredictionService {
 
     if (redWinProbability > 0.43 && redWinProbability < 0.57) {
       insights.add(
-        'Upset risk is high here. One robot disconnect, tip, or missed autonomous could flip the result.',
+        'Upset risk is high here. One big mistake could flip it.',
       );
     }
 

@@ -139,10 +139,8 @@ class _MatchMetaHeader extends StatelessWidget {
             _MetaPill(
               label: anchor == null ? 'Time pending' : _dateTimeLabel(anchor),
             ),
-            _MetaPill(label: 'Evidence ${prediction.evidenceMatches} matches'),
-            _MetaPill(
-              label: '${(prediction.confidence * 100).round()}% confidence',
-            ),
+            _MetaPill(label: '${prediction.evidenceMatches} matches'),
+            _MetaPill(label: '${(prediction.confidence * 100).round()}% conf.'),
             if (prediction.hasActualResult)
               _MetaPill(label: prediction.predictionDeltaLabel),
           ],

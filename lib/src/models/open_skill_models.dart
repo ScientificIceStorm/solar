@@ -22,6 +22,10 @@ class OpenSkillCacheEntry {
     required this.wpPerMatch,
     required this.opr,
     required this.dpr,
+    required this.strengthOfSchedule,
+    required this.eliminationWinRate,
+    required this.eliminationMatches,
+    required this.eventStrength,
     required this.qualifiedForRegionals,
     required this.qualifiedForWorlds,
   });
@@ -46,6 +50,10 @@ class OpenSkillCacheEntry {
   final double wpPerMatch;
   final double? opr;
   final double? dpr;
+  final double? strengthOfSchedule;
+  final double? eliminationWinRate;
+  final int eliminationMatches;
+  final double? eventStrength;
   final int qualifiedForRegionals;
   final int qualifiedForWorlds;
 
@@ -71,6 +79,27 @@ class OpenSkillCacheEntry {
       wpPerMatch: readDouble(json['wp_per_match']),
       opr: json['opr'] == null ? null : readDouble(json['opr']),
       dpr: json['dpr'] == null ? null : readDouble(json['dpr']),
+      strengthOfSchedule:
+          json['strength_of_schedule'] == null &&
+              json['strengthOfSchedule'] == null
+          ? null
+          : readDouble(
+              json['strength_of_schedule'] ?? json['strengthOfSchedule'],
+            ),
+      eliminationWinRate:
+          json['elimination_win_rate'] == null &&
+              json['eliminationWinRate'] == null
+          ? null
+          : readDouble(
+              json['elimination_win_rate'] ?? json['eliminationWinRate'],
+            ),
+      eliminationMatches: readInt(
+        json['elimination_matches'] ?? json['eliminationMatches'],
+      ),
+      eventStrength:
+          json['event_strength'] == null && json['eventStrength'] == null
+          ? null
+          : readDouble(json['event_strength'] ?? json['eventStrength']),
       qualifiedForRegionals: readInt(json['qualified_for_regionals']),
       qualifiedForWorlds: readInt(json['qualified_for_worlds']),
     );
@@ -98,6 +127,10 @@ class OpenSkillCacheEntry {
       'wpPerMatch': wpPerMatch,
       'opr': opr,
       'dpr': dpr,
+      'strengthOfSchedule': strengthOfSchedule,
+      'eliminationWinRate': eliminationWinRate,
+      'eliminationMatches': eliminationMatches,
+      'eventStrength': eventStrength,
       'qualifiedForRegionals': qualifiedForRegionals,
       'qualifiedForWorlds': qualifiedForWorlds,
     };

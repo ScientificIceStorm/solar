@@ -14,124 +14,131 @@ class SolarMlRankingService {
         entry.teamNumber.trim().toUpperCase(): entry,
     };
 
-    final combinedValues = worldSkills
-        .map((entry) => entry.combinedScore.toDouble())
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final driverValues = worldSkills
-        .map((entry) => entry.maxDriverScore.toDouble())
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final programmingValues = worldSkills
-        .map((entry) => entry.maxProgrammingScore.toDouble())
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final worldRankValues = worldSkills
-        .map((entry) => entry.rank.toDouble())
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final muValues = openSkillEntries
-        .map((entry) => entry.openSkillMu)
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final ordinalValues = openSkillEntries
-        .map((entry) => entry.openSkillOrdinal)
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final sigmaValues = openSkillEntries
-        .map((entry) => entry.openSkillSigma)
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final ccwmValues = openSkillEntries
-        .map((entry) => entry.ccwm ?? 0)
-        .where((value) => value != 0)
-        .toList(growable: false);
-    final awpValues = openSkillEntries
-        .map((entry) => entry.awpPerMatch)
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final wpValues = openSkillEntries
-        .map((entry) => entry.wpPerMatch)
-        .where((value) => value > 0)
-        .toList(growable: false);
-    final netValues = openSkillEntries
-        .map((entry) => (entry.opr ?? 0) - (entry.dpr ?? 0))
-        .where((value) => value != 0)
-        .toList(growable: false);
+    final muRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.openSkillMu)
+          .where((value) => value > 0),
+    );
+    final ordinalRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.openSkillOrdinal)
+          .where((value) => value > 0),
+    );
+    final sigmaRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.openSkillSigma)
+          .where((value) => value > 0),
+    );
+    final ccwmRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.ccwm ?? 0)
+          .where((value) => value != 0),
+    );
+    final awpRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.awpPerMatch)
+          .where((value) => value > 0),
+    );
+    final wpRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.wpPerMatch)
+          .where((value) => value > 0),
+    );
+    final netRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => (entry.opr ?? 0) - (entry.dpr ?? 0))
+          .where((value) => value != 0),
+    );
+    final scheduleRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.strengthOfSchedule)
+          .whereType<double>()
+          .where((value) => value > 0),
+    );
+    final eliminationRange = _MetricRange.fromValues(
+      openSkillEntries
+          .where((entry) => entry.eliminationMatches > 0)
+          .map((entry) => entry.eliminationWinRate)
+          .whereType<double>()
+          .where((value) => value > 0),
+    );
+    final eventStrengthRange = _MetricRange.fromValues(
+      openSkillEntries
+          .map((entry) => entry.eventStrength)
+          .whereType<double>()
+          .where((value) => value > 0),
+    );
 
     final computed =
         worldSkills
             .map((entry) {
               final key = entry.teamNumber.trim().toUpperCase();
               final openSkill = openSkillByTeam[key];
-              final combinedNorm = _normalize(
-                entry.combinedScore.toDouble(),
-                combinedValues,
-              );
-              final driverNorm = _normalize(
-                entry.maxDriverScore.toDouble(),
-                driverValues,
-              );
-              final programmingNorm = _normalize(
-                entry.maxProgrammingScore.toDouble(),
-                programmingValues,
-              );
-              final worldRankNorm = entry.rank <= 0
-                  ? 0.5
-                  : _reverseNormalize(entry.rank.toDouble(), worldRankValues);
               final muNorm = openSkill == null
                   ? 0.5
-                  : _normalize(openSkill.openSkillMu, muValues);
-              final ordinalNorm = _normalize(
-                openSkill?.openSkillOrdinal ?? 0,
-                ordinalValues,
-              );
+                  : muRange.normalize(openSkill.openSkillMu);
+              final ordinalNorm = openSkill == null
+                  ? 0.5
+                  : ordinalRange.normalize(openSkill.openSkillOrdinal);
               final sigmaNorm = openSkill == null
-                  ? 0.34
-                  : _reverseNormalize(openSkill.openSkillSigma, sigmaValues);
-              final ccwmNorm = _normalize(openSkill?.ccwm ?? 0, ccwmValues);
-              final awpNorm = _normalize(
-                openSkill?.awpPerMatch ?? 0,
-                awpValues,
-              );
-              final wpNorm = _normalize(openSkill?.wpPerMatch ?? 0, wpValues);
-              final netNorm = _normalize(
+                  ? 0.35
+                  : sigmaRange.reverseNormalize(openSkill.openSkillSigma);
+              final ccwmNorm = ccwmRange.normalize(openSkill?.ccwm ?? 0);
+              final awpNorm = awpRange.normalize(openSkill?.awpPerMatch ?? 0);
+              final wpNorm = wpRange.normalize(openSkill?.wpPerMatch ?? 0);
+              final netNorm = netRange.normalize(
                 (openSkill?.opr ?? 0) - (openSkill?.dpr ?? 0),
-                netValues,
               );
+              final scheduleNorm = openSkill?.strengthOfSchedule == null
+                  ? 0.5
+                  : scheduleRange.normalize(openSkill!.strengthOfSchedule!);
+              final eliminationNorm =
+                  openSkill == null ||
+                      openSkill.eliminationMatches <= 0 ||
+                      openSkill.eliminationWinRate == null
+                  ? 0.5
+                  : eliminationRange.normalize(openSkill.eliminationWinRate!);
+              final eventStrengthNorm = openSkill?.eventStrength == null
+                  ? 0.5
+                  : eventStrengthRange.normalize(openSkill!.eventStrength!);
 
-              final baseRating =
-                  openSkill?.openSkillOrdinal ??
-                  (18 + (combinedNorm * 5.0) + (worldRankNorm * 2.5));
+              final baseRating = openSkill?.openSkillOrdinal ?? 12.0;
               final solarizeAdjustment =
-                  ((muNorm - 0.5) * 2.4) +
-                  ((ccwmNorm - 0.5) * 2.8) +
-                  ((netNorm - 0.5) * 2.4) +
-                  ((wpNorm - 0.5) * 2.0) +
-                  ((awpNorm - 0.5) * 1.6) +
-                  ((combinedNorm - 0.5) * 1.5) +
-                  ((driverNorm - 0.5) * 0.8) +
-                  ((programmingNorm - 0.5) * 0.5) +
-                  ((worldRankNorm - 0.5) * 0.9);
+                  ((ordinalNorm - 0.5) * 4.1) +
+                  ((muNorm - 0.5) * 2.2) +
+                  ((ccwmNorm - 0.5) * 3.0) +
+                  ((netNorm - 0.5) * 2.7) +
+                  ((wpNorm - 0.5) * 2.2) +
+                  ((scheduleNorm - 0.5) * 2.9) +
+                  ((eliminationNorm - 0.5) * 3.4) +
+                  ((eventStrengthNorm - 0.5) * 2.0) +
+                  ((awpNorm - 0.5) * 0.9);
               final rating = baseRating + solarizeAdjustment;
               final stability = openSkill == null
                   ? 46.0
                   : ((1 - (openSkill.openSkillSigma / 12)).clamp(0.25, 1.0) *
                         100);
               final projectedWinShare =
-                  (48 +
-                          ((ordinalNorm - 0.5) * 28) +
+                  (46 +
+                          ((ordinalNorm - 0.5) * 22) +
                           ((ccwmNorm - 0.5) * 12) +
-                          ((wpNorm - 0.5) * 10) +
+                          ((wpNorm - 0.5) * 9) +
+                          ((scheduleNorm - 0.5) * 11) +
+                          ((eliminationNorm - 0.5) * 13) +
+                          ((eventStrengthNorm - 0.5) * 7) +
                           ((sigmaNorm - 0.5) * 8))
-                      .clamp(28, 88)
+                      .clamp(26, 89)
                       .toDouble();
               final ceilingScore =
-                  (entry.combinedScore * 0.34) +
-                  (entry.maxDriverScore * 0.18) +
-                  (entry.maxProgrammingScore * 0.08) +
-                  (((openSkill?.opr ?? 0).clamp(0, 90)) * 0.22) +
-                  ((((openSkill?.ccwm ?? 0) + 12).clamp(0, 24)) * 0.18);
+                  ((((openSkill?.opr ?? 32).clamp(10, 145)) * 0.45) +
+                          (((((openSkill?.ccwm ?? 0) + 16).clamp(4, 34))) *
+                              0.21) +
+                          (((openSkill?.awpPerMatch ?? 0.5).clamp(0.0, 1.0)) *
+                              18) +
+                          (scheduleNorm * 10) +
+                          (eliminationNorm * 15) +
+                          (eventStrengthNorm * 14))
+                      .toDouble();
 
               return SolarMlRankingEntry(
                 rank: 0,
@@ -165,6 +172,12 @@ class SolarMlRankingService {
             if (mlCompare != 0) {
               return mlCompare;
             }
+            final projectedCompare = b.projectedWinShare.compareTo(
+              a.projectedWinShare,
+            );
+            if (projectedCompare != 0) {
+              return projectedCompare;
+            }
             return a.teamNumber.compareTo(b.teamNumber);
           });
 
@@ -197,20 +210,42 @@ class SolarMlRankingService {
       );
     });
   }
+}
 
-  double _normalize(double value, List<double> population) {
-    if (population.isEmpty) {
-      return 0.5;
+class _MetricRange {
+  const _MetricRange({required this.minValue, required this.maxValue});
+
+  final double minValue;
+  final double maxValue;
+
+  factory _MetricRange.fromValues(Iterable<double> values) {
+    final iterator = values.iterator;
+    if (!iterator.moveNext()) {
+      return const _MetricRange(minValue: 0, maxValue: 0);
     }
-    final minValue = population.reduce((a, b) => a < b ? a : b);
-    final maxValue = population.reduce((a, b) => a > b ? a : b);
-    if (maxValue == minValue) {
+
+    var minValue = iterator.current;
+    var maxValue = iterator.current;
+    while (iterator.moveNext()) {
+      final value = iterator.current;
+      if (value < minValue) {
+        minValue = value;
+      }
+      if (value > maxValue) {
+        maxValue = value;
+      }
+    }
+    return _MetricRange(minValue: minValue, maxValue: maxValue);
+  }
+
+  double normalize(double value) {
+    if (maxValue <= minValue) {
       return 0.5;
     }
     return ((value - minValue) / (maxValue - minValue)).clamp(0.0, 1.0);
   }
 
-  double _reverseNormalize(double value, List<double> population) {
-    return 1 - _normalize(value, population);
+  double reverseNormalize(double value) {
+    return 1 - normalize(value);
   }
 }

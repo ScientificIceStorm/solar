@@ -17,9 +17,10 @@ import '../widgets/solar_navigation.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
 import '../widgets/solar_team_overview_card.dart';
+import '../widgets/worlds_schedule_banner.dart';
 import 'event_division_screen.dart';
 import 'match_details_screen.dart';
-import 'sign_in_screen.dart';
+import 'onboarding_screen.dart';
 import 'team_profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -31,9 +32,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+enum _HomeSearchScope { all, teams, events }
+
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   AppSessionController? _sessionController;
+  _HomeSearchScope _searchScope = _HomeSearchScope.all;
 
   @override
   void didChangeDependencies() {
@@ -75,34 +79,75 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
+  Future<void> _openSearchFilterSheet() async {
+    final selection = await showModalBottomSheet<_HomeSearchScope>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFF7F5F8),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'Search Filter',
+                  style: TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Choose what the homepage search should show.',
+                  style: TextStyle(
+                    color: Color(0xFF8E92A7),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                for (final scope in _HomeSearchScope.values)
+                  _HomeSearchScopeTile(
+                    label: _homeSearchScopeLabel(scope),
+                    selected: scope == _searchScope,
+                    onTap: () => Navigator.of(context).pop(scope),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selection == null || selection == _searchScope) {
+      return;
+    }
+
+    setState(() {
+      _searchScope = selection;
+    });
+  }
+
   Future<void> _openNotificationHub(AppSessionController controller) async {
-    await controller.syncIosCompanion();
+    final snapshot = await controller.fetchNotificationCenterSnapshot();
+    await controller.markNotificationCenterSeen(snapshot: snapshot);
     if (!mounted) {
       return;
     }
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: const Color(0xFFF7F5F8),
       builder: (context) {
         return SafeArea(
           top: false,
-          child: FutureBuilder<SolarNotificationCenterSnapshot>(
-            future: controller.fetchNotificationCenterSnapshot(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 24, 24, 32),
-                  child: SizedBox(
-                    height: 220,
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                );
-              }
-              return _NotificationHubSheet(snapshot: snapshot.data!);
-            },
-          ),
+          child: _NotificationHubSheet(snapshot: snapshot),
         );
       },
     );
@@ -124,6 +169,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final showSearchResults = query.length >= 2;
         final teamResults = controller.searchCachedTeams(query);
         final eventResults = controller.searchCachedEvents(query);
+        final visibleTeamResults = _searchScope == _HomeSearchScope.events
+            ? const <TeamSummary>[]
+            : teamResults;
+        final visibleEventResults = _searchScope == _HomeSearchScope.teams
+            ? const <EventSummary>[]
+            : eventResults;
         final teamStats =
             controller.teamStats ?? TeamStatsSnapshot(team: account.team);
         final notificationFuture = controller.fetchNotificationCenterSnapshot();
@@ -148,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return;
                 }
                 Navigator.of(context).pushNamedAndRemoveUntil(
-                  SignInScreen.routeName,
+                  OnboardingScreen.routeName,
                   (route) => false,
                 );
               },
@@ -180,15 +231,37 @@ class _HomeScreenState extends State<HomeScreen> {
                         onNotificationsTap: () {
                           _openNotificationHub(controller);
                         },
+                        onFilterTap: _openSearchFilterSheet,
+                        filterLabel: _homeSearchScopeLabel(_searchScope),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 24),
+                      if (controller
+                          .showWorldsScheduleReleaseBanner) ...<Widget>[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: WorldsScheduleBanner(
+                            onOpen: () {
+                              navigateToSolarDestination(
+                                context,
+                                SolarNavDestination.calendar,
+                              );
+                            },
+                            onDismiss: () {
+                              unawaited(
+                                controller.dismissWorldsScheduleReleaseBanner(),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
                       if (showSearchResults) ...<Widget>[
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 28),
                           child: _SearchResultsPanel(
                             query: query,
-                            teamResults: teamResults,
-                            eventResults: eventResults,
+                            teamResults: visibleTeamResults,
+                            eventResults: visibleEventResults,
                             isLoadingTeams:
                                 controller.isPreloadingSearchTeams &&
                                 controller.preloadedSearchTeams.isEmpty,
@@ -257,9 +330,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: SolarTeamOverviewCard(
                             team: account.team,
                             teamStats: teamStats,
-                            statusLabel: account.team.registered
-                                ? 'REGISTERED'
-                                : 'PENDING',
                             onTap: () {
                               openSolarTeamProfileForSummary(
                                 context,
@@ -296,6 +366,8 @@ class _HomeHeader extends StatelessWidget {
     required this.onClearSearch,
     required this.notificationFuture,
     required this.onNotificationsTap,
+    required this.onFilterTap,
+    required this.filterLabel,
   });
 
   final double topInset;
@@ -305,6 +377,8 @@ class _HomeHeader extends StatelessWidget {
   final VoidCallback onClearSearch;
   final Future<SolarNotificationCenterSnapshot> notificationFuture;
   final VoidCallback onNotificationsTap;
+  final VoidCallback onFilterTap;
+  final String filterLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -339,7 +413,11 @@ class _HomeHeader extends StatelessWidget {
               FutureBuilder<SolarNotificationCenterSnapshot>(
                 future: notificationFuture,
                 builder: (context, snapshot) {
-                  final itemCount = snapshot.data?.itemCount ?? 0;
+                  final itemCount = snapshot.hasData
+                      ? snapshot.data!.unreadCount(
+                          SolarAppScope.of(context).notificationCenterSeenAtMillis,
+                        )
+                      : 0;
                   return InkWell(
                     onTap: onNotificationsTap,
                     borderRadius: BorderRadius.circular(999),
@@ -406,7 +484,10 @@ class _HomeHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 20),
-              const _FilterButton(),
+              _FilterButton(
+                label: filterLabel,
+                onTap: onFilterTap,
+              ),
             ],
           ),
           if (isRefreshing) ...<Widget>[
@@ -433,58 +514,70 @@ class _NotificationHubSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 26),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text(
-            'Match Notifications',
-            style: TextStyle(
-              color: Color(0xFF24243A),
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.82;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 10, 22, 26),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              'Match Notifications',
+              style: TextStyle(
+                color: Color(0xFF24243A),
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Your next published match and the latest completed results live here.',
-            style: TextStyle(
-              color: Color(0xFF8E92A7),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              height: 1.45,
+            const SizedBox(height: 8),
+            const Text(
+              'Your next published match and the latest completed results live here.',
+              style: TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                height: 1.45,
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          if (snapshot.upcomingMatch != null)
-            _NotificationCard.upcoming(
-              event: snapshot.upcomingEvent,
-              match: snapshot.upcomingMatch!,
-            )
-          else
-            const _NotificationEmptyCard(
-              label: 'No upcoming published match right now.',
+            const SizedBox(height: 18),
+            Expanded(
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                children: <Widget>[
+                  if (snapshot.upcomingMatch != null)
+                    _NotificationCard.upcoming(
+                      event: snapshot.upcomingEvent,
+                      match: snapshot.upcomingMatch!,
+                    )
+                  else
+                    const _NotificationEmptyCard(
+                      label: 'No upcoming published match right now.',
+                    ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Recent Results',
+                    style: TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (snapshot.recentResults.isEmpty)
+                    const _NotificationEmptyCard(
+                      label:
+                          'Completed match results will show up here after they post.',
+                    )
+                  else
+                    ...snapshot.recentResults.map<Widget>(
+                      _NotificationCard.result,
+                    ),
+                ],
+              ),
             ),
-          const SizedBox(height: 16),
-          const Text(
-            'Recent Results',
-            style: TextStyle(
-              color: Color(0xFF24243A),
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (snapshot.recentResults.isEmpty)
-            const _NotificationEmptyCard(
-              label:
-                  'Completed match results will show up here after they post.',
-            )
-          else
-            ...snapshot.recentResults.map<Widget>(_NotificationCard.result),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -492,11 +585,13 @@ class _NotificationHubSheet extends StatelessWidget {
 
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard._({
-    required this.title,
+    required this.eyebrow,
+    required this.headline,
+    required this.icon,
     required this.subtitle,
     required this.meta,
-    required this.leadingLabel,
-    required this.leadingColor,
+    required this.accentColor,
+    this.emphasizeHeadline = false,
   });
 
   factory _NotificationCard.upcoming({
@@ -504,27 +599,33 @@ class _NotificationCard extends StatelessWidget {
     required MatchSummary match,
   }) {
     return _NotificationCard._(
-      title: match.name,
+      eyebrow: 'Up next',
+      headline: match.name,
+      icon: Icons.schedule_rounded,
       subtitle: event?.name ?? match.event.name,
       meta: <String>[
         if (match.division.name.trim().isNotEmpty) match.division.name.trim(),
         if (match.field.trim().isNotEmpty) match.field.trim(),
         solarMatchTimeLabel(match),
       ].join('  •  '),
-      leadingLabel: 'NEXT',
-      leadingColor: const Color(0xFF2930FF),
+      accentColor: const Color(0xFF2930FF),
     );
   }
 
   factory _NotificationCard.result(SolarRecentMatchResult result) {
     final scoreLabel = '${result.allianceScore} - ${result.opponentScore}';
-    final title = result.tied
-        ? 'Tied $scoreLabel'
-        : result.won
-        ? 'Won $scoreLabel'
-        : 'Lost $scoreLabel';
     return _NotificationCard._(
-      title: title,
+      eyebrow: result.tied
+          ? 'Tie'
+          : result.won
+          ? 'Win'
+          : 'Loss',
+      headline: scoreLabel,
+      icon: result.tied
+          ? Icons.drag_handle_rounded
+          : result.won
+          ? Icons.arrow_upward_rounded
+          : Icons.arrow_downward_rounded,
       subtitle:
           '${result.match.name}  •  ${result.event?.name ?? result.match.event.name}',
       meta: <String>[
@@ -532,51 +633,48 @@ class _NotificationCard extends StatelessWidget {
         if (result.match.field.trim().isNotEmpty) result.match.field.trim(),
         _notificationResultTimeLabel(result.completedAt),
       ].where((value) => value.trim().isNotEmpty).join('  •  '),
-      leadingLabel: result.tied
-          ? 'TIE'
-          : result.won
-          ? 'WIN'
-          : 'LOSS',
-      leadingColor: result.tied
+      accentColor: result.tied
           ? const Color(0xFF7A7F92)
           : result.won
           ? const Color(0xFF1F9D61)
           : const Color(0xFFD24E4E),
+      emphasizeHeadline: true,
     );
   }
 
-  final String title;
+  final String eyebrow;
+  final String headline;
+  final IconData icon;
   final String subtitle;
   final String meta;
-  final String leadingLabel;
-  final Color leadingColor;
+  final Color accentColor;
+  final bool emphasizeHeadline;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE8E8F0)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              color: leadingColor.withValues(alpha: 0.12),
+              color: accentColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Text(
-              leadingLabel,
-              style: TextStyle(
-                color: leadingColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.6,
-              ),
+            alignment: Alignment.center,
+            child: Icon(
+              icon,
+              color: accentColor,
+              size: 20,
             ),
           ),
           const SizedBox(width: 12),
@@ -585,11 +683,23 @@ class _NotificationCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFF24243A),
-                    fontSize: 16,
+                  eyebrow.toUpperCase(),
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  headline,
+                  style: TextStyle(
+                    color: const Color(0xFF24243A),
+                    fontSize: emphasizeHeadline ? 28 : 17,
                     fontWeight: FontWeight.w700,
+                    height: 1.05,
+                    letterSpacing: emphasizeHeadline ? -0.9 : -0.2,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -638,6 +748,7 @@ class _NotificationEmptyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE8E8F0)),
       ),
       child: Text(
         label,
@@ -729,42 +840,97 @@ class _SearchStrip extends StatelessWidget {
 }
 
 class _FilterButton extends StatelessWidget {
-  const _FilterButton();
+  const _FilterButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 54,
-      padding: const EdgeInsets.symmetric(horizontal: 17),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(28),
+      child: Container(
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 17),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 34,
+              height: 34,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.tune_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF22212E),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 34,
-            height: 34,
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.tune_rounded,
-              color: Colors.white,
-              size: 18,
+    );
+  }
+}
+
+class _HomeSearchScopeTile extends StatelessWidget {
+  const _HomeSearchScopeTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFEEF0FF) : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF5B61F6)
+                  : const Color(0xFFE6E8F2),
+              width: selected ? 1.6 : 1,
             ),
           ),
-          const SizedBox(width: 12),
-          const Text(
-            'Filters',
-            style: TextStyle(
-              color: Color(0xFF22212E),
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF24243A),
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1124,6 +1290,9 @@ class _TeamSearchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = SolarAppScope.of(context);
+    final isFavorite = controller.isFavoriteTeam(team.number);
+
     return InkWell(
       onTap: () {
         Navigator.of(
@@ -1180,12 +1349,19 @@ class _TeamSearchTile extends StatelessWidget {
                 ],
               ),
             ),
-            Text(
-              _locationLabel(team.location),
-              style: const TextStyle(
-                color: Color(0xFF9FA1B5),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            const SizedBox(width: 10),
+            InkWell(
+              onTap: () {
+                controller.toggleFavoriteTeam(team);
+              },
+              borderRadius: BorderRadius.circular(999),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: const Color(0xFF24243A),
+                  size: 20,
+                ),
               ),
             ),
           ],
@@ -1239,18 +1415,19 @@ class _EventSearchTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    _displayEventTitle(event.name),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    event.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.fade,
                     style: const TextStyle(
                       color: Color(0xFF24243A),
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w700,
+                      height: 1.2,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _locationLabel(event.location),
+                    '${event.sku}  •  ${_locationLabel(event.location)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -2042,9 +2219,43 @@ class _UpcomingEventsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleEvents = events.isEmpty
-        ? <EventSummary>[_MockEventSummary()]
-        : events.take(6).toList(growable: false);
+    if (events.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'No upcoming events yet',
+                style: TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Once your team has another published event, it will show up here without any mock placeholders.',
+                style: TextStyle(
+                  color: Color(0xFF8E92A7),
+                  fontSize: 14,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final visibleEvents = events.take(6).toList(growable: false);
 
     return SizedBox(
       height: 340,
@@ -2355,6 +2566,14 @@ String _displayEventTitle(String value) {
       .replaceAll('World Championship', 'World Championships');
 }
 
+String _homeSearchScopeLabel(_HomeSearchScope scope) {
+  return switch (scope) {
+    _HomeSearchScope.all => 'All',
+    _HomeSearchScope.teams => 'Teams',
+    _HomeSearchScope.events => 'Events',
+  };
+}
+
 String _locationLabel(LocationSummary location) {
   final region = _stateAbbreviations[location.region] ?? location.region;
   final parts = <String>[
@@ -2448,26 +2667,3 @@ const Map<String, String> _stateAbbreviations = <String, String>{
   'Wyoming': 'WY',
 };
 
-class _MockEventSummary extends EventSummary {
-  _MockEventSummary()
-    : super(
-        id: -1,
-        sku: 'MOCK',
-        name: 'VEX Robotics World Championships - HS',
-        start: _mockDate,
-        end: _mockDate,
-        seasonId: 0,
-        location: const LocationSummary(
-          venue: '',
-          address1: '',
-          city: 'St. Louis',
-          region: 'Missouri',
-          postcode: '',
-          country: 'United States',
-        ),
-        divisions: const <DivisionSummary>[],
-        livestreamLink: '',
-      );
-
-  static final DateTime _mockDate = DateTime(2026, 4, 21);
-}

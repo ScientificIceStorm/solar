@@ -50,7 +50,7 @@ void main() {
 
     expect(entries, hasLength(2));
     expect(entries.first.teamNumber, '200B');
-    expect(entries.first.mlRating, greaterThan(entries.last.mlRating));
+    expect(entries.first.solarRating, greaterThan(entries.last.solarRating));
   });
 }
 
@@ -113,6 +113,10 @@ OpenSkillCacheEntry _openSkillEntry({
     wpPerMatch: wpPerMatch,
     opr: opr,
     dpr: dpr,
+    strengthOfSchedule: 0.62,
+    eliminationWinRate: 0.71,
+    eliminationMatches: 6,
+    eventStrength: 1.18,
     qualifiedForRegionals: 1,
     qualifiedForWorlds: 1,
   );
