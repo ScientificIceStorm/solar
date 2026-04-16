@@ -157,10 +157,6 @@ class SolarAppDrawer extends StatelessWidget {
                 },
               ),
               const Spacer(),
-              Text(
-                account.email,
-                style: const TextStyle(color: Color(0xFF8E92A7), fontSize: 14),
-              ),
             ],
           ),
         ),

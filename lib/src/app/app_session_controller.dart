@@ -489,18 +489,21 @@ class AppSessionController extends ChangeNotifier {
         return;
       }
 
-      _teamStats = _withLocalScrimmage(snapshot);
+      final hydratedSnapshot = _applyKnownSignalsToTeamStats(snapshot);
+      _teamStats = _withLocalScrimmage(hydratedSnapshot);
       _quickviewSnapshotFuture = null;
       _notificationCenterSnapshotFuture = null;
       _primeSearchEvents(
-        snapshot.allEvents.isEmpty
-            ? snapshot.upcomingEvents
-            : snapshot.allEvents,
+        hydratedSnapshot.allEvents.isEmpty
+            ? hydratedSnapshot.upcomingEvents
+            : hydratedSnapshot.allEvents,
       );
-      _currentAccount = account.copyWith(team: snapshot.team);
+      _currentAccount = account.copyWith(team: hydratedSnapshot.team);
       await _repository.saveAccount(_currentAccount!);
       unawaited(preloadSearchEvents());
       unawaited(preloadSearchTeams(force: true));
+      unawaited(fetchQuickviewSnapshot());
+      unawaited(fetchNotificationCenterSnapshot());
       unawaited(syncIosCompanion());
     } finally {
       _isRefreshingTeamStats = false;
@@ -646,8 +649,11 @@ class AppSessionController extends ChangeNotifier {
       _scrimmagePackage = null;
       _scrimmageTeamKey = null;
       _quickviewSnapshotFuture = null;
+      _notificationCenterSnapshotFuture = null;
       if (_teamStats != null) {
-        _teamStats = _withLocalScrimmage(_teamStats!);
+        _teamStats = _withLocalScrimmage(
+          _applyKnownSignalsToTeamStats(_teamStats!),
+        );
       }
     } catch (_) {
       // Keep the current team-only fallback if the wider preload fails.
@@ -792,11 +798,10 @@ class AppSessionController extends ChangeNotifier {
               : null,
         );
         seasons.sort(_compareSeasonSummaries);
-        return seasons
-            .where((season) {
-              return _matchesSeasonProgramFilter(season, programFilter);
-            })
-            .toList(growable: false);
+        return seasons.where((season) {
+          return _matchesSeasonProgramFilter(season, programFilter) &&
+              _isPublishedSeason(season);
+        }).toList(growable: false);
       } catch (_) {
         return const <SeasonSummary>[];
       }
@@ -999,19 +1004,21 @@ class AppSessionController extends ChangeNotifier {
       teamNumber: normalizedKey,
       teamId: team.id,
     );
-    return TeamStatsSnapshot(
-      team: _bestKnownTeamSummary(
-        team,
-        worldSkillsEntry: worldSkillsEntry,
+    return _applyKnownSignalsToTeamStats(
+      TeamStatsSnapshot(
+        team: _bestKnownTeamSummary(
+          team,
+          worldSkillsEntry: worldSkillsEntry,
+          openSkillEntry: openSkillEntry,
+        ),
         openSkillEntry: openSkillEntry,
+        worldSkillsEntry: worldSkillsEntry,
+        lastUpdated:
+            currentTeam != null &&
+                currentTeam.number.trim().toUpperCase() == normalizedKey
+            ? _teamStats?.lastUpdated
+            : null,
       ),
-      openSkillEntry: openSkillEntry,
-      worldSkillsEntry: worldSkillsEntry,
-      lastUpdated:
-          currentTeam != null &&
-              currentTeam.number.trim().toUpperCase() == normalizedKey
-          ? _teamStats?.lastUpdated
-          : null,
     );
   }
 
@@ -1051,7 +1058,7 @@ class AppSessionController extends ChangeNotifier {
           );
 
           if (_hasRobotEventsCoverage(snapshot)) {
-            return snapshot;
+            return _applyKnownSignalsToTeamStats(snapshot);
           }
 
           final recoveredTeam = await _recoverTeamStatsIdentity(
@@ -1071,7 +1078,7 @@ class AppSessionController extends ChangeNotifier {
           if (_hasRobotEventsCoverage(recoveredSnapshot)) {
             snapshot = recoveredSnapshot;
           }
-          return snapshot;
+          return _applyKnownSignalsToTeamStats(snapshot);
         })
         .then((snapshot) {
           if (!_shouldCacheTeamStatsSnapshot(snapshot)) {
@@ -2092,12 +2099,6 @@ class AppSessionController extends ChangeNotifier {
   }
 
   Future<SolarQuickviewSnapshot?> _loadQuickviewSnapshot() async {
-    if (_preloadedWorldSkillsRankings.isEmpty &&
-        _currentAccount != null &&
-        !_isPreloadingSearchTeams) {
-      await preloadSearchTeams();
-    }
-
     final teamStats = _teamStats;
     if (teamStats == null) {
       return null;
@@ -2108,8 +2109,18 @@ class AppSessionController extends ChangeNotifier {
       return null;
     }
 
-    for (final event in futureEvents) {
-      final schedule = await fetchTeamScheduleForEvent(event.id);
+    final trackedEvents = futureEvents.take(4).toList(growable: false);
+    final schedules =
+        await Future.wait<MapEntry<EventSummary, List<MatchSummary>>>(
+          trackedEvents.map((event) async {
+            final schedule = await fetchTeamScheduleForEvent(event.id);
+            return MapEntry<EventSummary, List<MatchSummary>>(event, schedule);
+          }),
+        );
+
+    for (final entry in schedules) {
+      final event = entry.key;
+      final schedule = entry.value;
       final qualificationMatches = schedule
           .where((match) {
             return match.round == MatchRound.qualification;
@@ -2130,8 +2141,10 @@ class AppSessionController extends ChangeNotifier {
       }
     }
 
-    final fallbackEvent = futureEvents.first;
-    final fallbackSchedule = await fetchTeamScheduleForEvent(fallbackEvent.id);
+    final fallbackEntry = schedules.isEmpty ? null : schedules.first;
+    final fallbackEvent = fallbackEntry?.key ?? futureEvents.first;
+    final fallbackSchedule =
+        fallbackEntry?.value ?? await fetchTeamScheduleForEvent(fallbackEvent.id);
     final fallbackMatches = fallbackSchedule
         .where((match) {
           return _isFuturePendingMatch(match);
@@ -2667,6 +2680,43 @@ class AppSessionController extends ChangeNotifier {
     );
   }
 
+  TeamStatsSnapshot _applyKnownSignalsToTeamStats(TeamStatsSnapshot snapshot) {
+    final normalizedTeamNumber = snapshot.team.number.trim().toUpperCase();
+    final seededWorldSkillsEntry = snapshot.worldSkillsEntry ??
+        _seedWorldSkillsEntryForTeam(
+          teamNumber: normalizedTeamNumber,
+          teamId: snapshot.team.id,
+        );
+    final seededOpenSkillEntry = snapshot.openSkillEntry ??
+        _seedOpenSkillEntryForTeam(
+          teamNumber: normalizedTeamNumber,
+          teamId: snapshot.team.id,
+        );
+    final mergedTeam = _bestKnownTeamSummary(
+      snapshot.team,
+      worldSkillsEntry: seededWorldSkillsEntry,
+      openSkillEntry: seededOpenSkillEntry,
+    );
+
+    if (_sameTeamSummary(snapshot.team, mergedTeam) &&
+        identical(snapshot.worldSkillsEntry, seededWorldSkillsEntry) &&
+        identical(snapshot.openSkillEntry, seededOpenSkillEntry)) {
+      return snapshot;
+    }
+
+    return TeamStatsSnapshot(
+      team: mergedTeam,
+      allEvents: snapshot.allEvents,
+      upcomingEvents: snapshot.upcomingEvents,
+      rankings: snapshot.rankings,
+      matchHistory: snapshot.matchHistory,
+      openSkillEntry: seededOpenSkillEntry,
+      worldSkillsEntry: seededWorldSkillsEntry,
+      lastUpdated: snapshot.lastUpdated,
+      errorMessage: snapshot.errorMessage,
+    );
+  }
+
   String _resolvedGradeFor(String grade) {
     if (grade.trim().isNotEmpty) {
       return grade;
@@ -2736,6 +2786,27 @@ class AppSessionController extends ChangeNotifier {
         .trim()
         .toLowerCase();
     return haystack.contains(normalizedFilter);
+  }
+
+  bool _isPublishedSeason(SeasonSummary season) {
+    final match = RegExp(r'(20\d{2})\s*-\s*(20\d{2})').firstMatch(season.name);
+    if (match == null) {
+      return true;
+    }
+
+    final startYear = int.tryParse(match.group(1) ?? '');
+    if (startYear == null) {
+      return true;
+    }
+
+    final now = DateTime.now();
+    if (startYear > now.year) {
+      return false;
+    }
+    if (startYear == now.year && now.month < 5) {
+      return false;
+    }
+    return true;
   }
 
   int _compareSeasonSummaries(SeasonSummary left, SeasonSummary right) {

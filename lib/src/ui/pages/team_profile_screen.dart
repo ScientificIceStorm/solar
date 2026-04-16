@@ -149,49 +149,46 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: switch (_selectedTab) {
-                      _TeamProfileTab.overview => _OverviewTab(
-                          key: const ValueKey<String>('overview'),
-                          teamStats: teamStats,
-                        ),
-                      _TeamProfileTab.trends => FutureBuilder<
-                          _TeamProfileDetails>(
-                          key: const ValueKey<String>('trends'),
-                          future: _ensureDetailsFuture(teamStats),
-                          builder: (context, detailsSnapshot) {
-                            if (!detailsSnapshot.hasData) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 44),
-                                child: _CenteredLoader(compact: true),
-                              );
-                            }
-                            return _TrendsTab(
-                              teamStats: teamStats,
-                              details: detailsSnapshot.data!,
+                  switch (_selectedTab) {
+                    _TeamProfileTab.overview => _OverviewTab(
+                        key: const ValueKey<String>('overview'),
+                        teamStats: teamStats,
+                      ),
+                    _TeamProfileTab.trends => FutureBuilder<
+                        _TeamProfileDetails>(
+                        key: const ValueKey<String>('trends'),
+                        future: _ensureDetailsFuture(teamStats),
+                        builder: (context, detailsSnapshot) {
+                          if (!detailsSnapshot.hasData) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 44),
+                              child: _CenteredLoader(compact: true),
                             );
-                          },
-                        ),
-                      _TeamProfileTab.events => FutureBuilder<
-                          _TeamProfileDetails>(
-                          key: const ValueKey<String>('events'),
-                          future: _ensureDetailsFuture(teamStats),
-                          builder: (context, detailsSnapshot) {
-                            if (!detailsSnapshot.hasData) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 44),
-                                child: _CenteredLoader(compact: true),
-                              );
-                            }
-                            return _EventsTab(
-                              teamStats: teamStats,
-                              details: detailsSnapshot.data!,
+                          }
+                          return _TrendsTab(
+                            teamStats: teamStats,
+                            details: detailsSnapshot.data!,
+                          );
+                        },
+                      ),
+                    _TeamProfileTab.events => FutureBuilder<
+                        _TeamProfileDetails>(
+                        key: const ValueKey<String>('events'),
+                        future: _ensureDetailsFuture(teamStats),
+                        builder: (context, detailsSnapshot) {
+                          if (!detailsSnapshot.hasData) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 44),
+                              child: _CenteredLoader(compact: true),
                             );
-                          },
-                        ),
-                    },
-                  ),
+                          }
+                          return _EventsTab(
+                            teamStats: teamStats,
+                            details: detailsSnapshot.data!,
+                          );
+                        },
+                      ),
+                  },
                 ],
               ),
             ),
@@ -296,21 +293,11 @@ class _TeamProfileTabBar extends StatelessWidget {
           return Expanded(
             child: GestureDetector(
               onTap: () => onSelected(tab),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+              child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
                   color: selected ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(18),
-                  boxShadow: selected
-                      ? const <BoxShadow>[
-                          BoxShadow(
-                            color: Color(0x0E000000),
-                            blurRadius: 16,
-                            offset: Offset(0, 8),
-                          ),
-                        ]
-                      : const <BoxShadow>[],
                 ),
                 alignment: Alignment.center,
                 child: Text(

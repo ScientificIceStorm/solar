@@ -267,12 +267,12 @@ ThemeData _buildTheme({
     scaffoldBackgroundColor: surface,
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
-        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.fuchsia: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.android: _NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.iOS: _NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.macOS: _NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.windows: _NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.linux: _NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: _NoAnimationPageTransitionsBuilder(),
       },
     ),
     textTheme: baseTextTheme.copyWith(
@@ -334,6 +334,21 @@ ThemeData _buildTheme({
       ),
     ),
   );
+}
+
+class _NoAnimationPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _NoAnimationPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return child;
+  }
 }
 
 class _BootstrapErrorScreen extends StatelessWidget {

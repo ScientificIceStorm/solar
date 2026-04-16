@@ -71,38 +71,60 @@ class SolarMlRankingService {
 
     final computed =
         worldSkills
+            .where((entry) {
+              final openSkill =
+                  openSkillByTeam[entry.teamNumber.trim().toUpperCase()];
+              if (openSkill == null) {
+                return false;
+              }
+              if (openSkill.ranking <= 0 ||
+                  openSkill.id <= 0 ||
+                  openSkill.teamNumber.trim().isEmpty) {
+                return false;
+              }
+
+              final totalMatches =
+                  openSkill.totalWins +
+                  openSkill.totalLosses +
+                  openSkill.totalTies +
+                  openSkill.eliminationMatches;
+              final hasRatingSignal =
+                  openSkill.openSkillOrdinal != 0 ||
+                  openSkill.openSkillMu != 0 ||
+                  openSkill.ccwm != null ||
+                  openSkill.opr != null ||
+                  openSkill.dpr != null;
+              return totalMatches > 0 || hasRatingSignal;
+            })
             .map((entry) {
               final key = entry.teamNumber.trim().toUpperCase();
               final openSkill = openSkillByTeam[key];
-              final muNorm = openSkill == null
-                  ? 0.5
-                  : muRange.normalize(openSkill.openSkillMu);
-              final ordinalNorm = openSkill == null
-                  ? 0.5
-                  : ordinalRange.normalize(openSkill.openSkillOrdinal);
-              final sigmaNorm = openSkill == null
-                  ? 0.35
-                  : sigmaRange.reverseNormalize(openSkill.openSkillSigma);
-              final ccwmNorm = ccwmRange.normalize(openSkill?.ccwm ?? 0);
-              final awpNorm = awpRange.normalize(openSkill?.awpPerMatch ?? 0);
-              final wpNorm = wpRange.normalize(openSkill?.wpPerMatch ?? 0);
-              final netNorm = netRange.normalize(
-                (openSkill?.opr ?? 0) - (openSkill?.dpr ?? 0),
+              final muNorm = muRange.normalize(openSkill!.openSkillMu);
+              final ordinalNorm = ordinalRange.normalize(
+                openSkill.openSkillOrdinal,
               );
-              final scheduleNorm = openSkill?.strengthOfSchedule == null
+              final sigmaNorm = sigmaRange.reverseNormalize(
+                openSkill.openSkillSigma,
+              );
+              final ccwmNorm = ccwmRange.normalize(openSkill.ccwm ?? 0);
+              final awpNorm = awpRange.normalize(openSkill.awpPerMatch);
+              final wpNorm = wpRange.normalize(openSkill.wpPerMatch);
+              final netNorm = netRange.normalize(
+                (openSkill.opr ?? 0) - (openSkill.dpr ?? 0),
+              );
+              final scheduleNorm = openSkill.strengthOfSchedule == null
                   ? 0.5
-                  : scheduleRange.normalize(openSkill!.strengthOfSchedule!);
+                  : scheduleRange.normalize(openSkill.strengthOfSchedule!);
               final eliminationNorm =
-                  openSkill == null ||
-                      openSkill.eliminationMatches <= 0 ||
+                  openSkill.eliminationMatches <= 0 ||
                       openSkill.eliminationWinRate == null
                   ? 0.5
                   : eliminationRange.normalize(openSkill.eliminationWinRate!);
-              final eventStrengthNorm = openSkill?.eventStrength == null
+              final eventStrengthNorm = openSkill.eventStrength == null
                   ? 0.5
-                  : eventStrengthRange.normalize(openSkill!.eventStrength!);
+                  : eventStrengthRange.normalize(openSkill.eventStrength!);
 
-              final baseRating = openSkill?.openSkillOrdinal ?? 12.0;
+              final baseRating = openSkill.openSkillOrdinal;
               final solarizeAdjustment =
                   ((ordinalNorm - 0.5) * 4.1) +
                   ((muNorm - 0.5) * 2.2) +
@@ -114,10 +136,9 @@ class SolarMlRankingService {
                   ((eventStrengthNorm - 0.5) * 2.0) +
                   ((awpNorm - 0.5) * 0.9);
               final rating = baseRating + solarizeAdjustment;
-              final stability = openSkill == null
-                  ? 46.0
-                  : ((1 - (openSkill.openSkillSigma / 12)).clamp(0.25, 1.0) *
-                        100);
+              final stability =
+                  ((1 - (openSkill.openSkillSigma / 12)).clamp(0.25, 1.0) *
+                      100);
               final projectedWinShare =
                   (46 +
                           ((ordinalNorm - 0.5) * 22) +
@@ -130,10 +151,10 @@ class SolarMlRankingService {
                       .clamp(26, 89)
                       .toDouble();
               final ceilingScore =
-                  ((((openSkill?.opr ?? 32).clamp(10, 145)) * 0.45) +
-                          (((((openSkill?.ccwm ?? 0) + 16).clamp(4, 34))) *
+                  ((((openSkill.opr ?? 32).clamp(10, 145)) * 0.45) +
+                          ((((openSkill.ccwm ?? 0) + 16).clamp(4, 34)) *
                               0.21) +
-                          (((openSkill?.awpPerMatch ?? 0.5).clamp(0.0, 1.0)) *
+                          (((openSkill.awpPerMatch).clamp(0.0, 1.0)) *
                               18) +
                           (scheduleNorm * 10) +
                           (eliminationNorm * 15) +
@@ -157,13 +178,13 @@ class SolarMlRankingService {
                 combinedScore: entry.combinedScore,
                 programmingScore: entry.programmingScore,
                 driverScore: entry.driverScore,
-                ordinal: openSkill?.openSkillOrdinal,
-                openSkillMu: openSkill?.openSkillMu,
-                openSkillSigma: openSkill?.openSkillSigma,
-                ccwm: openSkill?.ccwm,
-                opr: openSkill?.opr,
-                dpr: openSkill?.dpr,
-                awpPerMatch: openSkill?.awpPerMatch,
+                ordinal: openSkill.openSkillOrdinal,
+                openSkillMu: openSkill.openSkillMu,
+                openSkillSigma: openSkill.openSkillSigma,
+                ccwm: openSkill.ccwm,
+                opr: openSkill.opr,
+                dpr: openSkill.dpr,
+                awpPerMatch: openSkill.awpPerMatch,
               );
             })
             .toList(growable: false)

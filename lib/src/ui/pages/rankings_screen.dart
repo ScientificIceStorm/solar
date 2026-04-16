@@ -409,11 +409,18 @@ class _RankingsScreenState extends State<RankingsScreen> {
       key: cacheKey,
       fromJson: SolarMlRankingEntry.fromJson,
     );
-    if (cachedEntries != null &&
-        cachedEntries.isNotEmpty &&
+    final usableCachedEntries =
+        cachedEntries != null && _isUsableSolarMlEntries(cachedEntries)
+        ? cachedEntries
+        : null;
+    if (cachedEntries != null && usableCachedEntries == null) {
+      await _diskCacheStore.clear('solar_ml_screen_rankings', cacheKey);
+    }
+    if (usableCachedEntries != null &&
+        usableCachedEntries.isNotEmpty &&
         _isCurrentLoad(controller, generation)) {
       setState(() {
-        _solarMlEntries = cachedEntries;
+        _solarMlEntries = usableCachedEntries;
         _isLoadingSolarize = false;
         _loadedSolarizeCacheKey = cacheKey;
       });
@@ -446,10 +453,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
     }
 
     if (openSkillEntries.isEmpty &&
-        cachedEntries != null &&
-        cachedEntries.isNotEmpty) {
+        usableCachedEntries != null &&
+        usableCachedEntries.isNotEmpty) {
       setState(() {
-        _solarMlEntries = cachedEntries;
+        _solarMlEntries = usableCachedEntries;
         _isLoadingSolarize = false;
         _loadedSolarizeCacheKey = cacheKey;
       });
@@ -1048,6 +1055,7 @@ class _RankingRow extends StatelessWidget {
     final labelColor = highlighted
         ? const Color(0xFF2930FF)
         : const Color(0xFF16182C);
+    final subtitle = _teamSubtitle(entry.teamName, entry.organization);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1094,17 +1102,19 @@ class _RankingRow extends StatelessWidget {
                         letterSpacing: -1.2,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _teamSubtitle(entry.teamName, entry.organization),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    if (subtitle.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF8E92A7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1174,6 +1184,7 @@ class _SolarMlRankingRow extends StatelessWidget {
     final labelColor = highlighted
         ? const Color(0xFF2930FF)
         : const Color(0xFF16182C);
+    final subtitle = _teamSubtitle(entry.teamName, entry.organization);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1220,17 +1231,19 @@ class _SolarMlRankingRow extends StatelessWidget {
                         letterSpacing: -1.1,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _teamSubtitle(entry.teamName, entry.organization),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    if (subtitle.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF8E92A7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1586,8 +1599,31 @@ String _teamSubtitle(String primary, String secondary) {
     return normalizedPrimary;
   }
   final normalizedSecondary = secondary.trim();
-  if (normalizedSecondary.isNotEmpty) {
-    return normalizedSecondary;
+  return normalizedSecondary;
+}
+
+bool _isUsableSolarMlEntries(List<SolarMlRankingEntry> entries) {
+  if (entries.isEmpty) {
+    return true;
   }
-  return 'Team profile pending';
+
+  final sample = entries.take(16).toList(growable: false);
+  final validCount = sample.where((entry) {
+    return entry.rank > 0 &&
+        entry.teamId > 0 &&
+        entry.teamNumber.trim().isNotEmpty &&
+        (entry.teamName.trim().isNotEmpty || entry.organization.trim().isNotEmpty);
+  }).length;
+  final distinctRatings = sample
+      .map((entry) => entry.solarRating.toStringAsFixed(2))
+      .toSet()
+      .length;
+
+  if (validCount < (sample.length / 2).ceil()) {
+    return false;
+  }
+  if (sample.length >= 8 && distinctRatings < 4) {
+    return false;
+  }
+  return true;
 }
