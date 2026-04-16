@@ -864,17 +864,12 @@ class _RankingHistoryRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
               Text(
-                'HS ${ranking.highScore > 0 ? ranking.highScore : '--'}',
+                'AP ${ranking.averagePoints > 0 ? ranking.averagePoints.toStringAsFixed(1) : '--'}',
                 style: const TextStyle(
                   color: Color(0xFF24243A),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'AP ${ranking.averagePoints > 0 ? ranking.averagePoints.toStringAsFixed(1) : '--'}',
-                style: const TextStyle(color: Color(0xFF8E92A7), fontSize: 12),
               ),
             ],
           ),

@@ -10,6 +10,7 @@ import '../../models/robot_events_models.dart';
 import '../../models/world_skills_models.dart';
 import '../models/solar_ml_ranking.dart';
 import '../services/solar_ml_ranking_service.dart';
+import '../services/solar_disk_cache_store.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
@@ -35,6 +36,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   static const _solarMlService = SolarMlRankingService();
+  static final _diskCacheStore = SolarDiskCacheStore.instance;
 
   AppSessionController? _sessionController;
   bool _searchVisible = false;
@@ -402,6 +404,23 @@ class _RankingsScreenState extends State<RankingsScreen> {
     required bool force,
   }) async {
     final cacheKey = '$seasonId|${gradeLevel.trim().toLowerCase()}';
+    final cachedEntries = await _diskCacheStore.readList<SolarMlRankingEntry>(
+      namespace: 'solar_ml_screen_rankings',
+      key: cacheKey,
+      fromJson: SolarMlRankingEntry.fromJson,
+    );
+    if (cachedEntries != null &&
+        cachedEntries.isNotEmpty &&
+        _isCurrentLoad(controller, generation)) {
+      setState(() {
+        _solarMlEntries = cachedEntries;
+        _isLoadingSolarize = false;
+        _loadedSolarizeCacheKey = cacheKey;
+      });
+      if (!force) {
+        return;
+      }
+    }
     if (!force &&
         _loadedSolarizeCacheKey == cacheKey &&
         _solarMlEntries.isNotEmpty) {
@@ -426,6 +445,17 @@ class _RankingsScreenState extends State<RankingsScreen> {
       return;
     }
 
+    if (openSkillEntries.isEmpty &&
+        cachedEntries != null &&
+        cachedEntries.isNotEmpty) {
+      setState(() {
+        _solarMlEntries = cachedEntries;
+        _isLoadingSolarize = false;
+        _loadedSolarizeCacheKey = cacheKey;
+      });
+      return;
+    }
+
     final solarMlEntries = _solarMlService.build(
       worldSkills: entries,
       openSkillEntries: openSkillEntries,
@@ -440,6 +470,21 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _isLoadingSolarize = false;
       _loadedSolarizeCacheKey = cacheKey;
     });
+    if (solarMlEntries.isNotEmpty) {
+      await _diskCacheStore.writeList<SolarMlRankingEntry>(
+        namespace: 'solar_ml_screen_rankings',
+        key: cacheKey,
+        items: solarMlEntries,
+        toJson: (item) => item.toJson(),
+        ttl: _dailyCacheTtl(),
+      );
+    }
+  }
+
+  Duration _dailyCacheTtl() {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    return tomorrow.difference(now);
   }
 
   @override

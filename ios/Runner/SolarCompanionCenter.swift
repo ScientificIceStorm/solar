@@ -131,7 +131,7 @@ final class SolarCompanionCenter: NSObject {
       }
 
       let content = UNMutableNotificationContent()
-      content.title = "\(upcoming.matchName) in \(offset)m"
+      content.title = "\(upcoming.matchLabel ?? upcoming.matchName) in \(offset)m"
       content.body =
         "\(upcoming.eventName) • \(upcoming.divisionName)\(upcoming.fieldName.isEmpty ? "" : " • \(upcoming.fieldName)")"
       content.sound = .default
@@ -173,10 +173,10 @@ final class SolarCompanionCenter: NSObject {
       let didWin = result.allianceScore > result.opponentScore
       let didTie = result.allianceScore == result.opponentScore
       content.title = didTie
-        ? "\(result.matchName) ended in a tie"
+        ? "\(result.matchLabel ?? result.matchName) ended in a tie"
         : didWin
-        ? "You won \(result.matchName)"
-        : "You lost \(result.matchName)"
+        ? "You won \(result.matchLabel ?? result.matchName)"
+        : "You lost \(result.matchLabel ?? result.matchName)"
       content.body =
         "\(result.eventName) • \(result.allianceScore)-\(result.opponentScore)"
       content.sound = .default
@@ -224,11 +224,17 @@ final class SolarCompanionCenter: NSObject {
       let state = SolarMatchActivityAttributes.ContentState(
         eventName: upcoming.eventName,
         matchName: upcoming.matchName,
+        matchLabel: upcoming.matchLabel ?? upcoming.matchName,
         divisionName: upcoming.divisionName,
         fieldName: upcoming.fieldName,
         scheduledAt: upcoming.scheduledAt ?? 0,
         redAlliance: upcoming.redAlliance,
-        blueAlliance: upcoming.blueAlliance
+        blueAlliance: upcoming.blueAlliance,
+        recentResultTitle: payload.recentResults.first.map(resultTitle) ?? "Awaiting result",
+        recentResultScore: payload.recentResults.first.map(resultScoreLine) ?? "No recent score",
+        worldRankLabel: payload.worldRankLabel ?? "--",
+        solarizeRankLabel: payload.solarizeRankLabel ?? "--",
+        recordLabel: payload.recordLabel ?? "--"
       )
 
       if let activity = existingActivities.first {
@@ -268,5 +274,19 @@ final class SolarCompanionCenter: NSObject {
         await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
       }
     }
+  }
+
+  private func resultTitle(_ result: SolarRecentResultPayload) -> String {
+    if result.allianceScore == result.opponentScore {
+      return "\(result.matchLabel ?? result.matchName) tied"
+    }
+    if result.allianceScore > result.opponentScore {
+      return "\(result.matchLabel ?? result.matchName) won"
+    }
+    return "\(result.matchLabel ?? result.matchName) lost"
+  }
+
+  private func resultScoreLine(_ result: SolarRecentResultPayload) -> String {
+    return "\(result.allianceScore)-\(result.opponentScore)"
   }
 }

@@ -18,8 +18,8 @@ class SeasonSummary {
     return SeasonSummary(
       id: readInt(json['id']),
       name: readString(json['name']),
-      programId: readInt(program['id']),
-      programName: readString(program['name']),
+      programId: readInt(program['id'] ?? json['programId']),
+      programName: readString(program['name'] ?? json['programName']),
     );
   }
 
@@ -71,7 +71,7 @@ class LocationSummary {
   factory LocationSummary.fromJson(JsonMap json) {
     return LocationSummary(
       venue: readString(json['venue']),
-      address1: readString(json['address_1']),
+      address1: readString(json['address_1'] ?? json['address1']),
       city: readString(json['city']),
       region: readString(json['region']),
       postcode: readString(json['postcode']),
@@ -176,10 +176,11 @@ class TeamSummary {
       ]),
       teamName: firstNonEmpty(<String?>[
         readString(json['team_name']),
+        readString(json['teamName']),
         readString(json['name']),
       ]),
       organization: readString(json['organization']),
-      robotName: readString(json['robot_name']),
+      robotName: readString(json['robot_name'] ?? json['robotName']),
       location: LocationSummary.fromJson(asJsonMap(json['location'])),
       grade: readString(json['grade']),
       registered: readBool(json['registered']),
@@ -231,12 +232,14 @@ class EventSummary {
       name: readString(json['name']),
       start: readDateTime(json['start']),
       end: readDateTime(json['end']),
-      seasonId: readInt(season['id']),
+      seasonId: readInt(season['id'] ?? json['seasonId']),
       location: LocationSummary.fromJson(asJsonMap(json['location'])),
       divisions: asJsonMapList(
         json['divisions'],
       ).map(DivisionSummary.fromJson).toList(growable: false),
-      livestreamLink: readString(json['livestream_link']),
+      livestreamLink: readString(
+        json['livestream_link'] ?? json['livestreamLink'],
+      ),
     );
   }
 
@@ -269,6 +272,45 @@ enum MatchRound {
 }
 
 extension MatchRoundX on MatchRound {
+  static MatchRound fromStored(dynamic value, {dynamic roundCode}) {
+    if (roundCode != null) {
+      final code = readInt(roundCode);
+      if (code > 0) {
+        return MatchRoundX.fromCode(code);
+      }
+    }
+
+    if (value is int) {
+      return MatchRoundX.fromCode(value);
+    }
+    if (value is num) {
+      return MatchRoundX.fromCode(value.toInt());
+    }
+    final label = '$value'.trim().toLowerCase();
+    switch (label) {
+      case 'practice':
+        return MatchRound.practice;
+      case 'qualification':
+        return MatchRound.qualification;
+      case 'quarterfinals':
+        return MatchRound.quarterfinals;
+      case 'semifinals':
+        return MatchRound.semifinals;
+      case 'finals':
+        return MatchRound.finals;
+      case 'round16':
+        return MatchRound.round16;
+      case 'round32':
+        return MatchRound.round32;
+      case 'round64':
+        return MatchRound.round64;
+      case 'round128':
+        return MatchRound.round128;
+      default:
+        return MatchRound.none;
+    }
+  }
+
   static MatchRound fromCode(int code) {
     switch (code) {
       case 1:
@@ -415,9 +457,12 @@ class MatchSummary {
       field: readString(json['field']),
       scheduled: readDateTime(json['scheduled']),
       started: readDateTime(json['started']),
-      round: MatchRoundX.fromCode(readInt(json['round'])),
+      round: MatchRoundX.fromStored(
+        json['round'],
+        roundCode: json['roundCode'],
+      ),
       instance: readInt(json['instance']),
-      matchNumber: readInt(json['matchnum']),
+      matchNumber: readInt(json['matchnum'] ?? json['matchNumber']),
       name: readString(json['name']),
       alliances: asJsonMapList(
         json['alliances'],
@@ -489,9 +534,12 @@ class RankingRecord {
       wp: readInt(json['wp'], -1),
       ap: readInt(json['ap'], -1),
       sp: readInt(json['sp'], -1),
-      highScore: readInt(json['high_score'], -1),
-      averagePoints: readDouble(json['average_points'], -1),
-      totalPoints: readInt(json['total_points'], -1),
+      highScore: readInt(json['high_score'] ?? json['highScore'], -1),
+      averagePoints: readDouble(
+        json['average_points'] ?? json['averagePoints'],
+        -1,
+      ),
+      totalPoints: readInt(json['total_points'] ?? json['totalPoints'], -1),
     );
   }
 

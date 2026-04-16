@@ -19,6 +19,7 @@ import '../ui/services/account_repository.dart';
 import '../ui/services/in_memory_account_repository.dart';
 import '../ui/services/local_account_repository.dart';
 import '../ui/services/solar_auth_service.dart';
+import '../ui/services/solar_disk_cache_store.dart';
 import '../ui/services/solar_match_prediction_service.dart';
 import '../ui/services/solar_scrimmage_service.dart';
 import '../ui/services/solarize_history_service.dart';
@@ -44,6 +45,7 @@ class AppSessionController extends ChangeNotifier {
   static const _scrimmageService = SolarScrimmageService();
   static const _solarizeHistoryService = SolarizeHistoryService();
   static const _iosCompanionService = SolarIosCompanionService();
+  static final _diskCacheStore = SolarDiskCacheStore.instance;
   static const _solarizeHistoryTeamLimit = 192;
   static const _solarizeHistoryBatchSize = 12;
   static const _solarizeMatchHistoryTeamLimit = 128;
@@ -62,6 +64,7 @@ class AppSessionController extends ChangeNotifier {
   String? _dismissedWorldsScheduleAnnouncementId;
   int? _notificationCenterSeenAtMillis;
   List<String> _favoriteTeamNumbers = const <String>[];
+  List<int> _bookmarkedEventIds = const <int>[];
   bool _developerScrimmageEnabled = false;
   bool _isRefreshingTeamStats = false;
   bool _isPreloadingSearchEvents = false;
@@ -127,11 +130,17 @@ class AppSessionController extends ChangeNotifier {
 
   List<String> get favoriteTeamNumbers => _favoriteTeamNumbers;
 
+  List<int> get bookmarkedEventIds => _bookmarkedEventIds;
+
   bool get developerScrimmageEnabled => _developerScrimmageEnabled;
 
   bool isFavoriteTeam(String teamNumber) {
     final normalized = teamNumber.trim().toUpperCase();
     return _favoriteTeamNumbers.contains(normalized);
+  }
+
+  bool isBookmarkedEvent(int eventId) {
+    return _bookmarkedEventIds.contains(eventId);
   }
 
   List<TeamSummary> get favoriteTeams {
@@ -248,6 +257,7 @@ class AppSessionController extends ChangeNotifier {
         settings.dismissedWorldsScheduleAnnouncementId;
     _notificationCenterSeenAtMillis = settings.notificationCenterSeenAtMillis;
     _favoriteTeamNumbers = settings.favoriteTeamNumbers;
+    _bookmarkedEventIds = settings.bookmarkedEventIds;
     _developerScrimmageEnabled = settings.developerScrimmageEnabled;
     _authStateSubscription = _authService.authStateChanges.listen((change) {
       unawaited(_handleAuthStateChange(change));
@@ -366,6 +376,25 @@ class AppSessionController extends ChangeNotifier {
     }
 
     _favoriteTeamNumbers = nextFavorites.toList(growable: false);
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> toggleBookmarkedEvent(EventSummary event) async {
+    final eventId = event.id;
+    if (eventId <= 0) {
+      return;
+    }
+
+    final nextBookmarks = _bookmarkedEventIds.toList(growable: true);
+    if (nextBookmarks.contains(eventId)) {
+      nextBookmarks.remove(eventId);
+    } else {
+      nextBookmarks.add(eventId);
+      nextBookmarks.sort();
+    }
+
+    _bookmarkedEventIds = nextBookmarks.toList(growable: false);
     await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
     notifyListeners();
   }
@@ -501,22 +530,33 @@ class AppSessionController extends ChangeNotifier {
     _isPreloadingSearchEvents = true;
     notifyListeners();
 
+    final cacheKey = '$seasonId';
     try {
-      final events = await api.robotEvents.fetchEvents(season: seasonId);
-      final uniqueEvents = <int, EventSummary>{};
-      for (final event in events) {
-        uniqueEvents[event.id] = event;
+      final sortedEvents = await _loadCachedList<EventSummary>(
+        namespace: 'season_events',
+        cacheKey: cacheKey,
+        force: force,
+        ttl: _dailyCacheTtl(),
+        fromJson: EventSummary.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final events = await api.robotEvents.fetchEvents(season: seasonId);
+          final uniqueEvents = <int, EventSummary>{};
+          for (final event in events) {
+            uniqueEvents[event.id] = event;
+          }
+          return uniqueEvents.values.toList(growable: false)..sort((a, b) {
+            final aStart = a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return aStart.compareTo(bStart);
+          });
+        },
+      );
+
+      if (sortedEvents.isNotEmpty) {
+        _preloadedSearchSeasonId = seasonId;
+        _preloadedSearchEvents = sortedEvents;
       }
-
-      final sortedEvents = uniqueEvents.values.toList(growable: false)
-        ..sort((a, b) {
-          final aStart = a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return aStart.compareTo(bStart);
-        });
-
-      _preloadedSearchSeasonId = seasonId;
-      _preloadedSearchEvents = sortedEvents;
       _primeSearchEvents(
         _teamStats?.allEvents ??
             _teamStats?.upcomingEvents ??
@@ -711,13 +751,12 @@ class AppSessionController extends ChangeNotifier {
       }
 
       _preloadedOpenSkillEntriesByTeam = mergedEntries;
-      _preloadedWorldSkillsRankings = mergedWorldSkills.values.toList(
-        growable: false,
-      )..sort((a, b) {
-        final aRank = a.rank <= 0 ? 999999 : a.rank;
-        final bRank = b.rank <= 0 ? 999999 : b.rank;
-        return aRank.compareTo(bRank);
-      });
+      _preloadedWorldSkillsRankings =
+          mergedWorldSkills.values.toList(growable: false)..sort((a, b) {
+            final aRank = a.rank <= 0 ? 999999 : a.rank;
+            final bRank = b.rank <= 0 ? 999999 : b.rank;
+            return aRank.compareTo(bRank);
+          });
       notifyListeners();
     } finally {
       for (final key in inflightKeys) {
@@ -780,22 +819,33 @@ class AppSessionController extends ChangeNotifier {
         return const <WorldSkillsEntry>[];
       }
 
-      try {
-        final entries = _filterPreferredProgramWorldSkills(
-          await api.worldSkills.fetchRankings(
-            seasonId: seasonId,
-            gradeLevel: gradeLevel,
-          ),
-        );
-        entries.sort((a, b) {
-          final aRank = a.rank <= 0 ? 999999 : a.rank;
-          final bRank = b.rank <= 0 ? 999999 : b.rank;
-          return aRank.compareTo(bRank);
-        });
-        return entries;
-      } catch (_) {
-        return const <WorldSkillsEntry>[];
+      final entries = await _loadCachedList<WorldSkillsEntry>(
+        namespace: 'world_skills_rankings',
+        cacheKey: cacheKey,
+        force: force,
+        ttl: _dailyCacheTtl(),
+        fromJson: WorldSkillsEntry.fromJson,
+        toJson: (item) => item.toJson(),
+        isUsable: _hasUsableWorldSkillsRankings,
+        loader: () async {
+          final fetched = _filterPreferredProgramWorldSkills(
+            await api.worldSkills.fetchRankings(
+              seasonId: seasonId,
+              gradeLevel: gradeLevel,
+            ),
+          );
+          fetched.sort((a, b) {
+            final aRank = a.rank <= 0 ? 999999 : a.rank;
+            final bRank = b.rank <= 0 ? 999999 : b.rank;
+            return aRank.compareTo(bRank);
+          });
+          return fetched;
+        },
+      );
+      if (entries.isEmpty) {
+        _worldSkillsRankingsCache.remove(cacheKey);
       }
+      return entries;
     });
   }
 
@@ -815,34 +865,49 @@ class AppSessionController extends ChangeNotifier {
         return const <OpenSkillCacheEntry>[];
       }
 
-      final worldSkills = await fetchWorldSkillsRankings(
-        seasonId: seasonId,
-        gradeLevel: gradeLevel,
+      final entries = await _loadCachedList<OpenSkillCacheEntry>(
+        namespace: 'solarize_rankings',
+        cacheKey: cacheKey,
         force: force,
-      );
-      if (worldSkills.isEmpty) {
-        return const <OpenSkillCacheEntry>[];
-      }
+        ttl: _dailyCacheTtl(),
+        fromJson: OpenSkillCacheEntry.fromJson,
+        toJson: (item) => item.toJson(),
+        isUsable: _hasUsableOpenSkillRankings,
+        loader: () async {
+          final worldSkills = await fetchWorldSkillsRankings(
+            seasonId: seasonId,
+            gradeLevel: gradeLevel,
+            force: force,
+          );
+          if (worldSkills.isEmpty) {
+            return const <OpenSkillCacheEntry>[];
+          }
 
-      final results = await Future.wait<Object>(<Future<Object>>[
-        _loadSolarizeTeamRankings(
-          worldSkills,
-          seasonId: seasonId,
-          force: force,
-        ).then<Object>((value) => value),
-        _loadSolarizeTeamMatches(
-          worldSkills,
-          seasonId: seasonId,
-          force: force,
-        ).then<Object>((value) => value),
-      ]);
-      final rankingsByTeam = results[0] as Map<String, List<RankingRecord>>;
-      final matchesByTeam = results[1] as Map<String, List<MatchSummary>>;
-      return _solarizeHistoryService.build(
-        worldSkills: worldSkills,
-        rankingsByTeam: rankingsByTeam,
-        matchesByTeam: matchesByTeam,
+          final results = await Future.wait<Object>(<Future<Object>>[
+            _loadSolarizeTeamRankings(
+              worldSkills,
+              seasonId: seasonId,
+              force: force,
+            ).then<Object>((value) => value),
+            _loadSolarizeTeamMatches(
+              worldSkills,
+              seasonId: seasonId,
+              force: force,
+            ).then<Object>((value) => value),
+          ]);
+          final rankingsByTeam = results[0] as Map<String, List<RankingRecord>>;
+          final matchesByTeam = results[1] as Map<String, List<MatchSummary>>;
+          return _solarizeHistoryService.build(
+            worldSkills: worldSkills,
+            rankingsByTeam: rankingsByTeam,
+            matchesByTeam: matchesByTeam,
+          );
+        },
       );
+      if (entries.isEmpty) {
+        _openSkillRankingsCache.remove(cacheKey);
+      }
+      return entries;
     });
   }
 
@@ -954,8 +1019,8 @@ class AppSessionController extends ChangeNotifier {
     TeamSummary team, {
     bool force = false,
   }) async {
-    final normalizedKey = team.number.trim().toUpperCase();
     final activeSeasonId = await _resolveActiveSeasonId();
+    final normalizedKey = team.number.trim().toUpperCase();
     final cacheKey = '$normalizedKey|${activeSeasonId ?? 0}';
     final currentTeam = _currentAccount?.team;
 
@@ -973,22 +1038,152 @@ class AppSessionController extends ChangeNotifier {
       _teamStatsCache.remove(cacheKey);
     }
 
-    return _teamStatsCache.putIfAbsent(cacheKey, () async {
-      final seedWorldSkillsEntry = _seedWorldSkillsEntryForTeam(
-        teamNumber: normalizedKey,
-        teamId: team.id,
+    return _teamStatsCache
+        .putIfAbsent(cacheKey, () async {
+          final resolvedTeam = await _resolveTeamForStats(
+            team,
+            preferredSeasonId: activeSeasonId,
+          );
+          var snapshot = await _loadResolvedTeamStats(
+            resolvedTeam,
+            normalizedTeamNumber: normalizedKey,
+            activeSeasonId: activeSeasonId,
+          );
+
+          if (_hasRobotEventsCoverage(snapshot)) {
+            return snapshot;
+          }
+
+          final recoveredTeam = await _recoverTeamStatsIdentity(
+            originalTeam: team,
+            currentTeam: resolvedTeam,
+            preferredSeasonId: activeSeasonId,
+          );
+          if (recoveredTeam == null) {
+            return snapshot;
+          }
+
+          final recoveredSnapshot = await _loadResolvedTeamStats(
+            recoveredTeam,
+            normalizedTeamNumber: normalizedKey,
+            activeSeasonId: activeSeasonId,
+          );
+          if (_hasRobotEventsCoverage(recoveredSnapshot)) {
+            snapshot = recoveredSnapshot;
+          }
+          return snapshot;
+        })
+        .then((snapshot) {
+          if (!_shouldCacheTeamStatsSnapshot(snapshot)) {
+            _teamStatsCache.remove(cacheKey);
+          }
+          return snapshot;
+        });
+  }
+
+  Future<TeamSummary> _resolveTeamForStats(
+    TeamSummary team, {
+    required int? preferredSeasonId,
+  }) async {
+    if (team.id > 0) {
+      return team;
+    }
+    try {
+      return await _teamDirectory.validateTeamNumber(
+        team.number,
+        preferredSeasonId: preferredSeasonId,
       );
-      final seedOpenSkillEntry = _seedOpenSkillEntryForTeam(
-        teamNumber: normalizedKey,
-        teamId: team.id,
+    } catch (_) {
+      return team;
+    }
+  }
+
+  Future<TeamStatsSnapshot> _loadResolvedTeamStats(
+    TeamSummary resolvedTeam, {
+    required String normalizedTeamNumber,
+    required int? activeSeasonId,
+  }) async {
+    final seedWorldSkillsEntry = _seedWorldSkillsEntryForTeam(
+      teamNumber: normalizedTeamNumber,
+      teamId: resolvedTeam.id,
+    );
+    final seedOpenSkillEntry = _seedOpenSkillEntryForTeam(
+      teamNumber: normalizedTeamNumber,
+      teamId: resolvedTeam.id,
+    );
+    final snapshot = await _teamDirectory.loadTeamStats(
+      resolvedTeam,
+      preferredSeasonId: activeSeasonId,
+      seedWorldSkillsEntry: seedWorldSkillsEntry,
+      seedOpenSkillEntry: seedOpenSkillEntry,
+    );
+    final bestKnownTeam = _bestKnownTeamSummary(
+      snapshot.team,
+      worldSkillsEntry: snapshot.worldSkillsEntry ?? seedWorldSkillsEntry,
+      openSkillEntry: snapshot.openSkillEntry ?? seedOpenSkillEntry,
+    );
+    if (_sameTeamSummary(snapshot.team, bestKnownTeam)) {
+      return snapshot;
+    }
+    return TeamStatsSnapshot(
+      team: bestKnownTeam,
+      allEvents: snapshot.allEvents,
+      upcomingEvents: snapshot.upcomingEvents,
+      rankings: snapshot.rankings,
+      matchHistory: snapshot.matchHistory,
+      openSkillEntry: snapshot.openSkillEntry,
+      worldSkillsEntry: snapshot.worldSkillsEntry,
+      lastUpdated: snapshot.lastUpdated,
+      errorMessage: snapshot.errorMessage,
+    );
+  }
+
+  Future<TeamSummary?> _recoverTeamStatsIdentity({
+    required TeamSummary originalTeam,
+    required TeamSummary currentTeam,
+    required int? preferredSeasonId,
+  }) async {
+    final normalizedNumber = originalTeam.number.trim().toUpperCase();
+    if (normalizedNumber.isEmpty) {
+      return null;
+    }
+
+    try {
+      final validated = await _teamDirectory.validateTeamNumber(
+        normalizedNumber,
+        preferredSeasonId: preferredSeasonId,
       );
-      return _teamDirectory.loadTeamStats(
-        team,
-        preferredSeasonId: activeSeasonId,
-        seedWorldSkillsEntry: seedWorldSkillsEntry,
-        seedOpenSkillEntry: seedOpenSkillEntry,
-      );
-    });
+      final recovered = _mergeTeamSummary(validated, originalTeam);
+      if (_sameTeamSummary(recovered, currentTeam)) {
+        return null;
+      }
+      return recovered;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _hasRobotEventsCoverage(TeamStatsSnapshot snapshot) {
+    return snapshot.allEvents.isNotEmpty ||
+        snapshot.rankings.isNotEmpty ||
+        snapshot.matchHistory.isNotEmpty;
+  }
+
+  bool _shouldCacheTeamStatsSnapshot(TeamStatsSnapshot snapshot) {
+    return _hasRobotEventsCoverage(snapshot) &&
+        !(snapshot.errorMessage?.trim().isNotEmpty ?? false);
+  }
+
+  bool _sameTeamSummary(TeamSummary left, TeamSummary right) {
+    return left.id == right.id &&
+        left.number.trim().toUpperCase() == right.number.trim().toUpperCase() &&
+        left.teamName.trim() == right.teamName.trim() &&
+        left.organization.trim() == right.organization.trim() &&
+        left.robotName.trim() == right.robotName.trim() &&
+        left.grade.trim() == right.grade.trim() &&
+        left.location.city.trim() == right.location.city.trim() &&
+        left.location.region.trim() == right.location.region.trim() &&
+        left.location.country.trim() == right.location.country.trim();
   }
 
   Future<void> dismissWorldsScheduleReleaseBanner() async {
@@ -1045,6 +1240,89 @@ class AppSessionController extends ChangeNotifier {
         final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
         return aStart.compareTo(bStart);
       });
+  }
+
+  Future<List<T>> _loadCachedList<T>({
+    required String namespace,
+    required String cacheKey,
+    required Future<List<T>> Function() loader,
+    required T Function(Map<String, dynamic> json) fromJson,
+    required Map<String, dynamic> Function(T item) toJson,
+    required Duration ttl,
+    bool force = false,
+    bool cacheEmptyResults = false,
+    List<T> fallback = const [],
+    bool Function(List<T> items)? isUsable,
+  }) async {
+    if (!force) {
+      final cached = await _diskCacheStore.readList<T>(
+        namespace: namespace,
+        key: cacheKey,
+        fromJson: fromJson,
+      );
+      if (cached != null) {
+        final isCacheable = cached.isNotEmpty || cacheEmptyResults;
+        final usable = !isCacheable || isUsable == null || isUsable(cached);
+        if (isCacheable && usable) {
+          return cached;
+        }
+        if (isCacheable && !usable) {
+          await _diskCacheStore.clear(namespace, cacheKey);
+        }
+      }
+    }
+
+    try {
+      final loaded = await loader();
+      if (loaded.isNotEmpty || cacheEmptyResults) {
+        await _diskCacheStore.writeList<T>(
+          namespace: namespace,
+          key: cacheKey,
+          items: loaded,
+          toJson: toJson,
+          ttl: ttl,
+        );
+      }
+      return loaded;
+    } catch (_) {
+      final cached = await _diskCacheStore.readList<T>(
+        namespace: namespace,
+        key: cacheKey,
+        fromJson: fromJson,
+        allowExpired: true,
+      );
+      final usable =
+          cached == null ||
+          isUsable == null ||
+          !(cached.isNotEmpty || cacheEmptyResults) ||
+          isUsable(cached);
+      if (cached != null &&
+          usable &&
+          (cached.isNotEmpty || cacheEmptyResults)) {
+        return cached;
+      }
+      return fallback;
+    }
+  }
+
+  Duration _dailyCacheTtl() {
+    final now = DateTime.now();
+    final nextDay = DateTime(now.year, now.month, now.day + 1);
+    return nextDay.difference(now);
+  }
+
+  Duration _eventCacheTtl(EventSummary? event) {
+    return _isPastEvent(event)
+        ? const Duration(days: 180)
+        : const Duration(hours: 2);
+  }
+
+  bool _isPastEvent(EventSummary? event) {
+    if (event == null) {
+      return false;
+    }
+    final anchor = event.end ?? event.start;
+    return anchor != null && anchor.isBefore(DateTime.now());
   }
 
   Future<Map<String, List<RankingRecord>>> _loadSolarizeTeamRankings(
@@ -1348,17 +1626,8 @@ class AppSessionController extends ChangeNotifier {
     }
 
     return _eventTeamCountCache.putIfAbsent(eventId, () async {
-      final api = _api;
-      if (api == null || !api.config.hasRobotEventsApiKey) {
-        return null;
-      }
-
-      try {
-        final teams = await api.robotEvents.fetchEventTeams(eventId);
-        return teams.length;
-      } catch (_) {
-        return null;
-      }
+      final teams = await fetchEventTeams(eventId);
+      return teams.isEmpty ? null : teams.length;
     });
   }
 
@@ -1389,11 +1658,20 @@ class AppSessionController extends ChangeNotifier {
         return const <TeamSummary>[];
       }
 
-      try {
-        return await api.robotEvents.fetchEventTeams(eventId);
-      } catch (_) {
-        return const <TeamSummary>[];
+      final event = resolveKnownEvent(eventId);
+      final teams = await _loadCachedList<TeamSummary>(
+        namespace: 'event_teams',
+        cacheKey: '$eventId',
+        ttl: _eventCacheTtl(event),
+        cacheEmptyResults: _isPastEvent(event),
+        fromJson: TeamSummary.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () => api.robotEvents.fetchEventTeams(eventId),
+      );
+      if (teams.isEmpty && !_isPastEvent(event)) {
+        _eventTeamsCache.remove(eventId);
       }
+      return teams;
     });
   }
 
@@ -1464,16 +1742,27 @@ class AppSessionController extends ChangeNotifier {
         return const <RankingRecord>[];
       }
 
-      try {
-        final rankings = await api.robotEvents.fetchDivisionRankings(
-          eventId: eventId,
-          divisionId: divisionId,
-        );
-        rankings.sort((a, b) => a.rank.compareTo(b.rank));
-        return rankings;
-      } catch (_) {
-        return const <RankingRecord>[];
+      final event = resolveKnownEvent(eventId);
+      final rankings = await _loadCachedList<RankingRecord>(
+        namespace: 'division_rankings',
+        cacheKey: cacheKey,
+        ttl: _eventCacheTtl(event),
+        cacheEmptyResults: _isPastEvent(event),
+        fromJson: RankingRecord.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final fetched = await api.robotEvents.fetchDivisionRankings(
+            eventId: eventId,
+            divisionId: divisionId,
+          );
+          fetched.sort((a, b) => a.rank.compareTo(b.rank));
+          return fetched;
+        },
+      );
+      if (rankings.isEmpty && !_isPastEvent(event)) {
+        _divisionRankingsCache.remove(cacheKey);
       }
+      return rankings;
     });
   }
 
@@ -1495,26 +1784,37 @@ class AppSessionController extends ChangeNotifier {
         return const <MatchSummary>[];
       }
 
-      try {
-        final matches = await api.robotEvents.fetchDivisionMatches(
-          eventId: eventId,
-          divisionId: divisionId,
-        );
-        matches.sort((a, b) {
-          final aDate =
-              a.started ??
-              a.scheduled ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          final bDate =
-              b.started ??
-              b.scheduled ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          return aDate.compareTo(bDate);
-        });
-        return matches;
-      } catch (_) {
-        return const <MatchSummary>[];
+      final event = resolveKnownEvent(eventId);
+      final matches = await _loadCachedList<MatchSummary>(
+        namespace: 'division_matches',
+        cacheKey: cacheKey,
+        ttl: _eventCacheTtl(event),
+        cacheEmptyResults: _isPastEvent(event),
+        fromJson: MatchSummary.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final fetched = await api.robotEvents.fetchDivisionMatches(
+            eventId: eventId,
+            divisionId: divisionId,
+          );
+          fetched.sort((a, b) {
+            final aDate =
+                a.started ??
+                a.scheduled ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                b.started ??
+                b.scheduled ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            return aDate.compareTo(bDate);
+          });
+          return fetched;
+        },
+      );
+      if (matches.isEmpty && !_isPastEvent(event)) {
+        _divisionMatchesCache.remove(cacheKey);
       }
+      return matches;
     });
   }
 
@@ -1530,17 +1830,28 @@ class AppSessionController extends ChangeNotifier {
         return const <SkillAttempt>[];
       }
 
-      try {
-        final skills = await api.robotEvents.fetchEventSkills(eventId);
-        skills.sort((a, b) {
-          final aRank = a.rank <= 0 ? 999999 : a.rank;
-          final bRank = b.rank <= 0 ? 999999 : b.rank;
-          return aRank.compareTo(bRank);
-        });
-        return skills;
-      } catch (_) {
-        return const <SkillAttempt>[];
+      final event = resolveKnownEvent(eventId);
+      final skills = await _loadCachedList<SkillAttempt>(
+        namespace: 'event_skills',
+        cacheKey: '$eventId',
+        ttl: _eventCacheTtl(event),
+        cacheEmptyResults: _isPastEvent(event),
+        fromJson: SkillAttempt.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final fetched = await api.robotEvents.fetchEventSkills(eventId);
+          fetched.sort((a, b) {
+            final aRank = a.rank <= 0 ? 999999 : a.rank;
+            final bRank = b.rank <= 0 ? 999999 : b.rank;
+            return aRank.compareTo(bRank);
+          });
+          return fetched;
+        },
+      );
+      if (skills.isEmpty && !_isPastEvent(event)) {
+        _eventSkillsCache.remove(eventId);
       }
+      return skills;
     });
   }
 
@@ -1556,18 +1867,29 @@ class AppSessionController extends ChangeNotifier {
         return const <AwardSummary>[];
       }
 
-      try {
-        final awards = await api.robotEvents.fetchEventAwards(eventId);
-        awards.sort((a, b) {
-          if (a.order != b.order) {
-            return a.order.compareTo(b.order);
-          }
-          return a.title.compareTo(b.title);
-        });
-        return awards;
-      } catch (_) {
-        return const <AwardSummary>[];
+      final event = resolveKnownEvent(eventId);
+      final awards = await _loadCachedList<AwardSummary>(
+        namespace: 'event_awards',
+        cacheKey: '$eventId',
+        ttl: _eventCacheTtl(event),
+        cacheEmptyResults: _isPastEvent(event),
+        fromJson: AwardSummary.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final fetched = await api.robotEvents.fetchEventAwards(eventId);
+          fetched.sort((a, b) {
+            if (a.order != b.order) {
+              return a.order.compareTo(b.order);
+            }
+            return a.title.compareTo(b.title);
+          });
+          return fetched;
+        },
+      );
+      if (awards.isEmpty && !_isPastEvent(event)) {
+        _eventAwardsCache.remove(eventId);
       }
+      return awards;
     });
   }
 
@@ -1602,26 +1924,37 @@ class AppSessionController extends ChangeNotifier {
         return const <MatchSummary>[];
       }
 
-      try {
-        final matches = await api.robotEvents.fetchTeamMatches(
-          account.team.id,
-          eventId: eventId,
-        );
-        matches.sort((a, b) {
-          final aDate =
-              a.started ??
-              a.scheduled ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          final bDate =
-              b.started ??
-              b.scheduled ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          return aDate.compareTo(bDate);
-        });
-        return matches;
-      } catch (_) {
-        return const <MatchSummary>[];
+      final event = resolveKnownEvent(eventId);
+      final matches = await _loadCachedList<MatchSummary>(
+        namespace: 'team_event_schedule',
+        cacheKey: cacheKey,
+        ttl: _eventCacheTtl(event),
+        cacheEmptyResults: _isPastEvent(event),
+        fromJson: MatchSummary.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final fetched = await api.robotEvents.fetchTeamMatches(
+            account.team.id,
+            eventId: eventId,
+          );
+          fetched.sort((a, b) {
+            final aDate =
+                a.started ??
+                a.scheduled ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                b.started ??
+                b.scheduled ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            return aDate.compareTo(bDate);
+          });
+          return fetched;
+        },
+      );
+      if (matches.isEmpty && !_isPastEvent(event)) {
+        _teamScheduleCache.remove(cacheKey);
       }
+      return matches;
     });
   }
 
@@ -1646,27 +1979,39 @@ class AppSessionController extends ChangeNotifier {
         return const <MatchSummary>[];
       }
 
-      try {
-        final matches = await api.robotEvents.fetchTeamMatches(
-          team.id,
-          season: season,
-          eventId: eventId,
-        );
-        matches.sort((a, b) {
-          final aDate =
-              a.started ??
-              a.scheduled ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          final bDate =
-              b.started ??
-              b.scheduled ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          return aDate.compareTo(bDate);
-        });
-        return matches;
-      } catch (_) {
-        return const <MatchSummary>[];
+      final event = eventId == null ? null : resolveKnownEvent(eventId);
+      final matches = await _loadCachedList<MatchSummary>(
+        namespace: 'team_match_history',
+        cacheKey: cacheKey,
+        force: force,
+        ttl: event == null ? _dailyCacheTtl() : _eventCacheTtl(event),
+        cacheEmptyResults: event != null && _isPastEvent(event),
+        fromJson: MatchSummary.fromJson,
+        toJson: (item) => item.toJson(),
+        loader: () async {
+          final fetched = await api.robotEvents.fetchTeamMatches(
+            team.id,
+            season: season,
+            eventId: eventId,
+          );
+          fetched.sort((a, b) {
+            final aDate =
+                a.started ??
+                a.scheduled ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                b.started ??
+                b.scheduled ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            return aDate.compareTo(bDate);
+          });
+          return fetched;
+        },
+      );
+      if (matches.isEmpty && eventId == null) {
+        _teamMatchHistoryCache.remove(cacheKey);
       }
+      return matches;
     });
   }
 
@@ -1701,13 +2046,19 @@ class AppSessionController extends ChangeNotifier {
     await _iosCompanionService.sync(
       teamNumber: account.team.number,
       snapshot: snapshot,
+      teamStats: _teamStats,
     );
+  }
+
+  Future<void> clearIosCompanion() {
+    return _iosCompanionService.clear();
   }
 
   Future<void> markNotificationCenterSeen({
     SolarNotificationCenterSnapshot? snapshot,
   }) async {
-    final resolvedSnapshot = snapshot ?? await fetchNotificationCenterSnapshot();
+    final resolvedSnapshot =
+        snapshot ?? await fetchNotificationCenterSnapshot();
     final anchors = <int>[
       DateTime.now().millisecondsSinceEpoch,
       if (resolvedSnapshot.upcomingMatch != null)
@@ -1719,7 +2070,9 @@ class AppSessionController extends ChangeNotifier {
       for (final result in resolvedSnapshot.recentResults)
         (result.completedAt?.millisecondsSinceEpoch ?? 0) + 1,
     ];
-    final now = anchors.reduce((current, value) => value > current ? value : current);
+    final now = anchors.reduce(
+      (current, value) => value > current ? value : current,
+    );
     if (_notificationCenterSeenAtMillis != null &&
         _notificationCenterSeenAtMillis! >= now) {
       return;
@@ -1733,6 +2086,7 @@ class AppSessionController extends ChangeNotifier {
       await _iosCompanionService.sync(
         teamNumber: _currentAccount!.team.number,
         snapshot: resolvedSnapshot,
+        teamStats: _teamStats,
       );
     }
   }
@@ -2403,6 +2757,39 @@ class AppSessionController extends ChangeNotifier {
         .toList(growable: false);
   }
 
+  bool _hasUsableWorldSkillsRankings(List<WorldSkillsEntry> entries) {
+    if (entries.isEmpty) {
+      return true;
+    }
+
+    final sample = entries.take(12).toList(growable: false);
+    final validCount = sample.where((entry) {
+      return entry.rank > 0 &&
+          entry.teamId > 0 &&
+          entry.teamNumber.trim().isNotEmpty &&
+          (entry.combinedScore > 0 ||
+              entry.programmingScore > 0 ||
+              entry.driverScore > 0);
+    }).length;
+
+    return validCount >= (sample.length / 2).ceil();
+  }
+
+  bool _hasUsableOpenSkillRankings(List<OpenSkillCacheEntry> entries) {
+    if (entries.isEmpty) {
+      return true;
+    }
+
+    final sample = entries.take(12).toList(growable: false);
+    final validCount = sample.where((entry) {
+      return entry.ranking > 0 &&
+          entry.id > 0 &&
+          entry.teamNumber.trim().isNotEmpty;
+    }).length;
+
+    return validCount >= (sample.length / 2).ceil();
+  }
+
   Future<void> _saveSettings({
     String? currentUserEmail,
     bool clearCurrentUserEmail = false,
@@ -2418,6 +2805,7 @@ class AppSessionController extends ChangeNotifier {
             _dismissedWorldsScheduleAnnouncementId,
         notificationCenterSeenAtMillis: _notificationCenterSeenAtMillis,
         favoriteTeamNumbers: _favoriteTeamNumbers,
+        bookmarkedEventIds: _bookmarkedEventIds,
         developerScrimmageEnabled: _developerScrimmageEnabled,
       ),
     );

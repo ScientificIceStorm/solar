@@ -7,6 +7,7 @@ import 'event_division_screen.dart';
 import 'event_schedule_screen.dart';
 import 'event_skills_screen.dart';
 import '../widgets/solar_event_photo.dart';
+import '../widgets/solar_swipe_back.dart';
 import '../widgets/solarize_team_list.dart';
 
 class EventDetailsScreen extends StatefulWidget {
@@ -31,17 +32,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     ).fetchEventTeamCount(widget.event.id);
   }
 
-  void _showPlaceholderAction(String label) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$label is coming next.')));
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
     final teamNumber = controller.currentAccount?.team.number ?? 'Your team';
     final event = widget.event;
+    final isBookmarked = controller.isBookmarkedEvent(event.id);
     final isCurrentTeamEvent = controller.isCurrentTeamEvent(event.id);
     final currentTeamDivision = controller.currentTeamDivisionForEvent(
       event.id,
@@ -53,11 +49,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F5F8),
-      body: StretchingOverscrollIndicator(
-        axisDirection: AxisDirection.down,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: <Widget>[
+      body: SolarSwipeBack(
+        child: StretchingOverscrollIndicator(
+          axisDirection: AxisDirection.down,
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: <Widget>[
             Stack(
               clipBehavior: Clip.none,
               children: <Widget>[
@@ -105,9 +102,25 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                               ),
                             ),
                             _TopOverlayButton(
-                              icon: Icons.bookmark_border_rounded,
-                              onTap: () =>
-                                  _showPlaceholderAction('Bookmarking'),
+                              icon: isBookmarked
+                                  ? Icons.bookmark_rounded
+                                  : Icons.bookmark_border_rounded,
+                              onTap: () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                await controller.toggleBookmarkedEvent(event);
+                                if (!mounted) {
+                                  return;
+                                }
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      isBookmarked
+                                          ? 'Removed from saved events.'
+                                          : 'Saved event for later.',
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -147,6 +160,19 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       height: 1.05,
                       letterSpacing: -1.2,
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  _InfoLine(
+                    icon: Icons.calendar_month_rounded,
+                    label: _eventDateRangeLabel(
+                      start: event.start,
+                      end: event.end,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _InfoLine(
+                    icon: Icons.location_on_rounded,
+                    label: _eventLocationLabel(event.location),
                   ),
                   const SizedBox(height: 30),
                   if (isCurrentTeamEvent) ...<Widget>[
@@ -221,7 +247,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 ],
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -519,8 +546,7 @@ class _MetaPill extends StatelessWidget {
             children: <Widget>[
               Text(
                 title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
                 style: const TextStyle(
                   color: Color(0xFF272844),
                   fontSize: 16,
@@ -667,10 +693,29 @@ String _eventDateLabel(DateTime? date) {
   return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
+String _eventDateRangeLabel({DateTime? start, DateTime? end}) {
+  if (start == null && end == null) {
+    return 'Date pending';
+  }
+  if (start != null && end != null) {
+    final sameDay =
+        start.year == end.year &&
+        start.month == end.month &&
+        start.day == end.day;
+    if (sameDay) {
+      return _eventDateLabel(start);
+    }
+    return '${_eventDateLabel(start)} to ${_eventDateLabel(end)}';
+  }
+  return _eventDateLabel(start ?? end);
+}
+
 String _eventLocationLabel(LocationSummary location) {
   final parts = <String>[
+    if (location.venue.isNotEmpty) location.venue,
     if (location.city.isNotEmpty) location.city,
     if (location.region.isNotEmpty) location.region,
+    if (location.country.isNotEmpty) location.country,
   ];
   return parts.isEmpty ? 'Location pending' : parts.join(', ');
 }
@@ -679,4 +724,33 @@ String _displayEventName(String value) {
   return value
       .replaceAll('VEX V5 Robotics Competition High School', 'High School')
       .replaceAll('VEX V5 Robotics Competition Middle School', 'Middle School');
+}
+
+class _InfoLine extends StatelessWidget {
+  const _InfoLine({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Icon(icon, size: 18, color: const Color(0xFF5A67F3)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF6B6F84),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

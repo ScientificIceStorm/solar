@@ -50,4 +50,63 @@ class SolarMlRankingEntry {
   final double? awpPerMatch;
 
   double get solarRating => mlRating;
+
+  factory SolarMlRankingEntry.fromJson(Map<String, dynamic> json) {
+    return SolarMlRankingEntry(
+      rank: (json['rank'] as num?)?.toInt() ?? 0,
+      teamId: (json['teamId'] as num?)?.toInt() ?? 0,
+      teamNumber: (json['teamNumber'] as String?) ?? '',
+      teamName: (json['teamName'] as String?) ?? '',
+      organization: (json['organization'] as String?) ?? '',
+      city: (json['city'] as String?) ?? '',
+      region: (json['region'] as String?) ?? '',
+      country: (json['country'] as String?) ?? '',
+      mlRating: (json['mlRating'] as num?)?.toDouble() ?? 0,
+      projectedWinShare:
+          (json['projectedWinShare'] as num?)?.toDouble() ?? 0,
+      ceilingScore: (json['ceilingScore'] as num?)?.toDouble() ?? 0,
+      stability: (json['stability'] as num?)?.toDouble() ?? 0,
+      worldRank: json['worldRank'] is num
+          ? (json['worldRank'] as num).toInt()
+          : null,
+      combinedScore: (json['combinedScore'] as num?)?.toInt() ?? 0,
+      programmingScore: (json['programmingScore'] as num?)?.toInt() ?? 0,
+      driverScore: (json['driverScore'] as num?)?.toInt() ?? 0,
+      ordinal: (json['ordinal'] as num?)?.toDouble(),
+      openSkillMu: (json['openSkillMu'] as num?)?.toDouble(),
+      openSkillSigma: (json['openSkillSigma'] as num?)?.toDouble(),
+      ccwm: (json['ccwm'] as num?)?.toDouble(),
+      opr: (json['opr'] as num?)?.toDouble(),
+      dpr: (json['dpr'] as num?)?.toDouble(),
+      awpPerMatch: (json['awpPerMatch'] as num?)?.toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'rank': rank,
+      'teamId': teamId,
+      'teamNumber': teamNumber,
+      'teamName': teamName,
+      'organization': organization,
+      'city': city,
+      'region': region,
+      'country': country,
+      'mlRating': mlRating,
+      'projectedWinShare': projectedWinShare,
+      'ceilingScore': ceilingScore,
+      'stability': stability,
+      'worldRank': worldRank,
+      'combinedScore': combinedScore,
+      'programmingScore': programmingScore,
+      'driverScore': driverScore,
+      'ordinal': ordinal,
+      'openSkillMu': openSkillMu,
+      'openSkillSigma': openSkillSigma,
+      'ccwm': ccwm,
+      'opr': opr,
+      'dpr': dpr,
+      'awpPerMatch': awpPerMatch,
+    };
+  }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="solar_quickview_widget_description">Shows your next match or latest result with current rank context.</string>
+    <string name="solar_next_match_widget_description">Focused widget for your next published match.</string>
+    <string name="solar_latest_result_widget_description">Focused widget for your latest published score.</string>
+</resources>

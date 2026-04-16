@@ -24,9 +24,9 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
   SolarTeamDirectoryService({required SolarApi api}) : _api = api;
 
   final SolarApi _api;
-  static const _eventsTimeout = Duration(seconds: 8);
-  static const _statsTimeout = Duration(seconds: 6);
-  static const _openSkillTimeout = Duration(seconds: 3);
+  static const _eventsTimeout = Duration(seconds: 12);
+  static const _statsTimeout = Duration(seconds: 10);
+  static const _openSkillTimeout = Duration(seconds: 5);
 
   @override
   Future<TeamStatsSnapshot> loadTeamStats(

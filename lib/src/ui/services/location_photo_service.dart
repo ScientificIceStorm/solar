@@ -7,19 +7,25 @@ import '../../models/robot_events_models.dart';
 class LocationPhotoService {
   LocationPhotoService._();
 
-  static final Map<String, Future<String?>> _photoCache =
-      <String, Future<String?>>{};
+  static final Map<String, Future<LocationPhotoAsset?>> _photoCache =
+      <String, Future<LocationPhotoAsset?>>{};
 
   static Future<String?> photoUrlFor(LocationSummary location) {
-    final cacheKey = _cacheKey(location);
-    if (cacheKey.isEmpty) {
-      return Future<String?>.value(null);
-    }
-
-    return _photoCache.putIfAbsent(cacheKey, () => _loadPhotoUrl(location));
+    return photoAssetFor(location).then((asset) => asset?.url);
   }
 
-  static Future<String?> _loadPhotoUrl(LocationSummary location) async {
+  static Future<LocationPhotoAsset?> photoAssetFor(LocationSummary location) {
+    final cacheKey = _cacheKey(location);
+    if (cacheKey.isEmpty) {
+      return Future<LocationPhotoAsset?>.value(null);
+    }
+
+    return _photoCache.putIfAbsent(cacheKey, () => _loadPhotoAsset(location));
+  }
+
+  static Future<LocationPhotoAsset?> _loadPhotoAsset(
+    LocationSummary location,
+  ) async {
     final client = http.Client();
     try {
       for (final query in _queriesFor(location)) {
@@ -55,14 +61,34 @@ class LocationPhotoService {
           if (item is! Map) {
             continue;
           }
-          final thumbnail = item['thumbnail'];
-          if (thumbnail is String && thumbnail.trim().isNotEmpty) {
-            return thumbnail.trim();
+
+          final thumbnail = (item['thumbnail'] as String?)?.trim();
+          final url = (item['url'] as String?)?.trim();
+          final imageUrl = thumbnail?.isNotEmpty == true
+              ? thumbnail!
+              : (url?.isNotEmpty == true ? url! : null);
+          if (imageUrl == null) {
+            continue;
           }
-          final url = item['url'];
-          if (url is String && url.trim().isNotEmpty) {
-            return url.trim();
-          }
+
+          final creator =
+              (item['creator'] as String?)?.trim() ??
+              (item['author'] as String?)?.trim() ??
+              '';
+          final sourceUrl =
+              (item['foreign_landing_url'] as String?)?.trim() ??
+              (item['creator_url'] as String?)?.trim() ??
+              '';
+          final provider =
+              (item['source'] as String?)?.trim() ??
+              (item['provider'] as String?)?.trim() ??
+              'Openverse';
+
+          return LocationPhotoAsset(
+            url: imageUrl,
+            creditLabel: creator.isEmpty ? provider : '$creator via $provider',
+            creditUrl: sourceUrl,
+          );
         }
       }
     } catch (_) {
@@ -124,4 +150,16 @@ class LocationPhotoService {
   static String _normalize(String value) {
     return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   }
+}
+
+class LocationPhotoAsset {
+  const LocationPhotoAsset({
+    required this.url,
+    required this.creditLabel,
+    this.creditUrl,
+  });
+
+  final String url;
+  final String creditLabel;
+  final String? creditUrl;
 }

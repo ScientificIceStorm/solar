@@ -59,24 +59,41 @@ class OpenSkillCacheEntry {
 
   factory OpenSkillCacheEntry.fromJson(JsonMap json) {
     return OpenSkillCacheEntry(
-      ranking: readInt(json['ts_ranking']),
-      rankingChange: readInt(json['ranking_change']),
-      teamNumber: readString(json['team_number']),
-      id: readInt(json['id']),
-      region: readString(json['loc_region']),
-      country: readString(json['loc_country']),
-      trueSkill: readDouble(json['trueskill']),
-      openSkillMu: readDouble(json['openskill_mu'], 25),
-      openSkillSigma: readDouble(json['openskill_sigma'], 25 / 3),
-      openSkillOrdinal: readDouble(json['openskill_ordinal']),
-      ratingSource: readString(json['rating_source']),
+      ranking: readInt(json['ts_ranking'] ?? json['ranking'] ?? json['rank']),
+      rankingChange: readInt(json['ranking_change'] ?? json['rankingChange']),
+      teamNumber: firstNonEmpty(<String?>[
+        readString(json['team_number']),
+        readString(json['teamNumber']),
+        readString(json['number']),
+      ]),
+      id: readInt(json['id'] ?? json['team_id']),
+      region: firstNonEmpty(<String?>[
+        readString(json['loc_region']),
+        readString(json['locRegion']),
+        readString(json['region']),
+      ]),
+      country: firstNonEmpty(<String?>[
+        readString(json['loc_country']),
+        readString(json['locCountry']),
+        readString(json['country']),
+      ]),
+      trueSkill: readDouble(json['trueskill'] ?? json['trueSkill']),
+      openSkillMu: readDouble(json['openskill_mu'] ?? json['openSkillMu'], 25),
+      openSkillSigma: readDouble(
+        json['openskill_sigma'] ?? json['openSkillSigma'],
+        25 / 3,
+      ),
+      openSkillOrdinal: readDouble(
+        json['openskill_ordinal'] ?? json['openSkillOrdinal'],
+      ),
+      ratingSource: readString(json['rating_source'] ?? json['ratingSource']),
       ccwm: json['ccwm'] == null ? null : readDouble(json['ccwm']),
-      totalWins: readInt(json['total_wins']),
-      totalLosses: readInt(json['total_losses']),
-      totalTies: readInt(json['total_ties']),
-      apPerMatch: readDouble(json['ap_per_match']),
-      awpPerMatch: readDouble(json['awp_per_match']),
-      wpPerMatch: readDouble(json['wp_per_match']),
+      totalWins: readInt(json['total_wins'] ?? json['totalWins']),
+      totalLosses: readInt(json['total_losses'] ?? json['totalLosses']),
+      totalTies: readInt(json['total_ties'] ?? json['totalTies']),
+      apPerMatch: readDouble(json['ap_per_match'] ?? json['apPerMatch']),
+      awpPerMatch: readDouble(json['awp_per_match'] ?? json['awpPerMatch']),
+      wpPerMatch: readDouble(json['wp_per_match'] ?? json['wpPerMatch']),
       opr: json['opr'] == null ? null : readDouble(json['opr']),
       dpr: json['dpr'] == null ? null : readDouble(json['dpr']),
       strengthOfSchedule:
@@ -100,8 +117,12 @@ class OpenSkillCacheEntry {
           json['event_strength'] == null && json['eventStrength'] == null
           ? null
           : readDouble(json['event_strength'] ?? json['eventStrength']),
-      qualifiedForRegionals: readInt(json['qualified_for_regionals']),
-      qualifiedForWorlds: readInt(json['qualified_for_worlds']),
+      qualifiedForRegionals: readInt(
+        json['qualified_for_regionals'] ?? json['qualifiedForRegionals'],
+      ),
+      qualifiedForWorlds: readInt(
+        json['qualified_for_worlds'] ?? json['qualifiedForWorlds'],
+      ),
     );
   }
 

@@ -5,6 +5,7 @@ struct SolarUpcomingPayload: Codable {
   let eventName: String
   let divisionName: String
   let matchName: String
+  let matchLabel: String?
   let fieldName: String
   let scheduledAt: Int64?
   let redAlliance: String
@@ -16,6 +17,7 @@ struct SolarRecentResultPayload: Codable {
   let eventName: String
   let divisionName: String
   let matchName: String
+  let matchLabel: String?
   let fieldName: String
   let completedAt: Int64?
   let allianceColor: String
@@ -27,6 +29,10 @@ struct SolarRecentResultPayload: Codable {
 
 struct SolarCompanionPayload: Codable {
   let teamNumber: String
+  let teamName: String?
+  let recordLabel: String?
+  let worldRankLabel: String?
+  let solarizeRankLabel: String?
   let upcoming: SolarUpcomingPayload?
   let recentResults: [SolarRecentResultPayload]
   let updatedAt: Int64?

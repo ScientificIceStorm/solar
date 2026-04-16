@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../models/robot_events_models.dart';
@@ -13,24 +11,26 @@ class SolarEventPhoto extends StatefulWidget {
     this.fit = BoxFit.cover,
     this.alignment = Alignment.center,
     this.overlay,
+    this.showAttribution = true,
   });
 
   final LocationSummary location;
   final BoxFit fit;
   final Alignment alignment;
   final Widget? overlay;
+  final bool showAttribution;
 
   @override
   State<SolarEventPhoto> createState() => _SolarEventPhotoState();
 }
 
 class _SolarEventPhotoState extends State<SolarEventPhoto> {
-  late Future<String?> _photoUrlFuture;
+  late Future<LocationPhotoAsset?> _photoAssetFuture;
 
   @override
   void initState() {
     super.initState();
-    _photoUrlFuture = LocationPhotoService.photoUrlFor(widget.location);
+    _photoAssetFuture = LocationPhotoService.photoAssetFor(widget.location);
   }
 
   @override
@@ -40,54 +40,57 @@ class _SolarEventPhotoState extends State<SolarEventPhoto> {
         oldWidget.location.region != widget.location.region ||
         oldWidget.location.country != widget.location.country ||
         oldWidget.location.venue != widget.location.venue) {
-      _photoUrlFuture = LocationPhotoService.photoUrlFor(widget.location);
+      _photoAssetFuture = LocationPhotoService.photoAssetFor(widget.location);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final overlayChildren = widget.overlay == null
-        ? null
-        : <Widget>[widget.overlay!];
-
-    return Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        SolarEventPhotoFallback(
-          location: widget.location,
-          fit: widget.fit,
-          alignment: widget.alignment,
-        ),
-        FutureBuilder<String?>(
-          future: _photoUrlFuture,
-          builder: (context, snapshot) {
-            final photoUrl = snapshot.data;
-            if (photoUrl == null || photoUrl.trim().isEmpty) {
-              return const SizedBox.shrink();
-            }
-
-            return Image.network(
-              photoUrl,
+    return FutureBuilder<LocationPhotoAsset?>(
+      future: _photoAssetFuture,
+      builder: (context, snapshot) {
+        final asset = snapshot.data;
+        return Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            SolarEventPhotoFallback(
+              location: widget.location,
               fit: widget.fit,
               alignment: widget.alignment,
-              gaplessPlayback: true,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) {
-                  return child;
-                }
-                return AnimatedOpacity(
-                  duration: const Duration(milliseconds: 220),
-                  opacity: 0,
-                  child: child,
-                );
-              },
-              errorBuilder: (context, error, stackTrace) =>
-                  const SizedBox.shrink(),
-            );
-          },
-        ),
-        ...?overlayChildren,
-      ],
+            ),
+            if (asset != null)
+              Image.network(
+                asset.url,
+                fit: widget.fit,
+                alignment: widget.alignment,
+                gaplessPlayback: true,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) {
+                    return child;
+                  }
+                  return AnimatedOpacity(
+                    duration: const Duration(milliseconds: 240),
+                    opacity: 0,
+                    child: child,
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) =>
+                    const SizedBox.shrink(),
+              ),
+            if (widget.overlay != null) widget.overlay!,
+            if (asset != null && widget.showAttribution)
+              Positioned(
+                left: 6,
+                top: 14,
+                bottom: 14,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _PhotoCreditLabel(asset: asset),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -112,15 +115,38 @@ class SolarEventPhotoFallback extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: visual.skyColors,
         ),
       ),
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          CustomPaint(painter: _SolarEventScenePainter(visual: visual)),
+          Positioned(
+            top: -60,
+            right: -30,
+            child: _SoftOrb(
+              size: 180,
+              color: Colors.white.withValues(alpha: 0.14),
+            ),
+          ),
+          Positioned(
+            left: -40,
+            top: 80,
+            child: _SoftOrb(
+              size: 120,
+              color: Colors.white.withValues(alpha: 0.10),
+            ),
+          ),
+          Positioned(
+            right: 28,
+            bottom: 54,
+            child: _SoftOrb(
+              size: 96,
+              color: Colors.black.withValues(alpha: 0.08),
+            ),
+          ),
           Positioned(
             left: 18,
             bottom: 16,
@@ -146,202 +172,63 @@ class SolarEventPhotoFallback extends StatelessWidget {
   }
 }
 
-class _SolarEventScenePainter extends CustomPainter {
-  const _SolarEventScenePainter({required this.visual});
+class _SoftOrb extends StatelessWidget {
+  const _SoftOrb({required this.size, required this.color});
 
-  final CityPhotoVisual visual;
+  final double size;
+  final Color color;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final hazePaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: <Color>[
-          Colors.white.withValues(alpha: 0),
-          visual.hazeColor,
-          Colors.white.withValues(alpha: 0),
-        ],
-        stops: const <double>[0, 0.62, 1],
-      ).createShader(rect);
-    canvas.drawRect(rect, hazePaint);
-
-    final sunPaint = Paint()..color = visual.sunColor.withValues(alpha: 0.92);
-    canvas.drawCircle(
-      Offset(size.width * 0.82, size.height * 0.18),
-      size.shortestSide * 0.09,
-      sunPaint,
-    );
-
-    final cloudPaint = Paint()..color = Colors.white.withValues(alpha: 0.28);
-    _drawCloud(
-      canvas,
-      Offset(size.width * 0.18, size.height * 0.16),
-      cloudPaint,
-    );
-    _drawCloud(
-      canvas,
-      Offset(size.width * 0.58, size.height * 0.12),
-      cloudPaint,
-    );
-    _drawCloud(
-      canvas,
-      Offset(size.width * 0.78, size.height * 0.28),
-      cloudPaint..color = Colors.white.withValues(alpha: 0.16),
-    );
-
-    final skylineBaseline = size.height * 0.56;
-    final buildingWidths = <double>[
-      size.width * 0.16,
-      size.width * 0.12,
-      size.width * 0.18,
-      size.width * 0.11,
-      size.width * 0.15,
-      size.width * 0.1,
-    ];
-    final buildingHeights = <double>[
-      size.height * 0.34,
-      size.height * 0.27,
-      size.height * 0.38,
-      size.height * 0.24,
-      size.height * 0.31,
-      size.height * 0.36,
-    ];
-
-    var x = size.width * 0.02;
-    for (var i = 0; i < buildingWidths.length; i++) {
-      final width = buildingWidths[i];
-      final height = buildingHeights[i];
-      final color = visual.buildingColors[i % visual.buildingColors.length];
-      final buildingRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, skylineBaseline - height, width, height),
-        const Radius.circular(6),
-      );
-      canvas.drawRRect(buildingRect, Paint()..color = color);
-
-      final stripePaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.15)
-        ..strokeWidth = 1.2;
-      final stripeCount = math.max(2, (height / 18).floor());
-      for (var stripe = 1; stripe < stripeCount; stripe++) {
-        final y = skylineBaseline - height + (stripe * height / stripeCount);
-        canvas.drawLine(
-          Offset(x + 6, y),
-          Offset(x + width - 6, y),
-          stripePaint,
-        );
-      }
-
-      x += width + size.width * 0.015;
-    }
-
-    if (visual.landmark == CityLandmark.arch) {
-      final archPaint = Paint()
-        ..color = const Color(0xFFECE9E4)
-        ..strokeWidth = size.width * 0.022
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-      final archRect = Rect.fromCenter(
-        center: Offset(size.width * 0.62, skylineBaseline - size.height * 0.1),
-        width: size.width * 0.26,
-        height: size.height * 0.48,
-      );
-      canvas.drawArc(archRect, math.pi, -math.pi, false, archPaint);
-    }
-
-    final riverPath = Path()
-      ..moveTo(0, size.height * 0.74)
-      ..quadraticBezierTo(
-        size.width * 0.24,
-        size.height * 0.66,
-        size.width * 0.52,
-        size.height * 0.78,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.72,
-        size.height * 0.86,
-        size.width,
-        size.height * 0.76,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(
-      riverPath,
-      Paint()..color = visual.waterColor.withValues(alpha: 0.5),
-    );
-
-    final lawnPaint = Paint()
-      ..color = const Color(0xFF7CA15A).withValues(alpha: 0.9);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(size.width * 0.36, size.height * 0.78),
-        width: size.width * 0.48,
-        height: size.height * 0.18,
-      ),
-      lawnPaint,
-    );
-
-    final plazaPaint = Paint()..color = visual.groundColor;
-    final plazaPath = Path()
-      ..moveTo(size.width * 0.08, size.height * 0.88)
-      ..lineTo(size.width * 0.92, size.height * 0.88)
-      ..lineTo(size.width * 0.76, size.height * 0.67)
-      ..lineTo(size.width * 0.24, size.height * 0.67)
-      ..close();
-    canvas.drawPath(plazaPath, plazaPaint);
-
-    final walkwayPaint = Paint()
-      ..color = const Color(0xFFE8DDD1).withValues(alpha: 0.96);
-    final walkwayPath = Path()
-      ..moveTo(size.width * 0.47, size.height)
-      ..lineTo(size.width * 0.53, size.height)
-      ..lineTo(size.width * 0.58, size.height * 0.67)
-      ..lineTo(size.width * 0.42, size.height * 0.67)
-      ..close();
-    canvas.drawPath(walkwayPath, walkwayPaint);
-
-    final pavilionPaint = Paint()..color = const Color(0xFFD9D4CB);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          size.width * 0.31,
-          size.height * 0.68,
-          size.width * 0.38,
-          size.height * 0.07,
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: <Color>[
+              color,
+              color.withValues(alpha: 0.04),
+              Colors.transparent,
+            ],
+          ),
         ),
-        const Radius.circular(6),
       ),
-      pavilionPaint,
-    );
-
-    final roofPaint = Paint()..color = const Color(0xFFC84A47);
-    final roofPath = Path()
-      ..moveTo(size.width * 0.28, size.height * 0.69)
-      ..lineTo(size.width * 0.5, size.height * 0.61)
-      ..lineTo(size.width * 0.72, size.height * 0.69)
-      ..close();
-    canvas.drawPath(roofPath, roofPaint);
-  }
-
-  void _drawCloud(Canvas canvas, Offset offset, Paint paint) {
-    canvas.drawOval(
-      Rect.fromCenter(center: offset, width: 60, height: 18),
-      paint,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(center: offset.translate(-18, 2), width: 28, height: 22),
-      paint,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(center: offset.translate(18, 0), width: 24, height: 18),
-      paint,
     );
   }
+}
+
+class _PhotoCreditLabel extends StatelessWidget {
+  const _PhotoCreditLabel({required this.asset});
+
+  final LocationPhotoAsset asset;
 
   @override
-  bool shouldRepaint(covariant _SolarEventScenePainter oldDelegate) {
-    return oldDelegate.visual != visual;
+  Widget build(BuildContext context) {
+    return RotatedBox(
+      quarterTurns: 3,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: Text(
+          asset.creditLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.92),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+            shadows: const <Shadow>[
+              Shadow(
+                color: Color(0x99000000),
+                blurRadius: 6,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

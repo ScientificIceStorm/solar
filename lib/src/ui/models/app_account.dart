@@ -75,6 +75,7 @@ class AppSettings {
     this.dismissedWorldsScheduleAnnouncementId,
     this.notificationCenterSeenAtMillis,
     this.favoriteTeamNumbers = const <String>[],
+    this.bookmarkedEventIds = const <int>[],
     this.developerScrimmageEnabled = false,
   });
 
@@ -88,6 +89,7 @@ class AppSettings {
   final String? dismissedWorldsScheduleAnnouncementId;
   final int? notificationCenterSeenAtMillis;
   final List<String> favoriteTeamNumbers;
+  final List<int> bookmarkedEventIds;
   final bool developerScrimmageEnabled;
 
   AppSettings copyWith({
@@ -99,6 +101,7 @@ class AppSettings {
     String? dismissedWorldsScheduleAnnouncementId,
     int? notificationCenterSeenAtMillis,
     List<String>? favoriteTeamNumbers,
+    List<int>? bookmarkedEventIds,
     bool? developerScrimmageEnabled,
     bool clearCurrentUserEmail = false,
     bool clearPreferredSeasonId = false,
@@ -127,6 +130,7 @@ class AppSettings {
           : notificationCenterSeenAtMillis ??
                 this.notificationCenterSeenAtMillis,
       favoriteTeamNumbers: favoriteTeamNumbers ?? this.favoriteTeamNumbers,
+      bookmarkedEventIds: bookmarkedEventIds ?? this.bookmarkedEventIds,
       developerScrimmageEnabled:
           developerScrimmageEnabled ?? this.developerScrimmageEnabled,
     );
@@ -164,6 +168,12 @@ class AppSettings {
               .map((value) => value.trim().toUpperCase())
               .where((value) => value.isNotEmpty)
               .toList(growable: false),
+      bookmarkedEventIds:
+          ((json['bookmarkedEventIds'] as List<Object?>?) ?? const <Object?>[])
+              .whereType<num>()
+              .map((value) => value.toInt())
+              .where((value) => value > 0)
+              .toList(growable: false),
       developerScrimmageEnabled:
           (json['developerScrimmageEnabled'] as bool?) ?? false,
     );
@@ -180,6 +190,7 @@ class AppSettings {
           dismissedWorldsScheduleAnnouncementId,
       'notificationCenterSeenAtMillis': notificationCenterSeenAtMillis,
       'favoriteTeamNumbers': favoriteTeamNumbers,
+      'bookmarkedEventIds': bookmarkedEventIds,
       'developerScrimmageEnabled': developerScrimmageEnabled,
     };
   }

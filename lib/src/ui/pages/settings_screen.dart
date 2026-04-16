@@ -218,6 +218,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _runCompanionPreview() async {
+    final controller = SolarAppScope.of(context);
+    await controller.refreshTeamStats();
+    await controller.syncIosCompanion();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Live activity and widgets were refreshed with current team data.'),
+      ),
+    );
+  }
+
+  Future<void> _clearCompanionPreview() async {
+    final controller = SolarAppScope.of(context);
+    await controller.clearIosCompanion();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Live activity preview cleared.')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
@@ -388,6 +413,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: _runCompanionPreview,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                        side: const BorderSide(color: Color(0xFF16182C)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Test live activity + widgets',
+                        style: TextStyle(
+                          color: Color(0xFF16182C),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: _clearCompanionPreview,
+                      child: const Text('Clear live activity preview'),
                     ),
                   ],
                 ),
