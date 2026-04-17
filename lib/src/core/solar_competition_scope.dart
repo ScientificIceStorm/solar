@@ -54,6 +54,14 @@ int compareSolarSeasonPriority({
   if (preferredCompare != 0) {
     return preferredCompare;
   }
+
+  final yearCompare = _seasonStartYear(
+    rightName,
+  ).compareTo(_seasonStartYear(leftName));
+  if (yearCompare != 0) {
+    return yearCompare;
+  }
+
   return rightId.compareTo(leftId);
 }
 
@@ -63,4 +71,12 @@ String _normalizeCompetitionText(String value) {
 
 int _seasonPriority(String name) {
   return isSolarPreferredSeasonText(name) ? 0 : 1;
+}
+
+int _seasonStartYear(String name) {
+  final match = RegExp(r'(20\d{2})').firstMatch(name);
+  if (match == null) {
+    return 0;
+  }
+  return int.tryParse(match.group(1) ?? '') ?? 0;
 }

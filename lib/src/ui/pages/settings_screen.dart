@@ -246,6 +246,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _pickDeveloperScrimmageStartAt() async {
+    final controller = SolarAppScope.of(context);
+    final current =
+        controller.developerScrimmageStartAt ?? DateTime.now().toLocal();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (!mounted || pickedDate == null) {
+      return;
+    }
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (!mounted || pickedTime == null) {
+      return;
+    }
+
+    final combined = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+    await controller.setDeveloperScrimmageStartAt(combined);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Quickview scrimmage now starts ${_developerScrimmageLabel(combined)}.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
@@ -431,6 +473,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
                       const SizedBox(height: 12),
+                      _SelectionField(
+                        label: 'Scrimmage start',
+                        value: controller.developerScrimmageStartAt == null
+                            ? 'Not set'
+                            : _developerScrimmageLabel(
+                                controller.developerScrimmageStartAt!,
+                              ),
+                        subtitle: controller.developerScrimmageEnabled
+                            ? 'Controls when Q1 and the whole test event begin. This stays pinned until you change it again.'
+                            : 'Enable the scrimmage first, then set the start time once so it does not keep drifting.',
+                        enabled: controller.developerScrimmageEnabled,
+                        onTap: _pickDeveloperScrimmageStartAt,
+                      ),
+                      const SizedBox(height: 12),
                       OutlinedButton(
                         onPressed: controller.refreshTeamStats,
                         style: OutlinedButton.styleFrom(
@@ -481,6 +537,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+String _developerScrimmageLabel(DateTime value) {
+  final local = value.toLocal();
+  final period = local.hour >= 12 ? 'PM' : 'AM';
+  final hourOfPeriod = local.hour % 12;
+  final hour = hourOfPeriod == 0 ? 12 : hourOfPeriod;
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '${local.month}/${local.day}/${local.year}  $hour:$minute $period';
 }
 
 class _SectionCard extends StatelessWidget {

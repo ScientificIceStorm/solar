@@ -3,14 +3,27 @@ import 'package:flutter/material.dart';
 import '../../app/solar_app_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
-import '../widgets/solar_team_link.dart';
+import 'event_team_screen.dart';
 
-class EventSkillsScreen extends StatelessWidget {
+class EventSkillsScreen extends StatefulWidget {
   const EventSkillsScreen({required this.event, super.key});
 
   static const routeName = '/event-skills';
 
   final EventSummary event;
+
+  @override
+  State<EventSkillsScreen> createState() => _EventSkillsScreenState();
+}
+
+class _EventSkillsScreenState extends State<EventSkillsScreen> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +32,9 @@ class EventSkillsScreen extends StatelessWidget {
 
     return SolarEventSubpageScaffold(
       title: 'Skills Rankings',
-      subtitle: event.name,
+      subtitle: widget.event.name,
       body: FutureBuilder<List<SkillAttempt>>(
-        future: controller.fetchEventSkills(event.id),
+        future: controller.fetchEventSkills(widget.event.id),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const _CenteredLoader();
@@ -36,24 +49,98 @@ class EventSkillsScreen extends StatelessWidget {
             );
           }
 
-          final combinedEntries = _buildCombinedEntries(skills);
+          final query = _searchController.text.trim().toLowerCase();
+          final combinedEntries = _buildCombinedEntries(skills)
+              .where((entry) {
+                if (query.isEmpty) {
+                  return true;
+                }
+                final teamName = entry.team.name.trim().toLowerCase();
+                final teamNumber = entry.team.number.trim().toLowerCase();
+                return teamNumber.contains(query) || teamName.contains(query);
+              })
+              .toList(growable: false);
 
-          return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 8),
-            itemCount: combinedEntries.length,
-            itemBuilder: (context, index) {
-              final entry = combinedEntries[index];
-              return _CombinedSkillRow(
-                entry: entry,
-                highlighted:
-                    highlightedTeamNumber != null &&
-                    entry.team.number.trim().toUpperCase() ==
-                        highlightedTeamNumber.trim().toUpperCase(),
-                showDivider: index != combinedEntries.length - 1,
-              );
-            },
+          return Column(
+            children: <Widget>[
+              _EventSkillsSearchField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: combinedEntries.isEmpty
+                    ? const _EmptyEventState(
+                        title: 'No matching teams',
+                        body:
+                            'Try another team number or team name to search the skills table.',
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        itemCount: combinedEntries.length,
+                        itemBuilder: (context, index) {
+                          final entry = combinedEntries[index];
+                          final resolvedTeam = controller
+                              .resolveKnownTeamSummary(
+                                teamNumber: entry.team.number,
+                                teamId: entry.team.id,
+                                teamName: entry.team.name,
+                              );
+                          return _CombinedSkillRow(
+                            entry: entry,
+                            team: resolvedTeam,
+                            event: widget.event,
+                            highlighted:
+                                highlightedTeamNumber != null &&
+                                entry.team.number.trim().toUpperCase() ==
+                                    highlightedTeamNumber.trim().toUpperCase(),
+                            showDivider: index != combinedEntries.length - 1,
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _EventSkillsSearchField extends StatelessWidget {
+  const _EventSkillsSearchField({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Search skills rankings',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: controller.text.trim().isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+        ),
       ),
     );
   }
@@ -62,11 +149,15 @@ class EventSkillsScreen extends StatelessWidget {
 class _CombinedSkillRow extends StatelessWidget {
   const _CombinedSkillRow({
     required this.entry,
+    required this.team,
+    required this.event,
     required this.highlighted,
     required this.showDivider,
   });
 
   final _CombinedSkillEntry entry;
+  final TeamSummary team;
+  final EventSummary event;
   final bool highlighted;
   final bool showDivider;
 
@@ -76,91 +167,156 @@ class _CombinedSkillRow extends StatelessWidget {
         ? const Color(0xFF2930FF)
         : const Color(0xFF16182C);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Column(
-        children: <Widget>[
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          openSolarEventTeamScreen(
+            context,
+            event: event,
+            team: team,
+            highlightTeamNumber: team.number,
+          );
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: showDivider
+              ? const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
+                )
+              : null,
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               SizedBox(
-                width: 44,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${entry.rank}',
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      color: labelColor,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.8,
-                    ),
+                width: 42,
+                child: Text(
+                  '${entry.rank}',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.8,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    SolarTeamLinkText(
-                      teamNumber: entry.team.number,
-                      teamId: entry.team.id,
-                      teamName: entry.team.name,
+                    Text(
+                      entry.team.number,
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: labelColor,
                         fontSize: 20,
                         fontWeight: highlighted
-                            ? FontWeight.w500
-                            : FontWeight.w400,
-                        letterSpacing: -0.9,
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        letterSpacing: -0.7,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Driver ${entry.driverScore} • Auton ${entry.programmingScore}',
+                      entry.team.name.trim().isEmpty
+                          ? 'Event team profile'
+                          : entry.team.name.trim(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Color(0xFF707487),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.1,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        _SkillMetricChip(
+                          icon: Icons.sports_esports_rounded,
+                          score: entry.driverScore,
+                          attempts: entry.driverAttempts,
+                          color: const Color(0xFF2A7FFF),
+                        ),
+                        _SkillMetricChip(
+                          icon: Icons.memory_rounded,
+                          score: entry.programmingScore,
+                          attempts: entry.programmingAttempts,
+                          color: const Color(0xFF7F61FF),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 56, maxWidth: 76),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '${entry.combinedScore}',
-                    maxLines: 1,
-                    softWrap: false,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Color(0xFF64677A),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: -0.8,
-                    ),
-                  ),
+              const SizedBox(width: 10),
+              Text(
+                '${entry.combinedScore}',
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 26,
+                  fontWeight: FontWeight.w300,
+                  letterSpacing: -0.8,
                 ),
               ),
             ],
           ),
-          if (showDivider) ...<Widget>[
-            const SizedBox(height: 10),
-            Container(height: 1, color: const Color(0xFFDADAE3)),
-          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkillMetricChip extends StatelessWidget {
+  const _SkillMetricChip({
+    required this.icon,
+    required this.score,
+    required this.attempts,
+    required this.color,
+  });
+
+  final IconData icon;
+  final int score;
+  final int attempts;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            '$score',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$attempts att',
+            style: const TextStyle(
+              color: Color(0xFF6F748B),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );
@@ -172,13 +328,17 @@ class _CombinedSkillEntry {
     required this.rank,
     required this.team,
     required this.programmingScore,
+    required this.programmingAttempts,
     required this.driverScore,
+    required this.driverAttempts,
   });
 
   final int rank;
   final TeamReference team;
   final int programmingScore;
+  final int programmingAttempts;
   final int driverScore;
+  final int driverAttempts;
 
   int get combinedScore => programmingScore + driverScore;
 }
@@ -198,14 +358,15 @@ List<_CombinedSkillEntry> _buildCombinedEntries(List<SkillAttempt> attempts) {
         normalizedType.contains('auton')) {
       if (attempt.score > scratch.programmingScore) {
         scratch.programmingScore = attempt.score;
+        scratch.programmingAttempts = attempt.attempts;
       }
       continue;
     }
 
-    if (normalizedType.contains('driver')) {
-      if (attempt.score > scratch.driverScore) {
-        scratch.driverScore = attempt.score;
-      }
+    if (normalizedType.contains('driver') &&
+        attempt.score > scratch.driverScore) {
+      scratch.driverScore = attempt.score;
+      scratch.driverAttempts = attempt.attempts;
     }
   }
 
@@ -229,7 +390,9 @@ List<_CombinedSkillEntry> _buildCombinedEntries(List<SkillAttempt> attempts) {
       rank: index + 1,
       team: item.team,
       programmingScore: item.programmingScore,
+      programmingAttempts: item.programmingAttempts,
       driverScore: item.driverScore,
+      driverAttempts: item.driverAttempts,
     );
   }, growable: false);
 }
@@ -239,7 +402,9 @@ class _CombinedSkillScratch {
 
   final TeamReference team;
   int programmingScore = 0;
+  int programmingAttempts = 0;
   int driverScore = 0;
+  int driverAttempts = 0;
 
   int get combinedScore => programmingScore + driverScore;
 }

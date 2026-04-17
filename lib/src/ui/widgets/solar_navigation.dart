@@ -172,7 +172,7 @@ class SolarBottomNavBar extends StatelessWidget {
     super.key,
   });
 
-  final SolarNavDestination current;
+  final SolarNavDestination? current;
   final ValueChanged<SolarNavDestination> onSelected;
 
   @override

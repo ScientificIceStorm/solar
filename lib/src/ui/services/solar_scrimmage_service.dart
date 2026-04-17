@@ -32,18 +32,22 @@ class SolarScrimmageService {
     required TeamSummary currentTeam,
     required List<WorldSkillsEntry> worldSkills,
     required Map<String, OpenSkillCacheEntry> openSkillByTeam,
+    required DateTime baseTime,
+    required int seasonId,
     DateTime? now,
   }) {
     final anchorNow = now ?? DateTime.now();
-    final baseTime = anchorNow.add(const Duration(minutes: 24));
+    final resolvedBaseTime = baseTime.isBefore(anchorNow)
+        ? anchorNow.add(const Duration(minutes: 2))
+        : baseTime;
     final division = const DivisionSummary(id: divisionId, name: 'Tonight');
     final event = EventSummary(
       id: eventId,
       sku: 'SCRIMMAGE-TONIGHT',
       name: 'Solar Quickview Test Scrimmage',
-      start: baseTime,
-      end: baseTime.add(const Duration(hours: 2, minutes: 10)),
-      seasonId: _resolveSeasonId(worldSkills),
+      start: resolvedBaseTime,
+      end: resolvedBaseTime.add(const Duration(hours: 2, minutes: 10)),
+      seasonId: seasonId,
       location: currentTeam.location,
       divisions: const <DivisionSummary>[
         DivisionSummary(id: divisionId, name: 'Tonight'),
@@ -59,7 +63,7 @@ class SolarScrimmageService {
       event: event,
       division: division,
       teams: selectedTeams,
-      baseTime: baseTime,
+      baseTime: resolvedBaseTime,
     );
     final rankings = _buildRankings(
       event: event,
@@ -346,15 +350,6 @@ class SolarScrimmageService {
     }
 
     return attempts;
-  }
-
-  int _resolveSeasonId(List<WorldSkillsEntry> worldSkills) {
-    for (final entry in worldSkills) {
-      if (entry.eventSku.trim().isNotEmpty) {
-        return 190;
-      }
-    }
-    return 190;
   }
 }
 

@@ -53,6 +53,7 @@ class SolarizeHistoryService {
         rankingChange: entry.rankingChange,
         teamNumber: entry.teamNumber,
         id: entry.id,
+        gradeLevel: entry.gradeLevel,
         region: entry.region,
         country: entry.country,
         trueSkill: entry.trueSkill,
@@ -95,25 +96,32 @@ class SolarizeHistoryService {
 
     final worldSkillPrior = _worldSkillPrior(entry);
     final historyConfidence =
-      (((history.weightedEvents / 6).clamp(0.0, 1.0) * 0.55) +
-          ((matchHistory.weightedMatches / 14).clamp(0.0, 1.0) * 0.45))
-        .clamp(0.0, 1.0)
-        .toDouble();
+        (((history.weightedEvents / 6).clamp(0.0, 1.0) * 0.55) +
+                ((matchHistory.weightedMatches / 14).clamp(0.0, 1.0) * 0.45))
+            .clamp(0.0, 1.0)
+            .toDouble();
 
-    final priorWinRate =
-      (0.34 + (worldSkillPrior * 0.56)).clamp(0.30, 0.90).toDouble();
-    final priorAveragePoints =
-      (20 + (worldSkillPrior * 58)).clamp(16.0, 92.0).toDouble();
-    final priorApPerMatch =
-      (1.5 + (worldSkillPrior * 6.4)).clamp(1.0, 9.4).toDouble();
-    final priorTopCutRate =
-      (0.08 + (worldSkillPrior * 0.52)).clamp(0.08, 0.76).toDouble();
-    final priorStrengthOfSchedule =
-      (0.40 + (worldSkillPrior * 0.44)).clamp(0.25, 0.92).toDouble();
-    final priorEliminationWinRate =
-      (0.38 + (worldSkillPrior * 0.48)).clamp(0.30, 0.88).toDouble();
-    final priorEventStrength =
-      (0.86 + (worldSkillPrior * 0.72)).clamp(0.86, 1.70).toDouble();
+    final priorWinRate = (0.34 + (worldSkillPrior * 0.56))
+        .clamp(0.30, 0.90)
+        .toDouble();
+    final priorAveragePoints = (20 + (worldSkillPrior * 58))
+        .clamp(16.0, 92.0)
+        .toDouble();
+    final priorApPerMatch = (1.5 + (worldSkillPrior * 6.4))
+        .clamp(1.0, 9.4)
+        .toDouble();
+    final priorTopCutRate = (0.08 + (worldSkillPrior * 0.52))
+        .clamp(0.08, 0.76)
+        .toDouble();
+    final priorStrengthOfSchedule = (0.40 + (worldSkillPrior * 0.44))
+        .clamp(0.25, 0.92)
+        .toDouble();
+    final priorEliminationWinRate = (0.38 + (worldSkillPrior * 0.48))
+        .clamp(0.30, 0.88)
+        .toDouble();
+    final priorEventStrength = (0.86 + (worldSkillPrior * 0.72))
+        .clamp(0.86, 1.70)
+        .toDouble();
 
     final rawBlendedWinRate = matchHistory.matches > 0
         ? ((matchHistory.winRate * 0.72) + (history.winRate * 0.28))
@@ -128,7 +136,7 @@ class SolarizeHistoryService {
         ? history.averagePoints
         : matchHistory.offenseAvg > 0
         ? matchHistory.offenseAvg
-      : 0.0;
+        : 0.0;
     final averagePoints = _blendMetric(
       primary: rawAveragePoints > 0 ? rawAveragePoints : priorAveragePoints,
       fallback: priorAveragePoints,
@@ -139,7 +147,7 @@ class SolarizeHistoryService {
         ? history.apPerMatch
         : matchHistory.matches > 0
         ? (matchHistory.offenseAvg / 12).clamp(1.6, 8.2).toDouble()
-      : 0.0;
+        : 0.0;
     final apPerMatch = _blendMetric(
       primary: rawApPerMatch > 0 ? rawApPerMatch : priorApPerMatch,
       fallback: priorApPerMatch,
@@ -150,7 +158,7 @@ class SolarizeHistoryService {
         ? history.topCutRate
         : matchHistory.eliminationMatches > 0
         ? (matchHistory.eliminationWinRate * 0.58).clamp(0.16, 0.78).toDouble()
-      : 0.0;
+        : 0.0;
     final topCutRate = _blendMetric(
       primary: rawTopCutRate > 0 ? rawTopCutRate : priorTopCutRate,
       fallback: priorTopCutRate,
@@ -158,23 +166,23 @@ class SolarizeHistoryService {
     );
 
     final rawStrengthOfSchedule = matchHistory.matches > 0
-      ? matchHistory.strengthOfSchedule
-      : 0.0;
+        ? matchHistory.strengthOfSchedule
+        : 0.0;
     final strengthOfSchedule = _blendMetric(
       primary: rawStrengthOfSchedule > 0
-        ? rawStrengthOfSchedule
-        : priorStrengthOfSchedule,
+          ? rawStrengthOfSchedule
+          : priorStrengthOfSchedule,
       fallback: priorStrengthOfSchedule,
       confidence: historyConfidence,
     );
 
     final rawEliminationWinRate = matchHistory.eliminationMatches > 0
         ? matchHistory.eliminationWinRate
-      : 0.0;
+        : 0.0;
     final eliminationWinRate = _blendMetric(
       primary: rawEliminationWinRate > 0
-        ? rawEliminationWinRate
-        : priorEliminationWinRate,
+          ? rawEliminationWinRate
+          : priorEliminationWinRate,
       fallback: priorEliminationWinRate,
       confidence: historyConfidence,
     );
@@ -207,15 +215,15 @@ class SolarizeHistoryService {
         .toDouble();
     final worldRankPenalty = (1 - worldSkillPrior) * 0.85;
     final rankPenalty = history.events == 0
-      ? worldRankPenalty
-      : ((history.averageRank - 1).clamp(0, 24) / 16.0) +
-          (worldRankPenalty * 0.45);
+        ? worldRankPenalty
+        : ((history.averageRank - 1).clamp(0, 24) / 16.0) +
+              (worldRankPenalty * 0.45);
     final badFinishPenalty = history.badFinishRate * 1.25;
     final volatilityPenalty = hasHistory
         ? (1 - matchHistory.reliability) * 0.95
-      : (0.52 - (worldSkillPrior * 0.28)).clamp(0.18, 0.52);
+        : (0.52 - (worldSkillPrior * 0.28)).clamp(0.18, 0.52);
     final repeatedHeavyLossPenalty =
-      math.max(0, matchHistory.corroboratedHeavyLosses - 1) * 0.95;
+        math.max(0, matchHistory.corroboratedHeavyLosses - 1) * 0.95;
 
     final mu =
         15.0 +
@@ -248,12 +256,12 @@ class SolarizeHistoryService {
     final ccwm =
         ((blendedWinRate - 0.5) * 22) +
         (matchHistory.marginAvg / 7.0) +
-      ((strengthOfSchedule - 0.5) * 6.2) +
-      ((eliminationWinRate - 0.5) * 5.8);
+        ((strengthOfSchedule - 0.5) * 6.2) +
+        ((eliminationWinRate - 0.5) * 5.8);
     final opr =
         (averagePoints +
                 math.max(matchHistory.offenseAvg * 0.32, 0) +
-          ((strengthOfSchedule - 0.5) * 14) +
+                ((strengthOfSchedule - 0.5) * 14) +
                 (((eventStrength - 1.0).clamp(-0.1, 0.6)) * 10))
             .clamp(10, 145)
             .toDouble();
@@ -262,9 +270,9 @@ class SolarizeHistoryService {
     final awpPerMatch =
         (((apPerMatch / 10).clamp(0.0, 1.0) * 0.44) +
                 (topCutRate * 0.18) +
-            ((eliminationWinRate.clamp(0.0, 1.0)) * 0.18) +
+                ((eliminationWinRate.clamp(0.0, 1.0)) * 0.18) +
                 (((eventStrength - 0.9) / 0.7).clamp(0.0, 1.0) * 0.10) +
-            ((strengthOfSchedule.clamp(0.0, 1.0)) * 0.10))
+                ((strengthOfSchedule.clamp(0.0, 1.0)) * 0.10))
             .clamp(0.05, 0.97)
             .toDouble();
     final totalWins = matchHistory.matches > 0
@@ -282,6 +290,7 @@ class SolarizeHistoryService {
       rankingChange: 0,
       teamNumber: entry.teamNumber,
       id: entry.teamId,
+      gradeLevel: _gradeLevelFromProgram(entry.program),
       region: entry.region,
       country: entry.country,
       trueSkill: mu,
@@ -304,13 +313,13 @@ class SolarizeHistoryService {
       eventStrength: eventStrength > 1.0 ? eventStrength : null,
       qualifiedForRegionals:
           hasHistory &&
-            (history.topCutRate >= 0.35 || eliminationWinRate >= 0.6)
+              (history.topCutRate >= 0.35 || eliminationWinRate >= 0.6)
           ? 1
           : 0,
       qualifiedForWorlds:
           history.podiumRate >= 0.2 ||
               history.topCutRate >= 0.45 ||
-            eliminationWinRate >= 0.72
+              eliminationWinRate >= 0.72
           ? 1
           : 0,
     );
@@ -748,7 +757,7 @@ class _MatchHistorySnapshot {
       totalLosses: totalLosses,
       totalTies: totalTies,
       eliminationMatches: eliminationMatches,
-        corroboratedHeavyLosses: corroboratedHeavyLosses,
+      corroboratedHeavyLosses: corroboratedHeavyLosses,
       weightedMatches: weightedMatches,
       winRate: (weightedWins + (weightedTies * 0.5)) / weightedMatches,
       eliminationWinRate: weightedEliminationMatches <= 0
@@ -787,14 +796,11 @@ class _PerformanceProfile {
     final topCutNorm = ((history.topCutRate * 1.1) + (history.podiumRate * 0.4))
         .clamp(0.0, 1.0)
         .toDouble();
-    final eventStrengthNorm = ((math.max(
-              history.eventStrength,
-              matchHistory.eventStrength,
-            ) -
-            0.8) /
-        0.9)
-        .clamp(0.0, 1.0)
-        .toDouble();
+    final eventStrengthNorm =
+        ((math.max(history.eventStrength, matchHistory.eventStrength) - 0.8) /
+                0.9)
+            .clamp(0.0, 1.0)
+            .toDouble();
 
     return _PerformanceProfile(
       strength:
@@ -802,9 +808,9 @@ class _PerformanceProfile {
                   (matchHistory.winRate * 0.28) +
                   (marginNorm * 0.18) +
                   ((matchHistory.eliminationMatches > 0
-                              ? matchHistory.eliminationWinRate
-                              : 0.5) *
-                          0.14) +
+                          ? matchHistory.eliminationWinRate
+                          : 0.5) *
+                      0.14) +
                   (topCutNorm * 0.08) +
                   (eventStrengthNorm * 0.06))
               .clamp(0.0, 1.0)
@@ -820,8 +826,9 @@ double _worldSkillPrior(WorldSkillsEntry entry) {
             .clamp(0.0, 1.0)
             .toDouble();
   final combinedSignal = (entry.combinedScore / 230).clamp(0.0, 1.0).toDouble();
-  final programmingSignal =
-      (entry.programmingScore / 120).clamp(0.0, 1.0).toDouble();
+  final programmingSignal = (entry.programmingScore / 120)
+      .clamp(0.0, 1.0)
+      .toDouble();
   final driverSignal = (entry.driverScore / 120).clamp(0.0, 1.0).toDouble();
 
   return ((rankSignal * 0.55) +
@@ -971,6 +978,17 @@ double _averageOpponentStrength(
     return 0.5;
   }
   return total / count;
+}
+
+String _gradeLevelFromProgram(String program) {
+  final normalized = program.trim().toLowerCase();
+  if (normalized.contains('elementary')) {
+    return 'Elementary School';
+  }
+  if (normalized.contains('middle')) {
+    return 'Middle School';
+  }
+  return 'High School';
 }
 
 bool _hasOfficialScore(MatchSummary match) {

@@ -184,7 +184,7 @@ final class SolarCompanionCenter: NSObject {
 
       if let completedAt = result.completedAt {
         let completedDate = Date(timeIntervalSince1970: TimeInterval(completedAt) / 1000)
-        guard now.timeIntervalSince(completedDate) <= 60 * 45 else {
+        guard now.timeIntervalSince(completedDate) <= 60 * 60 * 12 else {
           continue
         }
       }
@@ -255,29 +255,53 @@ final class SolarCompanionCenter: NSObject {
         await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
       }
 
-      guard let upcoming = payload.upcoming else {
+      let latestResult = payload.recentResults.first
+
+      let state: SolarMatchActivityAttributes.ContentState
+      if let upcoming = payload.upcoming {
+        state = SolarMatchActivityAttributes.ContentState(
+          mode: "upcoming",
+          eventName: upcoming.eventName,
+          matchName: upcoming.matchName,
+          matchLabel: upcoming.matchLabel ?? upcoming.matchName,
+          divisionName: upcoming.divisionName,
+          fieldName: upcoming.fieldName,
+          scheduledAt: upcoming.scheduledAt ?? 0,
+          redAlliance: upcoming.redAlliance,
+          blueAlliance: upcoming.blueAlliance,
+          recentResultTitle: latestResult.map(resultTitle) ?? "Awaiting result",
+          recentResultScore: latestResult.map(resultScoreLine) ?? "No recent score",
+          predictedScoreLine: payload.predictedScoreLine ?? "--",
+          worldRankLabel: payload.worldRankLabel ?? "--",
+          solarizeRankLabel: payload.solarizeRankLabel ?? "--",
+          rankingSummary: payload.rankingSummary ?? "--",
+          recordLabel: payload.recordLabel ?? "--"
+        )
+      } else if let latestResult {
+        state = SolarMatchActivityAttributes.ContentState(
+          mode: "recent",
+          eventName: latestResult.eventName,
+          matchName: latestResult.matchName,
+          matchLabel: latestResult.matchLabel ?? latestResult.matchName,
+          divisionName: latestResult.divisionName,
+          fieldName: latestResult.fieldName,
+          scheduledAt: latestResult.completedAt ?? 0,
+          redAlliance: latestResult.redAlliance,
+          blueAlliance: latestResult.blueAlliance,
+          recentResultTitle: resultTitle(latestResult),
+          recentResultScore: resultScoreLine(latestResult),
+          predictedScoreLine: payload.predictedScoreLine ?? "--",
+          worldRankLabel: payload.worldRankLabel ?? "--",
+          solarizeRankLabel: payload.solarizeRankLabel ?? "--",
+          rankingSummary: payload.rankingSummary ?? "--",
+          recordLabel: payload.recordLabel ?? "--"
+        )
+      } else {
         for activity in matchingActivities {
           await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
         }
         return
       }
-
-      let state = SolarMatchActivityAttributes.ContentState(
-        eventName: upcoming.eventName,
-        matchName: upcoming.matchName,
-        matchLabel: upcoming.matchLabel ?? upcoming.matchName,
-        divisionName: upcoming.divisionName,
-        fieldName: upcoming.fieldName,
-        scheduledAt: upcoming.scheduledAt ?? 0,
-        redAlliance: upcoming.redAlliance,
-        blueAlliance: upcoming.blueAlliance,
-        recentResultTitle: payload.recentResults.first.map(resultTitle) ?? "Awaiting result",
-        recentResultScore: payload.recentResults.first.map(resultScoreLine) ?? "No recent score",
-        predictedScoreLine: payload.predictedScoreLine ?? "--",
-        worldRankLabel: payload.worldRankLabel ?? "--",
-        solarizeRankLabel: payload.solarizeRankLabel ?? "--",
-        recordLabel: payload.recordLabel ?? "--"
-      )
 
       if let activity = matchingActivities.first {
         await activity.update(using: state)

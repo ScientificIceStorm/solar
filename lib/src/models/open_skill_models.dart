@@ -6,6 +6,7 @@ class OpenSkillCacheEntry {
     required this.rankingChange,
     required this.teamNumber,
     required this.id,
+    required this.gradeLevel,
     required this.region,
     required this.country,
     required this.trueSkill,
@@ -34,6 +35,7 @@ class OpenSkillCacheEntry {
   final int rankingChange;
   final String teamNumber;
   final int id;
+  final String gradeLevel;
   final String region;
   final String country;
   final double trueSkill;
@@ -67,6 +69,7 @@ class OpenSkillCacheEntry {
         readString(json['number']),
       ]),
       id: readInt(json['id'] ?? json['team_id']),
+      gradeLevel: readString(json['grade_level'] ?? json['gradeLevel']),
       region: firstNonEmpty(<String?>[
         readString(json['loc_region']),
         readString(json['locRegion']),
@@ -132,6 +135,7 @@ class OpenSkillCacheEntry {
       'rankingChange': rankingChange,
       'teamNumber': teamNumber,
       'id': id,
+      'gradeLevel': gradeLevel,
       'region': region,
       'country': country,
       'trueSkill': trueSkill,

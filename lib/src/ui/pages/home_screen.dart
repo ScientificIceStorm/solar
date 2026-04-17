@@ -21,6 +21,7 @@ import '../widgets/worlds_schedule_banner.dart';
 import 'event_division_screen.dart';
 import 'match_details_screen.dart';
 import 'onboarding_screen.dart';
+import 'search_screen.dart';
 import 'team_profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -648,54 +649,50 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(16),
-        border: Border(
-          left: BorderSide(color: accentColor, width: 3),
-          top: const BorderSide(color: Color(0xFFE8E8F0)),
-          right: const BorderSide(color: Color(0xFFE8E8F0)),
-          bottom: const BorderSide(color: Color(0xFFE8E8F0)),
-        ),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Container(
-            width: 36,
-            height: 36,
+            width: 10,
+            height: 54,
             decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              color: accentColor,
+              borderRadius: BorderRadius.circular(999),
             ),
-            alignment: Alignment.center,
-            child: Icon(icon, color: accentColor, size: 18),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  eyebrow.toUpperCase(),
-                  style: TextStyle(
-                    color: accentColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.7,
-                  ),
+                Row(
+                  children: <Widget>[
+                    Text(
+                      eyebrow.toUpperCase(),
+                      style: TextStyle(
+                        color: accentColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(icon, color: accentColor, size: 16),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
                   headline,
-                  style: TextStyle(
-                    color: const Color(0xFF24243A),
+                  style: const TextStyle(
+                    color: Color(0xFF24243A),
                     fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     height: 1.2,
-                    letterSpacing: -0.1,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -740,11 +737,9 @@ class _NotificationEmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE8E8F0)),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
       ),
       child: Text(
         label,
@@ -1029,6 +1024,28 @@ class _SearchResultsPanel extends StatelessWidget {
               letterSpacing: -0.6,
             ),
           ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pushNamed(
+                SearchScreen.routeName,
+                arguments: SearchScreenArgs(initialQuery: query),
+              );
+            },
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'See all results',
+              style: TextStyle(
+                color: Color(0xFF2930FF),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
           const SizedBox(height: 18),
           Text(
             'Teams and preloaded events update as you type.',
@@ -1048,12 +1065,12 @@ class _SearchResultsPanel extends StatelessWidget {
                   label: 'Teams',
                   count: teamResults.length,
                   onTap: () {
-                    _showSearchResultsSheet<TeamSummary>(
-                      context: context,
-                      title: 'Teams',
-                      query: query,
-                      items: teamResults,
-                      itemBuilder: (team) => _TeamSearchTile(team: team),
+                    Navigator.of(context).pushNamed(
+                      SearchScreen.routeName,
+                      arguments: SearchScreenArgs(
+                        initialQuery: query,
+                        initialScope: SearchResultScope.teams,
+                      ),
                     );
                   },
                 ),
@@ -1066,12 +1083,12 @@ class _SearchResultsPanel extends StatelessWidget {
                   label: 'Events',
                   count: eventResults.length,
                   onTap: () {
-                    _showSearchResultsSheet<EventSummary>(
-                      context: context,
-                      title: 'Events',
-                      query: query,
-                      items: eventResults,
-                      itemBuilder: (event) => _EventSearchTile(event: event),
+                    Navigator.of(context).pushNamed(
+                      SearchScreen.routeName,
+                      arguments: SearchScreenArgs(
+                        initialQuery: query,
+                        initialScope: SearchResultScope.events,
+                      ),
                     );
                   },
                 ),
@@ -1083,12 +1100,12 @@ class _SearchResultsPanel extends StatelessWidget {
             label: 'Teams',
             total: teamResults.length,
             onTap: () {
-              _showSearchResultsSheet<TeamSummary>(
-                context: context,
-                title: 'Teams',
-                query: query,
-                items: teamResults,
-                itemBuilder: (team) => _TeamSearchTile(team: team),
+              Navigator.of(context).pushNamed(
+                SearchScreen.routeName,
+                arguments: SearchScreenArgs(
+                  initialQuery: query,
+                  initialScope: SearchResultScope.teams,
+                ),
               );
             },
           ),
@@ -1110,12 +1127,12 @@ class _SearchResultsPanel extends StatelessWidget {
             label: 'Events',
             total: eventResults.length,
             onTap: () {
-              _showSearchResultsSheet<EventSummary>(
-                context: context,
-                title: 'Events',
-                query: query,
-                items: eventResults,
-                itemBuilder: (event) => _EventSearchTile(event: event),
+              Navigator.of(context).pushNamed(
+                SearchScreen.routeName,
+                arguments: SearchScreenArgs(
+                  initialQuery: query,
+                  initialScope: SearchResultScope.events,
+                ),
               );
             },
           ),
@@ -1420,7 +1437,7 @@ class _EventSearchTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${event.sku}  •  ${_locationLabel(event.location)}',
+                    '${_eventRangeLabel(event)}  •  ${_locationLabel(event.location)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1432,127 +1449,6 @@ class _EventSearchTile extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-Future<void> _showSearchResultsSheet<T>({
-  required BuildContext context,
-  required String title,
-  required String query,
-  required List<T> items,
-  required Widget Function(T item) itemBuilder,
-}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      return _SearchResultsBottomSheet<T>(
-        title: title,
-        query: query,
-        items: items,
-        itemBuilder: itemBuilder,
-      );
-    },
-  );
-}
-
-class _SearchResultsBottomSheet<T> extends StatelessWidget {
-  const _SearchResultsBottomSheet({
-    required this.title,
-    required this.query,
-    required this.items,
-    required this.itemBuilder,
-  });
-
-  final String title;
-  final String query;
-  final List<T> items;
-  final Widget Function(T item) itemBuilder;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.sizeOf(context).height * 0.84,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF7F5F8),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Center(
-                child: Container(
-                  width: 48,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD5D4DD),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Color(0xFF24243A),
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.7,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Results for "$query" (${items.length})',
-                          style: const TextStyle(
-                            color: Color(0xFF8E92A7),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Expanded(
-                child: items.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No results yet',
-                          style: TextStyle(
-                            color: Color(0xFF8E92A7),
-                            fontSize: 15,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          return itemBuilder(items[index]);
-                        },
-                      ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1866,10 +1762,9 @@ class _QuickviewSectionState extends State<_QuickviewSection> {
 
         final nextMatch = quickview.nextQualifyingMatch;
         if (nextMatch == null) {
-          return _QuickviewEmptyState(
-            title: quickview.event.name,
-            body:
-                'This competition is on your calendar, but RobotEvents has not posted qualifying match pairings yet.',
+          return _QuickviewEventBannerCard(
+            event: quickview.event,
+            body: 'RobotEvents has not posted qualifying match pairings yet.',
           );
         }
 
@@ -2324,6 +2219,122 @@ class _QuickviewEmptyState extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickviewEventBannerCard extends StatelessWidget {
+  const _QuickviewEventBannerCard({required this.event, required this.body});
+
+  final EventSummary event;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(
+            context,
+          ).pushNamed(EventDetailsScreen.routeName, arguments: event);
+        },
+        borderRadius: BorderRadius.circular(32),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.97),
+            borderRadius: BorderRadius.circular(32),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(26),
+                child: SizedBox(
+                  height: 176,
+                  width: double.infinity,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      SolarEventPhoto(
+                        location: event.location,
+                        overlay: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: <Color>[
+                                Colors.black.withValues(alpha: 0.08),
+                                Colors.black.withValues(alpha: 0.14),
+                                Colors.black.withValues(alpha: 0.48),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 18,
+                        right: 18,
+                        bottom: 18,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              event.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                height: 1.05,
+                                letterSpacing: -0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '${_eventRangeLabel(event)}  •  ${_locationLabel(event.location)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                body,
+                style: const TextStyle(
+                  color: Color(0xFF6F748B),
+                  fontSize: 14,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

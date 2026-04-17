@@ -6,7 +6,6 @@ import '../../models/open_skill_models.dart';
 import '../../models/robot_events_models.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
-import '../widgets/solar_team_link.dart';
 import '../widgets/solarize_team_list.dart';
 import 'event_team_screen.dart';
 import 'match_details_screen.dart';
@@ -125,7 +124,9 @@ class EventDivisionScreen extends StatelessWidget {
                             },
                             onTeamTap: (team) {
                               final resolvedTeam =
-                                  teamsByKey[team.number.trim().toUpperCase()] ??
+                                  teamsByKey[team.number
+                                      .trim()
+                                      .toUpperCase()] ??
                                   controller.resolveKnownTeamSummary(
                                     teamNumber: team.number,
                                     teamId: team.id,
@@ -167,7 +168,9 @@ class EventDivisionScreen extends StatelessWidget {
                             TeamSummary? knownTeam;
                             for (final team in eventTeams) {
                               if (team.number.trim().toUpperCase() ==
-                                      ranking.team.number.trim().toUpperCase() ||
+                                      ranking.team.number
+                                          .trim()
+                                          .toUpperCase() ||
                                   team.id == ranking.team.id) {
                                 knownTeam = team;
                                 break;
@@ -225,8 +228,8 @@ class EventDivisionScreen extends StatelessWidget {
                           for (final team in teamsByKey.values)
                             if (controller.openSkillEntryForTeam(team.number) !=
                                 null)
-                              team.number.trim().toUpperCase():
-                                  controller.openSkillEntryForTeam(team.number)!,
+                              team.number.trim().toUpperCase(): controller
+                                  .openSkillEntryForTeam(team.number)!,
                         },
                       );
 
@@ -280,15 +283,7 @@ TeamSummary _teamFromRanking(
   );
 }
 
-enum _DivisionRankingSortMode {
-  rank,
-  opr,
-  dpr,
-  ccwm,
-  wp,
-  ap,
-  sp,
-}
+enum _DivisionRankingSortMode { rank, opr, dpr, ccwm, wp, ap, sp }
 
 class _DivisionRankingsTab extends StatefulWidget {
   const _DivisionRankingsTab({
@@ -312,7 +307,14 @@ class _DivisionRankingsTab extends StatefulWidget {
 }
 
 class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
+  final TextEditingController _searchController = TextEditingController();
   _DivisionRankingSortMode _sortMode = _DivisionRankingSortMode.rank;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -349,37 +351,65 @@ class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
           performanceTable: performanceTable,
           sortMode: _sortMode,
         );
+        final query = _searchController.text.trim().toLowerCase();
+        final visibleRankings = query.isEmpty
+            ? sortedRankings
+            : sortedRankings
+                  .where((ranking) {
+                    final team =
+                        teamsByKey[ranking.team.number.trim().toUpperCase()] ??
+                        _teamFromRanking(widget.controller, ranking);
+                    final haystack =
+                        '${team.number} ${team.teamName} ${team.organization}'
+                            .toLowerCase();
+                    return haystack.contains(query);
+                  })
+                  .toList(growable: false);
 
-        return StretchingOverscrollIndicator(
-          axisDirection: AxisDirection.down,
-          child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 8),
-            itemCount: sortedRankings.length + 1,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return _DivisionRankingSortStrip(
-                  selectedMode: _sortMode,
-                  onModeSelected: (value) {
-                    setState(() {
-                      _sortMode = value;
-                    });
-                  },
-                );
-              }
+        return Stack(
+          children: <Widget>[
+            StretchingOverscrollIndicator(
+              axisDirection: AxisDirection.down,
+              child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 94),
+                itemCount: visibleRankings.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _DivisionRankingSortStrip(
+                      selectedMode: _sortMode,
+                      onModeSelected: (value) {
+                        setState(() {
+                          _sortMode = value;
+                        });
+                      },
+                    );
+                  }
 
-              final ranking = sortedRankings[index - 1];
-              final team =
-                  teamsByKey[ranking.team.number.trim().toUpperCase()] ??
-                  _teamFromRanking(widget.controller, ranking);
-              return _RankingCard(
-                event: widget.event,
-                ranking: ranking,
-                team: team,
-                highlightTeamNumber: widget.highlightTeamNumber,
-                metrics: performanceTable.forTeam(team.number),
-              );
-            },
-          ),
+                  final ranking = visibleRankings[index - 1];
+                  final team =
+                      teamsByKey[ranking.team.number.trim().toUpperCase()] ??
+                      _teamFromRanking(widget.controller, ranking);
+                  return _RankingCard(
+                    event: widget.event,
+                    ranking: ranking,
+                    team: team,
+                    highlightTeamNumber: widget.highlightTeamNumber,
+                    metrics: performanceTable.forTeam(team.number),
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _DivisionRankingSearchBar(
+                controller: _searchController,
+                resultCount: visibleRankings.length,
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -402,39 +432,45 @@ class _DivisionRankingSortStrip extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: _DivisionRankingSortMode.values.map((mode) {
-            final selected = mode == selectedMode;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: InkWell(
-                onTap: () => onModeSelected(mode),
-                borderRadius: BorderRadius.circular(999),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected ? const Color(0xFF16182C) : Colors.white,
+          children: _DivisionRankingSortMode.values
+              .map((mode) {
+                final selected = mode == selectedMode;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: InkWell(
+                    onTap: () => onModeSelected(mode),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: selected
-                          ? const Color(0xFF16182C)
-                          : const Color(0xFFE2E4F0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? const Color(0xFF16182C)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: selected
+                              ? const Color(0xFF16182C)
+                              : const Color(0xFFE2E4F0),
+                        ),
+                      ),
+                      child: Text(
+                        _divisionSortModeLabel(mode),
+                        style: TextStyle(
+                          color: selected
+                              ? Colors.white
+                              : const Color(0xFF24243A),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    _divisionSortModeLabel(mode),
-                    style: TextStyle(
-                      color: selected ? Colors.white : const Color(0xFF24243A),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(growable: false),
+                );
+              })
+              .toList(growable: false),
         ),
       ),
     );
@@ -463,10 +499,7 @@ List<RankingRecord> _sortDivisionRankings({
         );
         break;
       case _DivisionRankingSortMode.dpr:
-        metricCompare = _compareAscendingDouble(
-          aMetrics?.dpr,
-          bMetrics?.dpr,
-        );
+        metricCompare = _compareAscendingDouble(aMetrics?.dpr, bMetrics?.dpr);
         break;
       case _DivisionRankingSortMode.ccwm:
         metricCompare = _compareDescendingDouble(
@@ -564,122 +597,207 @@ class _RankingCard extends StatelessWidget {
         ? const Color(0xFF2930FF)
         : const Color(0xFF16182C);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SizedBox(
-            width: 44,
-            child: Text(
-              ranking.rank > 0 ? '${ranking.rank}' : '--',
-              style: TextStyle(
-                color: labelColor,
-                fontSize: 30,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -1,
-              ),
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          openSolarEventTeamScreen(
+            context,
+            event: event,
+            team: team,
+            highlightTeamNumber: highlightTeamNumber,
+          );
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SizedBox(
+                width: 44,
+                child: Text(
+                  ranking.rank > 0 ? '${ranking.rank}' : '--',
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -1,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Expanded(
-                      child: SolarTeamLinkText(
-                        teamNumber: team.number,
-                        teamId: team.id,
-                        teamName: team.teamName,
-                        organization: team.organization,
-                        onTap: () {
-                          openSolarEventTeamScreen(
-                            context,
-                            event: event,
-                            team: team,
-                            highlightTeamNumber: highlightTeamNumber,
-                          );
-                        },
-                        style: TextStyle(
-                          color: labelColor,
-                          fontSize: 24,
-                          fontWeight: isHighlighted
-                              ? FontWeight.w500
-                              : FontWeight.w300,
-                          letterSpacing: -0.9,
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            team.number,
+                            style: TextStyle(
+                              color: labelColor,
+                              fontSize: 24,
+                              fontWeight: isHighlighted
+                                  ? FontWeight.w500
+                                  : FontWeight.w300,
+                              letterSpacing: -0.9,
+                            ),
+                          ),
                         ),
+                        if (isHighlighted)
+                          const Text(
+                            'YOU',
+                            style: TextStyle(
+                              color: Color(0xFF2930FF),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.9,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _teamSubtitle(team),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF8E92A7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (isHighlighted)
-                      const Text(
-                        'YOU',
-                        style: TextStyle(
-                          color: Color(0xFF2930FF),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.9,
+                    const SizedBox(height: 6),
+                    Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                          color: Color(0xFF8E92A7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
+                        children: <TextSpan>[
+                          TextSpan(
+                            text:
+                                '${_rankingRecordLabel(ranking, metrics)}  •  ',
+                          ),
+                          TextSpan(
+                            text: 'WP ${_intLabel(ranking.wp)}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const TextSpan(text: '  •  '),
+                          TextSpan(
+                            text: 'AP ${_intLabel(ranking.ap)}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const TextSpan(text: '  •  '),
+                          TextSpan(
+                            text: 'SP ${_intLabel(ranking.sp)}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'OPR ${metrics?.oprLabel ?? '--'}  •  DPR ${metrics?.dprLabel ?? '--'}  •  CCWM ${metrics?.ccwmLabel ?? '--'}',
+                      style: const TextStyle(
+                        color: Color(0xFF6F748B),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _teamSubtitle(team),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DivisionRankingSearchBar extends StatelessWidget {
+  const _DivisionRankingSearchBar({
+    required this.controller,
+    required this.resultCount,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final int resultCount;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(0, 18, 0, 0),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            const Color(0xFFF7F5F8).withValues(alpha: 0),
+            const Color(0xFFF7F5F8),
+            const Color(0xFFF7F5F8),
+          ],
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.98),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x12000000),
+              blurRadius: 18,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.search_rounded, color: Color(0xFF6F748B)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                onChanged: onChanged,
+                textInputAction: TextInputAction.search,
+                decoration: const InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: 'Search rankings',
+                  hintStyle: TextStyle(
                     color: Color(0xFF8E92A7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text.rich(
-                  TextSpan(
-                    style: const TextStyle(
-                      color: Color(0xFF8E92A7),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    children: <TextSpan>[
-                      TextSpan(
-                        text: '${_rankingRecordLabel(ranking, metrics)}  •  ',
-                      ),
-                      TextSpan(
-                        text: 'WP ${_intLabel(ranking.wp)}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const TextSpan(text: '  •  '),
-                      TextSpan(
-                        text: 'AP ${_intLabel(ranking.ap)}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const TextSpan(text: '  •  '),
-                      TextSpan(
-                        text: 'SP ${_intLabel(ranking.sp)}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'OPR ${metrics?.oprLabel ?? '--'}  •  DPR ${metrics?.dprLabel ?? '--'}  •  CCWM ${metrics?.ccwmLabel ?? '--'}',
-                  style: const TextStyle(
-                    color: Color(0xFF6F748B),
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-              ],
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Text(
+              '$resultCount',
+              style: const TextStyle(
+                color: Color(0xFF6F748B),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -842,10 +960,7 @@ String _rankingRecordLabel(
 }
 
 class _PredictionsTab extends StatelessWidget {
-  const _PredictionsTab({
-    required this.predictions,
-    required this.onOpenTeam,
-  });
+  const _PredictionsTab({required this.predictions, required this.onOpenTeam});
 
   final List<_PredictedAllianceSelection> predictions;
   final ValueChanged<TeamSummary> onOpenTeam;
@@ -960,7 +1075,10 @@ class _PredictionRow extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
@@ -1023,7 +1141,9 @@ class _PredictionTeamChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: emphasized ? const Color(0xFF16182C) : Colors.white,
           borderRadius: BorderRadius.circular(999),
-          border: emphasized ? null : Border.all(color: const Color(0xFFE4E5EE)),
+          border: emphasized
+              ? null
+              : Border.all(color: const Color(0xFFE4E5EE)),
         ),
         child: Text(
           team.number,
@@ -1061,10 +1181,9 @@ class _PredictedAllianceSelection {
     required _DivisionPerformanceTable performanceTable,
     required Map<String, OpenSkillCacheEntry> openSkillByTeam,
   }) {
-    final rankedTeams = rankings
-        .where((ranking) => ranking.rank > 0)
-        .toList(growable: false)
-      ..sort((a, b) => a.rank.compareTo(b.rank));
+    final rankedTeams =
+        rankings.where((ranking) => ranking.rank > 0).toList(growable: false)
+          ..sort((a, b) => a.rank.compareTo(b.rank));
     final allianceCount = _predictedAllianceCount(rankedTeams.length);
     if (allianceCount <= 0 || rankedTeams.length < allianceCount) {
       return const <_PredictedAllianceSelection>[];
@@ -1084,13 +1203,15 @@ class _PredictedAllianceSelection {
 
     double captainScore(RankingRecord ranking) {
       final metrics = performanceTable.forTeam(ranking.team.number);
-      final openSkill = openSkillByTeam[ranking.team.number.trim().toUpperCase()];
+      final openSkill =
+          openSkillByTeam[ranking.team.number.trim().toUpperCase()];
       final recordStrength =
           ((ranking.wins + (ranking.ties * 0.5)) - ranking.losses) * 1.35;
       final liveMargin = metrics?.ccwm ?? 0;
       final liveOffense = metrics?.opr ?? ranking.averagePoints;
-      final openSkillBoost =
-          openSkill == null ? 0.0 : (openSkill.openSkillOrdinal / 6.2);
+      final openSkillBoost = openSkill == null
+          ? 0.0
+          : (openSkill.openSkillOrdinal / 6.2);
       return ((100 - ranking.rank.clamp(1, 100)) * 0.46) +
           recordStrength +
           (liveMargin * 1.2) +
@@ -1098,13 +1219,11 @@ class _PredictedAllianceSelection {
           openSkillBoost;
     }
 
-    double partnerFit(
-      RankingRecord captain,
-      RankingRecord candidate,
-    ) {
+    double partnerFit(RankingRecord captain, RankingRecord candidate) {
       final captainMetrics = performanceTable.forTeam(captain.team.number);
       final candidateMetrics = performanceTable.forTeam(candidate.team.number);
-      final openSkill = openSkillByTeam[candidate.team.number.trim().toUpperCase()];
+      final openSkill =
+          openSkillByTeam[candidate.team.number.trim().toUpperCase()];
       final candidateScore = captainScore(candidate);
       final captainOffense = captainMetrics?.opr ?? captain.averagePoints;
       final candidateDefense = candidateMetrics?.dpr ?? 0;
@@ -1116,10 +1235,7 @@ class _PredictedAllianceSelection {
       return candidateScore + complement;
     }
 
-    bool wouldDecline(
-      RankingRecord captain,
-      RankingRecord candidate,
-    ) {
+    bool wouldDecline(RankingRecord captain, RankingRecord candidate) {
       if (captain.rank == 1 && candidate.rank == 2) {
         return false;
       }
@@ -1154,20 +1270,23 @@ class _PredictedAllianceSelection {
 
       RankingRecord? acceptedCandidate;
       RankingRecord? declinedCandidate;
-      final candidates = rankedTeams
-          .where((candidate) {
-            final key = candidate.team.number.trim().toUpperCase();
-            return !unavailable.contains(key) && key != captainNumber;
-          })
-          .toList(growable: false)
-        ..sort((a, b) {
-          final fitCompare =
-              partnerFit(captainRanking, b).compareTo(partnerFit(captainRanking, a));
-          if (fitCompare != 0) {
-            return fitCompare;
-          }
-          return a.rank.compareTo(b.rank);
-        });
+      final candidates =
+          rankedTeams
+              .where((candidate) {
+                final key = candidate.team.number.trim().toUpperCase();
+                return !unavailable.contains(key) && key != captainNumber;
+              })
+              .toList(growable: false)
+            ..sort((a, b) {
+              final fitCompare = partnerFit(
+                captainRanking,
+                b,
+              ).compareTo(partnerFit(captainRanking, a));
+              if (fitCompare != 0) {
+                return fitCompare;
+              }
+              return a.rank.compareTo(b.rank);
+            });
 
       final candidateWindow = allianceCount >= 16 ? 24 : 12;
       for (final candidate in candidates.take(candidateWindow)) {

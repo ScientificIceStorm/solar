@@ -97,6 +97,7 @@ OpenSkillCacheEntry _openSkillEntry({
     rankingChange: 0,
     teamNumber: teamNumber,
     id: teamNumber.hashCode,
+    gradeLevel: 'High School',
     region: 'California',
     country: 'United States',
     trueSkill: 25,

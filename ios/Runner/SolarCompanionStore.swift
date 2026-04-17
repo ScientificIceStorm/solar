@@ -33,6 +33,7 @@ struct SolarCompanionPayload: Codable {
   let recordLabel: String?
   let worldRankLabel: String?
   let solarizeRankLabel: String?
+  let rankingSummary: String?
   let predictedScoreLine: String?
   let upcoming: SolarUpcomingPayload?
   let recentResults: [SolarRecentResultPayload]

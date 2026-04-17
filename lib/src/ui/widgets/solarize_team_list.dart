@@ -76,46 +76,47 @@ class SolarizeTeamList extends StatelessWidget {
             entry.teamNumber.trim().toUpperCase(): entry,
         };
 
-        final rows = teams
-            .map((team) {
-              final key = team.number.trim().toUpperCase();
-              final mlEntry = mlByTeam[key];
-              final openSkillEntry = controller.openSkillEntryForTeam(
-                team.number,
-              );
-              final worldSkillsEntry = worldSkillsByTeam[key];
-              final sortScore =
-                  mlEntry?.solarRating ??
-                  openSkillEntry?.openSkillOrdinal ??
-                  worldSkillsEntry?.combinedScore.toDouble() ??
-                  0;
+        final rows =
+            teams
+                .map((team) {
+                  final key = team.number.trim().toUpperCase();
+                  final mlEntry = mlByTeam[key];
+                  final openSkillEntry = controller.openSkillEntryForTeam(
+                    team.number,
+                  );
+                  final worldSkillsEntry = worldSkillsByTeam[key];
+                  final sortScore =
+                      mlEntry?.solarRating ??
+                      openSkillEntry?.openSkillOrdinal ??
+                      worldSkillsEntry?.combinedScore.toDouble() ??
+                      0;
 
-              return _SolarizeTeamRowModel(
-                team: team,
-                mlEntry: mlEntry,
-                openSkillEntry: openSkillEntry,
-                worldSkillsEntry: worldSkillsEntry,
-                sortScore: sortScore,
-                event: event,
-              );
-            })
-            .toList(growable: false)
-          ..sort((a, b) {
-            final aRank = a.mlEntry?.rank;
-            final bRank = b.mlEntry?.rank;
-            if (aRank != null && bRank != null) {
-              final rankCompare = aRank.compareTo(bRank);
-              if (rankCompare != 0) {
-                return rankCompare;
-              }
-            }
+                  return _SolarizeTeamRowModel(
+                    team: team,
+                    mlEntry: mlEntry,
+                    openSkillEntry: openSkillEntry,
+                    worldSkillsEntry: worldSkillsEntry,
+                    sortScore: sortScore,
+                    event: event,
+                  );
+                })
+                .toList(growable: false)
+              ..sort((a, b) {
+                final aRank = a.mlEntry?.rank;
+                final bRank = b.mlEntry?.rank;
+                if (aRank != null && bRank != null) {
+                  final rankCompare = aRank.compareTo(bRank);
+                  if (rankCompare != 0) {
+                    return rankCompare;
+                  }
+                }
 
-            final scoreCompare = b.sortScore.compareTo(a.sortScore);
-            if (scoreCompare != 0) {
-              return scoreCompare;
-            }
-            return a.team.number.compareTo(b.team.number);
-          });
+                final scoreCompare = b.sortScore.compareTo(a.sortScore);
+                if (scoreCompare != 0) {
+                  return scoreCompare;
+                }
+                return a.team.number.compareTo(b.team.number);
+              });
 
         return StretchingOverscrollIndicator(
           axisDirection: AxisDirection.down,
@@ -161,85 +162,90 @@ class _SolarizeTeamRow extends StatelessWidget {
         ? const Color(0xFF2930FF)
         : const Color(0xFF16182C);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        border: showDivider
-            ? const Border(bottom: BorderSide(color: Color(0xFFDADAE3)))
-            : null,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SizedBox(
-            width: 34,
-            child: Text(
-              '${index + 1}',
-              style: TextStyle(
-                color: labelColor,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.8,
-              ),
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: row.event == null
+            ? () {
+                openSolarTeamProfileForSummary(context, row.team);
+              }
+            : () {
+                openSolarEventTeamScreen(
+                  context,
+                  event: row.event!,
+                  team: row.team,
+                  highlightTeamNumber: highlightTeamNumber,
+                );
+              },
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            border: showDivider
+                ? const Border(bottom: BorderSide(color: Color(0xFFDADAE3)))
+                : null,
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                SolarTeamLinkText(
-                  teamNumber: row.team.number,
-                  teamId: row.team.id,
-                  teamName: row.team.teamName,
-                  organization: row.team.organization,
-                  robotName: row.team.robotName,
-                  grade: row.team.grade,
-                  onTap: row.event == null
-                      ? null
-                      : () {
-                          openSolarEventTeamScreen(
-                            context,
-                            event: row.event!,
-                            team: row.team,
-                            highlightTeamNumber: highlightTeamNumber,
-                          );
-                        },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '${index + 1}',
                   style: TextStyle(
                     color: labelColor,
-                    fontSize: 22,
-                    fontWeight: highlighted ? FontWeight.w600 : FontWeight.w400,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -0.8,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  row.team.teamName.trim().isEmpty
-                      ? 'Team profile'
-                      : row.team.teamName.trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF8E92A7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      row.team.number,
+                      style: TextStyle(
+                        color: labelColor,
+                        fontSize: 22,
+                        fontWeight: highlighted
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        letterSpacing: -0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      row.team.teamName.trim().isEmpty
+                          ? 'Team profile'
+                          : row.team.teamName.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF8E92A7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _metaLabel(row),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF707487),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  _metaLabel(row),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF707487),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

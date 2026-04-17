@@ -210,6 +210,7 @@ class _TeamHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
     final isFavorite = controller.isFavoriteTeam(teamStats.team.number);
+    final teamRating = controller.teamRatingFor(teamStats.team.number);
     final subtitleParts = <String>[
       if (teamStats.team.organization.isNotEmpty) teamStats.team.organization,
       if (teamStats.locationLabel.isNotEmpty) teamStats.locationLabel,
@@ -273,6 +274,50 @@ class _TeamHeader extends StatelessWidget {
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 8,
+          children: <Widget>[
+            const Text(
+              'Scout rating',
+              style: TextStyle(
+                color: Color(0xFF6F748B),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            ...List<Widget>.generate(5, (index) {
+              final selected = index < teamRating;
+              return InkWell(
+                onTap: () {
+                  final nextRating = index + 1 == teamRating ? 0 : index + 1;
+                  controller.setTeamRating(teamStats.team.number, nextRating);
+                },
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    selected ? Icons.star_rounded : Icons.star_border_rounded,
+                    size: 24,
+                    color: selected
+                        ? const Color(0xFFFFB13B)
+                        : const Color(0xFFBCC0D1),
+                  ),
+                ),
+              );
+            }),
+            Text(
+              teamRating == 0 ? 'Tap to rate' : '$teamRating/5',
+              style: const TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ],
     );

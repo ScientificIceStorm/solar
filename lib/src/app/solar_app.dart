@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +20,7 @@ import '../ui/pages/onboarding_screen.dart';
 import '../ui/pages/profile_screen.dart';
 import '../ui/pages/rankings_screen.dart';
 import '../ui/pages/reset_password_screen.dart';
+import '../ui/pages/search_screen.dart';
 import '../ui/pages/sign_in_screen.dart';
 import '../ui/pages/sign_up_screen.dart';
 import '../ui/pages/splash_screen.dart';
@@ -196,6 +199,13 @@ class _SolarAppState extends State<SolarApp> {
                 HomeScreen.routeName => (_) => const HomeScreen(),
                 CalendarScreen.routeName => (_) => const CalendarScreen(),
                 ProfileScreen.routeName => (_) => const ProfileScreen(),
+                SearchScreen.routeName => (_) {
+                  final args = settings.arguments;
+                  if (args is! SearchScreenArgs) {
+                    return const SearchScreen();
+                  }
+                  return SearchScreen(args: args);
+                },
                 TeamProfileScreen.routeName => (_) {
                   final team = settings.arguments;
                   if (team is! TeamSummary) {
@@ -261,9 +271,9 @@ class _SolarAppState extends State<SolarApp> {
                 return null;
               }
 
-              return MaterialPageRoute<void>(
-                builder: builder,
+              return _buildPageRoute<void>(
                 settings: settings,
+                builder: builder,
               );
             },
           );
@@ -382,6 +392,22 @@ class _SolarAppState extends State<SolarApp> {
   }
 }
 
+PageRoute<T> _buildPageRoute<T>({
+  required RouteSettings settings,
+  required WidgetBuilder builder,
+}) {
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.iOS:
+    case TargetPlatform.macOS:
+      return CupertinoPageRoute<T>(builder: builder, settings: settings);
+    case TargetPlatform.android:
+    case TargetPlatform.fuchsia:
+    case TargetPlatform.linux:
+    case TargetPlatform.windows:
+      return MaterialPageRoute<T>(builder: builder, settings: settings);
+  }
+}
+
 ThemeData _buildTheme({
   required ColorScheme colorScheme,
   required Color surface,
@@ -389,52 +415,63 @@ ThemeData _buildTheme({
   required Color accent,
   required bool dark,
 }) {
-  final baseTextTheme = GoogleFonts.montserratTextTheme().apply(
+  final baseTextTheme = GoogleFonts.manropeTextTheme().apply(
     bodyColor: textPrimary,
     displayColor: textPrimary,
   );
+  final displayFamily = GoogleFonts.spaceGrotesk().fontFamily;
+  final titleWeight = dark ? FontWeight.w700 : FontWeight.w800;
 
   return ThemeData(
-    fontFamily: GoogleFonts.montserrat().fontFamily,
+    fontFamily: GoogleFonts.manrope().fontFamily,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: surface,
+    canvasColor: dark ? const Color(0xFF060810) : const Color(0xFF050607),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
-        TargetPlatform.android: _NoAnimationPageTransitionsBuilder(),
-        TargetPlatform.iOS: _NoAnimationPageTransitionsBuilder(),
-        TargetPlatform.macOS: _NoAnimationPageTransitionsBuilder(),
-        TargetPlatform.windows: _NoAnimationPageTransitionsBuilder(),
-        TargetPlatform.linux: _NoAnimationPageTransitionsBuilder(),
-        TargetPlatform.fuchsia: _NoAnimationPageTransitionsBuilder(),
+        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.fuchsia: FadeUpwardsPageTransitionsBuilder(),
       },
     ),
     textTheme: baseTextTheme.copyWith(
       headlineMedium: baseTextTheme.headlineMedium?.copyWith(
+        fontFamily: displayFamily,
         fontSize: 34,
-        fontWeight: FontWeight.w700,
+        fontWeight: titleWeight,
         height: 1.15,
+        letterSpacing: -1.2,
       ),
       headlineSmall: baseTextTheme.headlineSmall?.copyWith(
+        fontFamily: displayFamily,
         fontSize: 28,
-        fontWeight: FontWeight.w700,
+        fontWeight: titleWeight,
+        letterSpacing: -0.9,
       ),
       titleLarge: baseTextTheme.titleLarge?.copyWith(
+        fontFamily: displayFamily,
         fontSize: 30,
-        fontWeight: FontWeight.w700,
+        fontWeight: titleWeight,
+        letterSpacing: -0.9,
       ),
       titleMedium: baseTextTheme.titleMedium?.copyWith(
+        fontFamily: displayFamily,
         fontSize: 24,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.7,
       ),
       bodyLarge: baseTextTheme.bodyLarge?.copyWith(
         fontSize: 16,
-        fontWeight: FontWeight.w400,
-        height: 1.45,
+        fontWeight: FontWeight.w500,
+        height: 1.5,
       ),
       bodyMedium: baseTextTheme.bodyMedium?.copyWith(
         fontSize: 14,
-        fontWeight: FontWeight.w400,
-        height: 1.45,
+        fontWeight: FontWeight.w500,
+        height: 1.5,
       ),
     ),
     useMaterial3: true,
@@ -467,21 +504,6 @@ ThemeData _buildTheme({
       ),
     ),
   );
-}
-
-class _NoAnimationPageTransitionsBuilder extends PageTransitionsBuilder {
-  const _NoAnimationPageTransitionsBuilder();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    return child;
-  }
 }
 
 class _BootstrapErrorScreen extends StatelessWidget {

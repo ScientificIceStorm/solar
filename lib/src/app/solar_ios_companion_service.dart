@@ -23,6 +23,7 @@ class SolarIosCompanionService {
         'solarizeRankLabel': teamStats?.openSkillEntry == null
             ? null
             : '#${teamStats!.openSkillEntry!.ranking}',
+        'rankingSummary': snapshot.focusRankingSummary,
         'predictedScoreLine': _predictedScoreLine(snapshot),
         'upcoming': _upcomingPayload(snapshot),
         'recentResults': snapshot.recentResults
@@ -142,7 +143,9 @@ class SolarIosCompanionService {
   String _matchLabel(MatchSummary match) {
     switch (match.round) {
       case MatchRound.qualification:
-        final number = match.matchNumber > 0 ? match.matchNumber : match.instance;
+        final number = match.matchNumber > 0
+            ? match.matchNumber
+            : match.instance;
         return number > 0 ? 'Q$number' : 'Q';
       case MatchRound.quarterfinals:
         return _eliminationLabel('QF', match);
@@ -159,7 +162,9 @@ class SolarIosCompanionService {
       case MatchRound.round128:
         return _eliminationLabel('R128', match);
       case MatchRound.practice:
-        final number = match.matchNumber > 0 ? match.matchNumber : match.instance;
+        final number = match.matchNumber > 0
+            ? match.matchNumber
+            : match.instance;
         return number > 0 ? 'P$number' : 'P';
       default:
         return match.name.trim().isEmpty ? 'Match' : match.name.trim();

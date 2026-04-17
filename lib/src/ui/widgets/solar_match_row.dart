@@ -234,19 +234,50 @@ class _AllianceColumn extends StatelessWidget {
                           highlightTeamNumber!.trim().toUpperCase();
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 1),
-                    child: SolarTeamLinkText(
-                      teamNumber: team.number,
-                      teamId: team.id,
-                      teamName: team.name,
-                      onTap: onTeamTap == null ? null : () => onTeamTap!(team),
-                      textAlign: alignEnd ? TextAlign.right : TextAlign.left,
-                      style: TextStyle(
-                        color: isHighlighted ? const Color(0xFF191B35) : color,
-                        fontSize: 14,
-                        fontWeight: isHighlighted
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        height: 1.18,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          if (onTeamTap != null) {
+                            onTeamTap!(team);
+                            return;
+                          }
+                          openSolarTeamProfileForReference(
+                            context,
+                            teamNumber: team.number,
+                            teamId: team.id,
+                            teamName: team.name,
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              team.number,
+                              textAlign: alignEnd
+                                  ? TextAlign.right
+                                  : TextAlign.left,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isHighlighted
+                                    ? const Color(0xFF191B35)
+                                    : color,
+                                fontSize: 14,
+                                fontWeight: isHighlighted
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                height: 1.18,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   );

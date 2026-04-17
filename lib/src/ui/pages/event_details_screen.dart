@@ -55,198 +55,200 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: <Widget>[
-            Stack(
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                SizedBox(
-                  height: 470,
-                  child: SolarEventPhoto(
-                    location: event.location,
-                    overlay: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: <Color>[
-                            Colors.black.withValues(alpha: 0.22),
-                            Colors.black.withValues(alpha: 0.08),
-                            Colors.black.withValues(alpha: 0.28),
-                          ],
+              Stack(
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  SizedBox(
+                    height: 470,
+                    child: SolarEventPhoto(
+                      location: event.location,
+                      overlay: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[
+                              Colors.black.withValues(alpha: 0.22),
+                              Colors.black.withValues(alpha: 0.08),
+                              Colors.black.withValues(alpha: 0.28),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
-                    child: Column(
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            _TopOverlayButton(
-                              icon: Icons.arrow_back_ios_new_rounded,
-                              onTap: () => Navigator.of(context).pop(),
-                            ),
-                            const SizedBox(width: 18),
-                            const Expanded(
-                              child: Text(
-                                'Event Details',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w300,
-                                  letterSpacing: -0.9,
+                  SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                      child: Column(
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              _TopOverlayButton(
+                                icon: Icons.arrow_back_ios_new_rounded,
+                                onTap: () => Navigator.of(context).pop(),
+                              ),
+                              const SizedBox(width: 18),
+                              const Expanded(
+                                child: Text(
+                                  'Event Details',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w300,
+                                    letterSpacing: -0.9,
+                                  ),
                                 ),
                               ),
-                            ),
-                            _TopOverlayButton(
-                              icon: isBookmarked
-                                  ? Icons.bookmark_rounded
-                                  : Icons.bookmark_border_rounded,
-                              onTap: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                await controller.toggleBookmarkedEvent(event);
-                                if (!mounted) {
-                                  return;
-                                }
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isBookmarked
-                                          ? 'Removed from saved events.'
-                                          : 'Saved event for later.',
+                              _TopOverlayButton(
+                                icon: isBookmarked
+                                    ? Icons.bookmark_rounded
+                                    : Icons.bookmark_border_rounded,
+                                onTap: () async {
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  await controller.toggleBookmarkedEvent(event);
+                                  if (!mounted) {
+                                    return;
+                                  }
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isBookmarked
+                                            ? 'Removed from saved events.'
+                                            : 'Saved event for later.',
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 28,
-                  right: 28,
-                  bottom: -44,
-                  child: FutureBuilder<int?>(
-                    future: _teamCountFuture,
-                    builder: (context, snapshot) {
-                      return _EventHeroMetaCard(
-                        date: event.start,
-                        locationLabel: _eventLocationLabel(event.location),
-                        teamCount: snapshot.data,
-                        divisionCount: event.divisions.length,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 74, 28, 34),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    _displayEventName(event.name),
-                    style: const TextStyle(
-                      color: Color(0xFF1A1B33),
-                      fontSize: 42,
-                      fontWeight: FontWeight.w300,
-                      height: 1.05,
-                      letterSpacing: -1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _InfoLine(
-                    icon: Icons.calendar_month_rounded,
-                    label: _eventDateRangeLabel(
-                      start: event.start,
-                      end: event.end,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _InfoLine(
-                    icon: Icons.location_on_rounded,
-                    label: _eventLocationLabel(event.location),
-                  ),
-                  const SizedBox(height: 30),
-                  if (isCurrentTeamEvent) ...<Widget>[
-                    _EventActionButton(
-                      label: 'View $teamNumber schedule',
-                      color: const Color(0xFF5A67F3),
-                      onTap: () {
-                        Navigator.of(context).pushNamed(
-                          EventScheduleScreen.routeName,
-                          arguments: event,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-                  if (currentTeamDivision != null) ...<Widget>[
-                    _EventActionButton(
-                      label: 'View your division',
-                      color: const Color(0xFF111111),
-                      onTap: () {
-                        Navigator.of(context).pushNamed(
-                          EventDivisionScreen.routeName,
-                          arguments: EventDivisionScreenArgs(
-                            event: event,
-                            division: currentTeamDivision,
-                            highlightTeamNumber:
-                                controller.currentAccount?.team.number,
+                                  );
+                                },
+                              ),
+                            ],
                           ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 28,
+                    right: 28,
+                    bottom: -44,
+                    child: FutureBuilder<int?>(
+                      future: _teamCountFuture,
+                      builder: (context, snapshot) {
+                        return _EventHeroMetaCard(
+                          date: event.start,
+                          locationLabel: _eventLocationLabel(event.location),
+                          teamCount: snapshot.data,
+                          divisionCount: event.divisions.length,
                         );
                       },
                     ),
-                    const SizedBox(height: 18),
-                  ],
-                  _EventActionButton(
-                    label: divisionsButtonLabel,
-                    color: const Color(0xFF111111),
-                    onTap: () => _showDivisionPicker(context, event),
-                  ),
-                  const SizedBox(height: 22),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _SmallEventActionButton(
-                          label: 'View skills',
-                          onTap: () {
-                            Navigator.of(context).pushNamed(
-                              EventSkillsScreen.routeName,
-                              arguments: event,
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: _SmallEventActionButton(
-                          label: 'View awards',
-                          onTap: () {
-                            Navigator.of(context).pushNamed(
-                              EventAwardsScreen.routeName,
-                              arguments: event,
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  _SmallEventActionButton(
-                    label: 'View Solarize team list',
-                    onTap: () => _showSolarizeTeams(context, event),
                   ),
                 ],
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 74, 28, 34),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      _displayEventName(event.name),
+                      style: const TextStyle(
+                        color: Color(0xFF1A1B33),
+                        fontSize: 42,
+                        fontWeight: FontWeight.w300,
+                        height: 1.05,
+                        letterSpacing: -1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _InfoLine(
+                      icon: Icons.calendar_month_rounded,
+                      label: _eventDateRangeLabel(
+                        start: event.start,
+                        end: event.end,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _InfoLine(
+                      icon: Icons.location_on_rounded,
+                      label: _eventLocationLabel(event.location),
+                    ),
+                    const SizedBox(height: 30),
+                    if (isCurrentTeamEvent) ...<Widget>[
+                      _EventActionButton(
+                        label: 'View $teamNumber schedule',
+                        color: const Color(0xFF5A67F3),
+                        onTap: () {
+                          Navigator.of(context).pushNamed(
+                            EventScheduleScreen.routeName,
+                            arguments: event,
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                    if (currentTeamDivision != null) ...<Widget>[
+                      _EventActionButton(
+                        label: 'View your division',
+                        color: const Color(0xFF111111),
+                        onTap: () {
+                          Navigator.of(context).pushNamed(
+                            EventDivisionScreen.routeName,
+                            arguments: EventDivisionScreenArgs(
+                              event: event,
+                              division: currentTeamDivision,
+                              highlightTeamNumber:
+                                  controller.currentAccount?.team.number,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                    _EventActionButton(
+                      label: divisionsButtonLabel,
+                      color: const Color(0xFF111111),
+                      onTap: () => _showDivisionPicker(context, event),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _SmallEventActionButton(
+                            label: 'View skills',
+                            onTap: () {
+                              Navigator.of(context).pushNamed(
+                                EventSkillsScreen.routeName,
+                                arguments: event,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: _SmallEventActionButton(
+                            label: 'View awards',
+                            onTap: () {
+                              Navigator.of(context).pushNamed(
+                                EventAwardsScreen.routeName,
+                                arguments: event,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _SmallEventActionButton(
+                      label: 'View Solarize team list',
+                      onTap: () => _showSolarizeTeams(context, event),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -261,8 +263,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+          ),
           decoration: const BoxDecoration(
             color: Color(0xFFF7F5F8),
             borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -272,7 +278,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(22, 14, 22, 18),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Center(
@@ -295,51 +300,58 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  ...event.divisions.map((division) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(context).pushNamed(
-                            EventDivisionScreen.routeName,
-                            arguments: EventDivisionScreenArgs(
-                              event: event,
-                              division: division,
-                              highlightTeamNumber: highlightTeamNumber,
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.96),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: <Widget>[
-                              Expanded(
-                                child: Text(
-                                  division.name,
-                                  style: const TextStyle(
-                                    color: Color(0xFF24243A),
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: event.divisions.length,
+                      itemBuilder: (context, index) {
+                        final division = event.divisions[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              Navigator.of(context).pushNamed(
+                                EventDivisionScreen.routeName,
+                                arguments: EventDivisionScreenArgs(
+                                  event: event,
+                                  division: division,
+                                  highlightTeamNumber: highlightTeamNumber,
                                 ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.96),
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              const Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 16,
-                                color: Color(0xFF7C7F94),
+                              child: Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Text(
+                                      division.name,
+                                      style: const TextStyle(
+                                        color: Color(0xFF24243A),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 16,
+                                    color: Color(0xFF7C7F94),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  }),
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -352,88 +364,142 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   Future<void> _showSolarizeTeams(BuildContext context, EventSummary event) {
     final controller = SolarAppScope.of(context);
     final highlightTeamNumber = controller.currentAccount?.team.number;
+    final searchController = TextEditingController();
 
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return Container(
-          height: MediaQuery.sizeOf(context).height * 0.82,
-          decoration: const BoxDecoration(
-            color: Color(0xFFF7F5F8),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 14, 22, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD5D4DD),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Solarize Teams',
-                    style: TextStyle(
-                      color: Color(0xFF24243A),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    event.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF8E92A7),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: FutureBuilder<List<TeamSummary>>(
-                      future: controller.fetchEventTeams(event.id),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return const Center(
-                            child: SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                              ),
-                            ),
-                          );
-                        }
-
-                        return SolarizeTeamList(
-                          controller: controller,
-                          teams: snapshot.data!,
-                          highlightTeamNumber: highlightTeamNumber,
-                          emptyLabel: 'No event teams available yet.',
-                        );
-                      },
-                    ),
-                  ),
-                ],
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.sizeOf(context).height * 0.82,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF7F5F8),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
               ),
-            ),
-          ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Center(
+                        child: Container(
+                          width: 48,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD5D4DD),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Solarize Teams',
+                        style: TextStyle(
+                          color: Color(0xFF24243A),
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        event.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF8E92A7),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.96),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: (_) => setModalState(() {}),
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            hintText: 'Search Solarize teams',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: searchController.text.trim().isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () {
+                                      searchController.clear();
+                                      setModalState(() {});
+                                    },
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: FutureBuilder<List<TeamSummary>>(
+                          future: controller.fetchEventTeams(event.id),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Center(
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.4,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final query = searchController.text
+                                .trim()
+                                .toLowerCase();
+                            final filteredTeams = snapshot.data!
+                                .where((team) {
+                                  if (query.isEmpty) {
+                                    return true;
+                                  }
+                                  return team.number.toLowerCase().contains(
+                                        query,
+                                      ) ||
+                                      team.teamName.toLowerCase().contains(
+                                        query,
+                                      ) ||
+                                      team.organization.toLowerCase().contains(
+                                        query,
+                                      );
+                                })
+                                .toList(growable: false);
+
+                            return SolarizeTeamList(
+                              controller: controller,
+                              teams: filteredTeams,
+                              highlightTeamNumber: highlightTeamNumber,
+                              emptyLabel: query.isEmpty
+                                  ? 'No event teams available yet.'
+                                  : 'No Solarize teams matched your search.',
+                              event: event,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
-    );
+    ).whenComplete(searchController.dispose);
   }
 }
 

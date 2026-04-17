@@ -77,6 +77,8 @@ class AppSettings {
     this.favoriteTeamNumbers = const <String>[],
     this.bookmarkedEventIds = const <int>[],
     this.developerScrimmageEnabled = false,
+    this.developerScrimmageStartAtMillis,
+    this.teamRatings = const <String, int>{},
   });
 
   static const empty = AppSettings(hasCompletedOnboarding: false);
@@ -91,6 +93,8 @@ class AppSettings {
   final List<String> favoriteTeamNumbers;
   final List<int> bookmarkedEventIds;
   final bool developerScrimmageEnabled;
+  final int? developerScrimmageStartAtMillis;
+  final Map<String, int> teamRatings;
 
   AppSettings copyWith({
     bool? hasCompletedOnboarding,
@@ -103,10 +107,13 @@ class AppSettings {
     List<String>? favoriteTeamNumbers,
     List<int>? bookmarkedEventIds,
     bool? developerScrimmageEnabled,
+    int? developerScrimmageStartAtMillis,
+    Map<String, int>? teamRatings,
     bool clearCurrentUserEmail = false,
     bool clearPreferredSeasonId = false,
     bool clearDismissedWorldsScheduleAnnouncementId = false,
     bool clearNotificationCenterSeenAtMillis = false,
+    bool clearDeveloperScrimmageStartAtMillis = false,
   }) {
     return AppSettings(
       hasCompletedOnboarding:
@@ -133,6 +140,11 @@ class AppSettings {
       bookmarkedEventIds: bookmarkedEventIds ?? this.bookmarkedEventIds,
       developerScrimmageEnabled:
           developerScrimmageEnabled ?? this.developerScrimmageEnabled,
+      developerScrimmageStartAtMillis: clearDeveloperScrimmageStartAtMillis
+          ? null
+          : developerScrimmageStartAtMillis ??
+                this.developerScrimmageStartAtMillis,
+      teamRatings: teamRatings ?? this.teamRatings,
     );
   }
 
@@ -176,6 +188,20 @@ class AppSettings {
               .toList(growable: false),
       developerScrimmageEnabled:
           (json['developerScrimmageEnabled'] as bool?) ?? false,
+      developerScrimmageStartAtMillis:
+          json['developerScrimmageStartAtMillis'] is num
+          ? (json['developerScrimmageStartAtMillis'] as num).toInt()
+          : null,
+      teamRatings:
+          ((json['teamRatings'] as Map<Object?, Object?>?) ??
+                  const <Object?, Object?>{})
+              .map((key, value) {
+                final normalizedKey =
+                    (key as String?)?.trim().toUpperCase() ?? '';
+                final rating = value is num ? value.toInt() : 0;
+                return MapEntry(normalizedKey, rating.clamp(1, 5));
+              })
+            ..removeWhere((key, value) => key.isEmpty),
     );
   }
 
@@ -192,6 +218,8 @@ class AppSettings {
       'favoriteTeamNumbers': favoriteTeamNumbers,
       'bookmarkedEventIds': bookmarkedEventIds,
       'developerScrimmageEnabled': developerScrimmageEnabled,
+      'developerScrimmageStartAtMillis': developerScrimmageStartAtMillis,
+      'teamRatings': teamRatings,
     };
   }
 }

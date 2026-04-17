@@ -6,12 +6,14 @@ class SolarNotificationCenterSnapshot {
     this.upcomingEvent,
     this.upcomingMatch,
     this.upcomingPrediction,
+    this.focusRankingSummary,
     this.recentResults = const <SolarRecentMatchResult>[],
   });
 
   final EventSummary? upcomingEvent;
   final MatchSummary? upcomingMatch;
   final SolarMatchPrediction? upcomingPrediction;
+  final String? focusRankingSummary;
   final List<SolarRecentMatchResult> recentResults;
 
   bool get hasItems => upcomingMatch != null || recentResults.isNotEmpty;

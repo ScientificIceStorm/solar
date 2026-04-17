@@ -40,6 +40,7 @@ private struct SolarCompanionPayload: Codable {
   let recordLabel: String?
   let worldRankLabel: String?
   let solarizeRankLabel: String?
+  let rankingSummary: String?
   let predictedScoreLine: String?
   let upcoming: SolarUpcomingPayload?
   let recentResults: [SolarRecentResultPayload]
@@ -84,8 +85,8 @@ private struct SolarWidgetShell<Content: View>: View {
   let verticalPadding: CGFloat
 
   init(
-    horizontalPadding: CGFloat = 16,
-    verticalPadding: CGFloat = 18,
+    horizontalPadding: CGFloat = 18,
+    verticalPadding: CGFloat = 20,
     @ViewBuilder content: () -> Content
   ) {
     self.horizontalPadding = horizontalPadding
@@ -127,9 +128,9 @@ private struct SolarQuickviewWidgetView: View {
   let entry: SolarCompanionEntry
 
   var body: some View {
-    SolarWidgetShell {
+    SolarWidgetShell(horizontalPadding: 18, verticalPadding: 22) {
       if let payload = entry.payload {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
           headerLine(payload)
           if let upcoming = payload.upcoming {
             nextMatchBlock(upcoming, predictedScoreLine: payload.predictedScoreLine)
@@ -143,6 +144,11 @@ private struct SolarQuickviewWidgetView: View {
 
           if let result = payload.recentResults.first {
             footerPill(label: "Last", value: "\(resultTitle(result)) \(resultScoreLine(result))")
+          }
+
+          if let rankingSummary = payload.rankingSummary,
+             !rankingSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            footerPill(label: "Rank", value: rankingSummary)
           }
 
           HStack(spacing: 8) {
@@ -163,11 +169,11 @@ private struct SolarQuickviewWidgetView: View {
   private func headerLine(_ payload: SolarCompanionPayload) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(payload.teamNumber)
-        .font(.headline.weight(.bold))
+        .font(solarRounded(24, weight: .bold))
         .foregroundStyle(.white)
       if let name = payload.teamName, !name.isEmpty {
         Text(name)
-          .font(.caption.weight(.semibold))
+          .font(solarRounded(12, weight: .semibold))
           .foregroundStyle(.white.opacity(0.74))
           .lineLimit(1)
       }
@@ -181,31 +187,31 @@ private struct SolarQuickviewWidgetView: View {
   ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Next Match")
-        .font(.caption.weight(.semibold))
+        .font(solarRounded(12, weight: .semibold))
         .foregroundStyle(.white.opacity(0.72))
       Text(upcoming.matchLabel ?? upcoming.matchName)
-        .font(.title3.weight(.bold))
+        .font(solarRounded(24, weight: .bold))
         .foregroundStyle(.white)
       Text(upcoming.eventName)
-        .font(.footnote.weight(.semibold))
+        .font(solarRounded(14, weight: .semibold))
         .foregroundStyle(.white.opacity(0.88))
         .lineLimit(2)
       Text(metaLine(for: upcoming))
-        .font(.caption2.weight(.semibold))
+        .font(solarRounded(11, weight: .semibold))
         .foregroundStyle(.white.opacity(0.68))
         .lineLimit(2)
       if let predictedScoreLine, !predictedScoreLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         Text("Predicted: \(predictedScoreLine)")
-          .font(.caption2.weight(.semibold))
+          .font(solarRounded(11, weight: .semibold))
           .foregroundStyle(.white.opacity(0.84))
           .lineLimit(1)
       }
       Text(allianceLine(label: "Red", teams: upcoming.redAlliance))
-        .font(.caption2.weight(.semibold))
+        .font(solarRounded(11, weight: .semibold))
         .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
         .lineLimit(2)
       Text(allianceLine(label: "Blue", teams: upcoming.blueAlliance))
-        .font(.caption2.weight(.semibold))
+        .font(solarRounded(11, weight: .semibold))
         .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
         .lineLimit(2)
     }
@@ -215,16 +221,16 @@ private struct SolarQuickviewWidgetView: View {
   private func latestResultBlock(_ result: SolarRecentResultPayload) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Latest Result")
-        .font(.caption.weight(.semibold))
+        .font(solarRounded(12, weight: .semibold))
         .foregroundStyle(.white.opacity(0.72))
       Text("\(resultTitle(result)) \(resultScoreLine(result))")
-        .font(.title3.weight(.bold))
+        .font(solarRounded(24, weight: .bold))
         .foregroundStyle(.white)
       Text(result.matchLabel ?? result.matchName)
-        .font(.footnote.weight(.semibold))
+        .font(solarRounded(14, weight: .semibold))
         .foregroundStyle(.white.opacity(0.88))
       Text(result.eventName)
-        .font(.caption.weight(.semibold))
+        .font(solarRounded(12, weight: .semibold))
         .foregroundStyle(.white.opacity(0.68))
         .lineLimit(2)
     }
@@ -234,10 +240,10 @@ private struct SolarQuickviewWidgetView: View {
   private func emptyBlock(title: String, body: String) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title)
-        .font(.title3.weight(.bold))
+        .font(solarRounded(22, weight: .bold))
         .foregroundStyle(.white)
       Text(body)
-        .font(.footnote.weight(.semibold))
+        .font(solarRounded(14, weight: .semibold))
         .foregroundStyle(.white.opacity(0.74))
         .lineLimit(3)
     }
@@ -247,10 +253,10 @@ private struct SolarQuickviewWidgetView: View {
   private func footerPill(label: String, value: String) -> some View {
     HStack(spacing: 6) {
       Text(label.uppercased())
-        .font(.caption2.weight(.heavy))
+        .font(solarRounded(10, weight: .heavy))
         .foregroundStyle(.white.opacity(0.56))
       Text(value)
-        .font(.caption2.weight(.semibold))
+        .font(solarRounded(11, weight: .semibold))
         .foregroundStyle(.white)
         .lineLimit(1)
     }
@@ -496,21 +502,28 @@ struct SolarCompanionLiveActivity: Widget {
           endPoint: .bottomTrailing
         )
 
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
           HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 3) {
-              Text(context.state.matchLabel)
-                .font(.headline.weight(.bold))
+            VStack(alignment: .leading, spacing: 4) {
+              Text(context.state.mode == "recent" ? "Latest Result" : context.state.matchLabel)
+                .font(solarRounded(context.state.mode == "recent" ? 14 : 22, weight: .bold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
               Text(context.state.eventName)
-                .font(.footnote.weight(.semibold))
+                .font(solarRounded(14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.82))
                 .lineLimit(2)
             }
             Spacer()
-            if context.state.scheduledAt > 0 {
+            if context.state.mode == "recent" {
+              Text(context.state.recentResultScore)
+                .font(solarRounded(22, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+            } else if context.state.scheduledAt > 0 {
               Text(Date(timeIntervalSince1970: TimeInterval(context.state.scheduledAt) / 1000), style: .time)
-                .font(.headline.weight(.bold))
+                .font(solarRounded(18, weight: .bold))
                 .foregroundStyle(.white)
             }
           }
@@ -520,7 +533,7 @@ struct SolarCompanionLiveActivity: Widget {
               .filter { !$0.isEmpty }
               .joined(separator: " • ")
           )
-          .font(.caption.weight(.semibold))
+          .font(solarRounded(12, weight: .semibold))
           .foregroundStyle(.white.opacity(0.65))
 
           HStack(spacing: 10) {
@@ -530,7 +543,7 @@ struct SolarCompanionLiveActivity: Widget {
             Text(allianceLine(label: "Blue", teams: context.state.blueAlliance))
               .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
           }
-          .font(.caption2.weight(.semibold))
+          .font(solarRounded(12, weight: .semibold))
 
           if let countdownDate = countdownTargetDate(for: context.state.scheduledAt),
              countdownDate > Date() {
@@ -542,52 +555,54 @@ struct SolarCompanionLiveActivity: Widget {
                 .monospacedDigit()
               Spacer(minLength: 0)
             }
-            .font(.caption2.weight(.semibold))
+            .font(solarRounded(12, weight: .semibold))
           }
 
           Divider().overlay(Color.white.opacity(0.12))
 
           HStack(spacing: 10) {
             compactMetric("Last", "\(context.state.recentResultTitle) \(context.state.recentResultScore)")
-            compactMetric("Pred", context.state.predictedScoreLine)
+            compactMetric("Rank", context.state.rankingSummary)
             compactMetric("Skills", context.state.worldRankLabel)
             compactMetric("Solarize", context.state.solarizeRankLabel)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 18)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 22)
       }
-      .widgetURL(nextMatchDeepLinkURL)
+      .widgetURL(context.state.mode == "recent" ? recentResultDeepLinkURL : nextMatchDeepLinkURL)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
           Text(context.attributes.teamNumber)
-            .font(.caption.weight(.bold))
+            .font(solarRounded(12, weight: .bold))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
         }
         DynamicIslandExpandedRegion(.center) {
           VStack(spacing: 4) {
             Text(context.state.matchLabel)
-              .font(.headline.weight(.bold))
+              .font(solarRounded(18, weight: .bold))
               .lineLimit(1)
               .minimumScaleFactor(0.72)
             Text(context.state.eventName)
-              .font(.caption.weight(.semibold))
+              .font(solarRounded(12, weight: .semibold))
               .lineLimit(1)
               .minimumScaleFactor(0.72)
           }
           .frame(maxWidth: .infinity)
         }
         DynamicIslandExpandedRegion(.trailing) {
-          if context.state.scheduledAt > 0 {
-            Text(compactTimeLabel(for: context.state.scheduledAt))
-              .font(.caption.weight(.bold))
-              .monospacedDigit()
-              .lineLimit(1)
-              .minimumScaleFactor(0.72)
-          }
+          Text(
+            context.state.mode == "recent"
+                ? context.state.recentResultScore
+                : compactTimeLabel(for: context.state.scheduledAt)
+          )
+          .font(solarRounded(12, weight: .bold))
+          .monospacedDigit()
+          .lineLimit(1)
+          .minimumScaleFactor(0.72)
         }
         DynamicIslandExpandedRegion(.bottom) {
           VStack(alignment: .leading, spacing: 7) {
@@ -602,18 +617,22 @@ struct SolarCompanionLiveActivity: Widget {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             }
-            .font(.caption2.weight(.semibold))
+            .font(solarRounded(12, weight: .semibold))
 
             HStack {
               Text("\(context.state.recentResultTitle) \(context.state.recentResultScore)")
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
               Spacer()
-              Text("Pred \(context.state.predictedScoreLine)")
+              Text(
+                context.state.mode == "recent"
+                    ? context.state.rankingSummary
+                    : "Pred \(context.state.predictedScoreLine)"
+              )
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             }
-            .font(.caption2.weight(.semibold))
+            .font(solarRounded(12, weight: .semibold))
             .foregroundStyle(.white.opacity(0.82))
 
             HStack {
@@ -625,38 +644,35 @@ struct SolarCompanionLiveActivity: Widget {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             }
-            .font(.caption2.weight(.semibold))
+            .font(solarRounded(12, weight: .semibold))
             .foregroundStyle(.white.opacity(0.80))
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 2)
-          .padding(.bottom, 6)
+          .padding(.top, 4)
+          .padding(.bottom, 8)
         }
       } compactLeading: {
-        Text(shortMatchLabel(context.state.matchLabel))
-          .font(.caption.weight(.bold))
+        Text(context.state.mode == "recent" ? shortResultLabel(context.state.recentResultTitle) : shortMatchLabel(context.state.matchLabel))
+          .font(solarRounded(12, weight: .bold))
           .lineLimit(1)
           .minimumScaleFactor(0.75)
       } compactTrailing: {
-        if context.state.scheduledAt > 0 {
-          Text(compactTimeLabel(for: context.state.scheduledAt))
-            .font(.caption2.weight(.bold))
-            .monospacedDigit()
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-        } else {
-          Text("Live")
-            .font(.caption2.weight(.bold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-        }
+        Text(
+          context.state.mode == "recent"
+              ? context.state.recentResultScore
+              : compactTimeLabel(for: context.state.scheduledAt)
+        )
+        .font(solarRounded(11, weight: .bold))
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
       } minimal: {
-        Text(shortMatchLabel(context.state.matchLabel))
-          .font(.caption2.weight(.bold))
+        Text(context.state.mode == "recent" ? shortResultLabel(context.state.recentResultTitle) : shortMatchLabel(context.state.matchLabel))
+          .font(solarRounded(11, weight: .bold))
           .lineLimit(1)
           .minimumScaleFactor(0.72)
       }
-      .widgetURL(nextMatchDeepLinkURL)
+      .widgetURL(context.state.mode == "recent" ? recentResultDeepLinkURL : nextMatchDeepLinkURL)
     }
   }
 
@@ -664,12 +680,13 @@ struct SolarCompanionLiveActivity: Widget {
   private func compactMetric(_ label: String, _ value: String) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(label.uppercased())
-        .font(.caption2.weight(.heavy))
+        .font(solarRounded(10, weight: .heavy))
         .foregroundStyle(.white.opacity(0.56))
       Text(value)
-        .font(.caption2.weight(.semibold))
+        .font(solarRounded(11, weight: .semibold))
         .foregroundStyle(.white)
-        .lineLimit(1)
+        .lineLimit(2)
+        .minimumScaleFactor(0.78)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -684,6 +701,10 @@ struct SolarCompanionWidgetBundle: WidgetBundle {
       SolarCompanionLiveActivity()
     }
   }
+}
+
+private func solarRounded(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+  .system(size: size, weight: weight, design: .rounded)
 }
 
 private func metaLine(for upcoming: SolarUpcomingPayload) -> String {
@@ -740,6 +761,20 @@ private func shortMatchLabel(_ value: String) -> String {
     return compact
   }
   return String(compact.prefix(5))
+}
+
+private func shortResultLabel(_ value: String) -> String {
+  let lowered = value.lowercased()
+  if lowered.contains("won") {
+    return "W"
+  }
+  if lowered.contains("lost") {
+    return "L"
+  }
+  if lowered.contains("tied") {
+    return "T"
+  }
+  return "RES"
 }
 
 private func compactTimeLabel(for timestampMillis: Int64) -> String {

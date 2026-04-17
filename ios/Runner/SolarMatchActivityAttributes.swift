@@ -2,6 +2,7 @@ import ActivityKit
 
 struct SolarMatchActivityAttributes: ActivityAttributes {
   public struct ContentState: Codable, Hashable {
+    var mode: String
     var eventName: String
     var matchName: String
     var matchLabel: String
@@ -15,6 +16,7 @@ struct SolarMatchActivityAttributes: ActivityAttributes {
     var predictedScoreLine: String
     var worldRankLabel: String
     var solarizeRankLabel: String
+    var rankingSummary: String
     var recordLabel: String
   }
 
