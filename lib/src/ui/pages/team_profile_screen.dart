@@ -44,7 +44,9 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
           teams: <TeamSummary>[widget.team],
           force: force,
         )
-        .then((_) => controller.fetchTeamStatsSnapshot(widget.team, force: force));
+        .then(
+          (_) => controller.fetchTeamStatsSnapshot(widget.team, force: force),
+        );
   }
 
   Future<void> _refresh() async {
@@ -151,11 +153,11 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                   const SizedBox(height: 24),
                   switch (_selectedTab) {
                     _TeamProfileTab.overview => _OverviewTab(
-                        key: const ValueKey<String>('overview'),
-                        teamStats: teamStats,
-                      ),
-                    _TeamProfileTab.trends => FutureBuilder<
-                        _TeamProfileDetails>(
+                      key: const ValueKey<String>('overview'),
+                      teamStats: teamStats,
+                    ),
+                    _TeamProfileTab.trends =>
+                      FutureBuilder<_TeamProfileDetails>(
                         key: const ValueKey<String>('trends'),
                         future: _ensureDetailsFuture(teamStats),
                         builder: (context, detailsSnapshot) {
@@ -171,8 +173,8 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                           );
                         },
                       ),
-                    _TeamProfileTab.events => FutureBuilder<
-                        _TeamProfileDetails>(
+                    _TeamProfileTab.events =>
+                      FutureBuilder<_TeamProfileDetails>(
                         key: const ValueKey<String>('events'),
                         future: _ensureDetailsFuture(teamStats),
                         builder: (context, detailsSnapshot) {
@@ -206,27 +208,66 @@ class _TeamHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = SolarAppScope.of(context);
+    final isFavorite = controller.isFavoriteTeam(teamStats.team.number);
+    final subtitleParts = <String>[
+      if (teamStats.team.organization.isNotEmpty) teamStats.team.organization,
+      if (teamStats.locationLabel.isNotEmpty) teamStats.locationLabel,
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          teamStats.team.teamName.isEmpty
-              ? 'Competition profile'
-              : teamStats.team.teamName,
-          style: const TextStyle(
-            color: Color(0xFF24243A),
-            fontSize: 30,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -1,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                teamStats.team.teamName.isEmpty
+                    ? 'Competition profile'
+                    : teamStats.team.teamName,
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -1,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            InkWell(
+              onTap: () {
+                controller.toggleFavoriteTeam(teamStats.team);
+              },
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.95),
+                  shape: BoxShape.circle,
+                  boxShadow: const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x12000000),
+                      blurRadius: 16,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: const Color(0xFF24243A),
+                  size: 21,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Text(
-          [
-            if (teamStats.team.organization.isNotEmpty)
-              teamStats.team.organization,
-            if (teamStats.locationLabel.isNotEmpty) teamStats.locationLabel,
-          ].join('  •  '),
+          subtitleParts.isEmpty
+              ? 'Location pending'
+              : subtitleParts.join('  •  '),
           style: const TextStyle(
             color: Color(0xFF8E92A7),
             fontSize: 14,
@@ -283,37 +324,41 @@ class _TeamProfileTabBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
       ),
       child: Row(
-        children: _TeamProfileTab.values.map((tab) {
-          final selected = tab == selectedTab;
-          final label = switch (tab) {
-            _TeamProfileTab.overview => 'Overview',
-            _TeamProfileTab.trends => 'Trends',
-            _TeamProfileTab.events => 'Events',
-          };
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelected(tab),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                decoration: BoxDecoration(
-                  color: selected ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected
-                        ? const Color(0xFF24243A)
-                        : const Color(0xFF7A7F92),
-                    fontSize: 14,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+        children: _TeamProfileTab.values
+            .map((tab) {
+              final selected = tab == selectedTab;
+              final label = switch (tab) {
+                _TeamProfileTab.overview => 'Overview',
+                _TeamProfileTab.trends => 'Trends',
+                _TeamProfileTab.events => 'Events',
+              };
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onSelected(tab),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    decoration: BoxDecoration(
+                      color: selected ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: selected
+                            ? const Color(0xFF24243A)
+                            : const Color(0xFF7A7F92),
+                        fontSize: 14,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(growable: false),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -383,10 +428,7 @@ class _OverviewTab extends StatelessWidget {
                 label: 'Robot',
                 value: _fallback(teamStats.team.robotName),
               ),
-              _StatRow(
-                label: 'Grade',
-                value: _fallback(teamStats.team.grade),
-              ),
+              _StatRow(label: 'Grade', value: _fallback(teamStats.team.grade)),
               _StatRow(
                 label: 'Location',
                 value: teamStats.locationLabel,
@@ -664,7 +706,8 @@ class _EventSection extends StatelessWidget {
                 for (var i = 0; i < events.length; i++)
                   _TeamEventRow(
                     event: events[i],
-                    awards: awardsByEvent[events[i].id] ?? const <AwardSummary>[],
+                    awards:
+                        awardsByEvent[events[i].id] ?? const <AwardSummary>[],
                     showDivider: i != events.length - 1,
                   ),
               ],
@@ -1015,11 +1058,13 @@ List<AwardSummary> _awardsForTeam(
   String teamNumber,
 ) {
   final normalizedTeamNumber = teamNumber.trim().toUpperCase();
-  return awards.where((award) {
-    return award.recipients.any((recipient) {
-      return recipient.trim().toUpperCase().contains(normalizedTeamNumber);
-    });
-  }).toList(growable: false);
+  return awards
+      .where((award) {
+        return award.recipients.any((recipient) {
+          return recipient.trim().toUpperCase().contains(normalizedTeamNumber);
+        });
+      })
+      .toList(growable: false);
 }
 
 _SkillsHistoryEntry? _skillsHistoryEntryForTeam(
@@ -1078,13 +1123,17 @@ List<SolarTrendPoint> _recentMarginPoints(TeamStatsSnapshot teamStats) {
       ? completedMatches
       : completedMatches.sublist(completedMatches.length - 12);
 
-  return recentMatches.map((match) {
-    final teamScore = teamStats.scoreForTeam(match) ?? 0;
-    final opponentScore = teamStats.opponentScoreForTeam(match) ?? 0;
-    return SolarTrendPoint(
-      label: match.name.trim().isEmpty ? _eventDateLabel(match.started) : match.name,
-      value: (teamScore - opponentScore).toDouble(),
-      detail: '$teamScore-$opponentScore',
-    );
-  }).toList(growable: false);
+  return recentMatches
+      .map((match) {
+        final teamScore = teamStats.scoreForTeam(match) ?? 0;
+        final opponentScore = teamStats.opponentScoreForTeam(match) ?? 0;
+        return SolarTrendPoint(
+          label: match.name.trim().isEmpty
+              ? _eventDateLabel(match.started)
+              : match.name,
+          value: (teamScore - opponentScore).toDouble(),
+          detail: '$teamScore-$opponentScore',
+        );
+      })
+      .toList(growable: false);
 }

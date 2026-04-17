@@ -28,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _didSeedProfile = false;
   bool _isSavingProfile = false;
   int? _selectedSeasonId;
+  bool _showDeveloperTools = false;
 
   @override
   void didChangeDependencies() {
@@ -227,7 +228,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Live activity and widgets were refreshed with current team data.'),
+        content: Text(
+          'Live activity and widgets were refreshed with current team data.',
+        ),
       ),
     );
   }
@@ -238,9 +241,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Live activity preview cleared.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Live activity preview cleared.')),
+    );
   }
 
   @override
@@ -362,84 +365,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 18),
-              _SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      'Developer',
-                      style: TextStyle(
-                        color: Color(0xFF24243A),
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _showDeveloperTools = !_showDeveloperTools;
+                    });
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 2,
+                      vertical: 1,
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Keep test-only scrimmage data hidden in normal use. Turn it on only when you want to preview the local Quickview test event.',
-                      style: TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.45,
-                      ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    _showDeveloperTools
+                        ? 'Hide developer tools'
+                        : 'Developer tools',
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
                     ),
-                    const SizedBox(height: 12),
-                    _SwitchRow(
-                      title: 'Show Quickview test scrimmage',
-                      subtitle: controller.developerScrimmageEnabled
-                          ? 'Enabled for local debugging.'
-                          : 'Hidden from the app.',
-                      value: controller.developerScrimmageEnabled,
-                      onChanged: (value) {
-                        controller.setDeveloperScrimmageEnabled(value);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: controller.refreshTeamStats,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(54),
-                        side: const BorderSide(color: Color(0xFF16182C)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Refresh team data',
-                        style: TextStyle(
-                          color: Color(0xFF16182C),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      onPressed: _runCompanionPreview,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(54),
-                        side: const BorderSide(color: Color(0xFF16182C)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Test live activity + widgets',
-                        style: TextStyle(
-                          color: Color(0xFF16182C),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: _clearCompanionPreview,
-                      child: const Text('Clear live activity preview'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
+              if (_showDeveloperTools) ...<Widget>[
+                const SizedBox(height: 8),
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'Developer',
+                        style: TextStyle(
+                          color: Color(0xFF24243A),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Keep test-only scrimmage data hidden in normal use. Turn it on only when you want to preview the local Quickview test event.',
+                        style: TextStyle(
+                          color: Color(0xFF8E92A7),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _SwitchRow(
+                        title: 'Show Quickview test scrimmage',
+                        subtitle: controller.developerScrimmageEnabled
+                            ? 'Enabled for local debugging.'
+                            : 'Hidden from the app.',
+                        value: controller.developerScrimmageEnabled,
+                        onChanged: (value) {
+                          controller.setDeveloperScrimmageEnabled(value);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: controller.refreshTeamStats,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(54),
+                          side: const BorderSide(color: Color(0xFF16182C)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Refresh team data',
+                          style: TextStyle(
+                            color: Color(0xFF16182C),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        onPressed: _runCompanionPreview,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(54),
+                          side: const BorderSide(color: Color(0xFF16182C)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Test live activity + widgets',
+                          style: TextStyle(
+                            color: Color(0xFF16182C),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: _clearCompanionPreview,
+                        child: const Text('Clear live activity preview'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           );
         },

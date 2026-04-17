@@ -12,6 +12,7 @@ struct SolarMatchActivityAttributes: ActivityAttributes {
     var blueAlliance: String
     var recentResultTitle: String
     var recentResultScore: String
+    var predictedScoreLine: String
     var worldRankLabel: String
     var solarizeRankLabel: String
     var recordLabel: String

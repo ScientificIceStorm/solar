@@ -11,6 +11,8 @@ final class SolarCompanionCenter: NSObject {
   private let center = UNUserNotificationCenter.current()
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
+  private var pendingCompanionRoute: String?
+  private var liveActivityUpdateTask: Task<Void, Never>?
 
   func configure(with messenger: FlutterBinaryMessenger) {
     guard channel == nil else {
@@ -25,6 +27,11 @@ final class SolarCompanionCenter: NSObject {
       self?.handle(call: call, result: result)
     }
     self.channel = channel
+
+    if let route = pendingCompanionRoute {
+      pendingCompanionRoute = nil
+      channel.invokeMethod("openCompanionRoute", arguments: ["route": route])
+    }
   }
 
   private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -55,9 +62,22 @@ final class SolarCompanionCenter: NSObject {
     case "clearCompanion":
       clearAll()
       result(nil)
+    case "consumePendingCompanionRoute":
+      let route = pendingCompanionRoute
+      pendingCompanionRoute = nil
+      result(route)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  func handleIncomingCompanionURL(_ url: URL) {
+    guard let route = companionRoute(from: url) else {
+      return
+    }
+
+    pendingCompanionRoute = route
+    channel?.invokeMethod("openCompanionRoute", arguments: ["route": route])
   }
 
   private func payload(from arguments: [String: Any]) -> SolarCompanionPayload? {
@@ -212,10 +232,31 @@ final class SolarCompanionCenter: NSObject {
       return
     }
 
-    Task {
+    liveActivityUpdateTask?.cancel()
+    liveActivityUpdateTask = Task {
       let existingActivities = Activity<SolarMatchActivityAttributes>.activities
+      let normalizedTeamNumber = payload.teamNumber
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .uppercased()
+
+      let matchingActivities = existingActivities.filter { activity in
+        activity.attributes.teamNumber
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .uppercased() == normalizedTeamNumber
+      }
+
+      let nonMatchingActivities = existingActivities.filter { activity in
+        activity.attributes.teamNumber
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .uppercased() != normalizedTeamNumber
+      }
+
+      for activity in nonMatchingActivities {
+        await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
+      }
+
       guard let upcoming = payload.upcoming else {
-        for activity in existingActivities {
+        for activity in matchingActivities {
           await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
         }
         return
@@ -232,13 +273,19 @@ final class SolarCompanionCenter: NSObject {
         blueAlliance: upcoming.blueAlliance,
         recentResultTitle: payload.recentResults.first.map(resultTitle) ?? "Awaiting result",
         recentResultScore: payload.recentResults.first.map(resultScoreLine) ?? "No recent score",
+        predictedScoreLine: payload.predictedScoreLine ?? "--",
         worldRankLabel: payload.worldRankLabel ?? "--",
         solarizeRankLabel: payload.solarizeRankLabel ?? "--",
         recordLabel: payload.recordLabel ?? "--"
       )
 
-      if let activity = existingActivities.first {
+      if let activity = matchingActivities.first {
         await activity.update(using: state)
+        if matchingActivities.count > 1 {
+          for duplicate in matchingActivities.dropFirst() {
+            await duplicate.end(using: duplicate.contentState, dismissalPolicy: .immediate)
+          }
+        }
       } else {
         let attributes = SolarMatchActivityAttributes(teamNumber: payload.teamNumber)
         do {
@@ -255,6 +302,8 @@ final class SolarCompanionCenter: NSObject {
   }
 
   func clearAll() {
+    liveActivityUpdateTask?.cancel()
+    liveActivityUpdateTask = nil
     center.removeAllPendingNotificationRequests()
     center.removeAllDeliveredNotifications()
     let defaults = SolarCompanionStore.sharedDefaults()
@@ -288,5 +337,31 @@ final class SolarCompanionCenter: NSObject {
 
   private func resultScoreLine(_ result: SolarRecentResultPayload) -> String {
     return "\(result.allianceScore)-\(result.opponentScore)"
+  }
+
+  private func companionRoute(from url: URL) -> String? {
+    guard
+      let scheme = url.scheme?.lowercased(),
+      scheme == "dev.minzhang.solarv6"
+    else {
+      return nil
+    }
+
+    let host = url.host?.lowercased() ?? ""
+    let path = url.path.lowercased()
+    if host == "companion" || path.contains("companion") {
+      if path.contains("recent") {
+        return "recent_result"
+      }
+      return "next_match"
+    }
+
+    if path.contains("recent") {
+      return "recent_result"
+    }
+    if path.contains("next") || path.contains("match") {
+      return "next_match"
+    }
+    return nil
   }
 }

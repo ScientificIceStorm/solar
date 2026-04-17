@@ -23,6 +23,7 @@ class SolarIosCompanionService {
         'solarizeRankLabel': teamStats?.openSkillEntry == null
             ? null
             : '#${teamStats!.openSkillEntry!.ranking}',
+        'predictedScoreLine': _predictedScoreLine(snapshot),
         'upcoming': _upcomingPayload(snapshot),
         'recentResults': snapshot.recentResults
             .map<Map<String, Object?>>(_resultPayload)
@@ -82,6 +83,14 @@ class SolarIosCompanionService {
       'redAlliance': _allianceLabel(result.match, 'red'),
       'blueAlliance': _allianceLabel(result.match, 'blue'),
     };
+  }
+
+  String? _predictedScoreLine(SolarNotificationCenterSnapshot snapshot) {
+    final prediction = snapshot.upcomingPrediction;
+    if (prediction == null) {
+      return null;
+    }
+    return '${prediction.predictedRedScore}-${prediction.predictedBlueScore}';
   }
 
   String _allianceLabel(MatchSummary match, String color) {

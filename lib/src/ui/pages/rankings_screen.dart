@@ -35,6 +35,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
   ];
 
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   static const _solarMlService = SolarMlRankingService();
   static final _diskCacheStore = SolarDiskCacheStore.instance;
 
@@ -52,6 +53,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
   String _selectedRegion = _allRegionsLabel;
   _RankingsMode _mode = _RankingsMode.skill;
   String? _loadedSolarizeCacheKey;
+  bool _showPinnedHeroBar = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScrollOffset);
+  }
 
   @override
   void didChangeDependencies() {
@@ -65,8 +73,25 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_handleScrollOffset);
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleScrollOffset() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    final shouldShow = _scrollController.offset > 110;
+    if (shouldShow == _showPinnedHeroBar || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _showPinnedHeroBar = shouldShow;
+    });
   }
 
   Future<void> _bootstrapFilters(
@@ -405,7 +430,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }) async {
     final cacheKey = '$seasonId|${gradeLevel.trim().toLowerCase()}';
     final cachedEntries = await _diskCacheStore.readList<SolarMlRankingEntry>(
-      namespace: 'solar_ml_screen_rankings',
+      namespace: 'solar_ml_screen_rankings_v2',
       key: cacheKey,
       fromJson: SolarMlRankingEntry.fromJson,
     );
@@ -414,7 +439,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         ? cachedEntries
         : null;
     if (cachedEntries != null && usableCachedEntries == null) {
-      await _diskCacheStore.clear('solar_ml_screen_rankings', cacheKey);
+      await _diskCacheStore.clear('solar_ml_screen_rankings_v2', cacheKey);
     }
     if (usableCachedEntries != null &&
         usableCachedEntries.isNotEmpty &&
@@ -479,7 +504,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     });
     if (solarMlEntries.isNotEmpty) {
       await _diskCacheStore.writeList<SolarMlRankingEntry>(
-        namespace: 'solar_ml_screen_rankings',
+        namespace: 'solar_ml_screen_rankings_v2',
         key: cacheKey,
         items: solarMlEntries,
         toJson: (item) => item.toJson(),
@@ -576,127 +601,149 @@ class _RankingsScreenState extends State<RankingsScreen> {
             body: SolarScreenBackground(
               padding: EdgeInsets.zero,
               respectSafeArea: false,
-              child: RefreshIndicator(
-                color: Colors.black,
-                onRefresh: () async {
-                  await controller.refreshTeamStats();
-                  await _bootstrapFilters(controller, forceSeasons: true);
-                },
-                child: StretchingOverscrollIndicator(
-                  axisDirection: AxisDirection.down,
-                  child: ListView.builder(
-                    physics: const BouncingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    padding: const EdgeInsets.only(bottom: 164),
-                    itemCount: listItemCount,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return _RankingsHeader(
-                          topInset: topInset,
-                          filterLabel: _filterLabel(
-                            entries: _activeRankings,
-                            fallbackGrade:
-                                _selectedGradeLevel ??
-                                controller.defaultWorldSkillsGradeLevel,
-                            selectedRegion: _selectedRegion,
-                          ),
-                          seasonLabel: _selectedSeasonId == null
-                              ? 'Season loading'
-                              : _seasonDisplayNameFromId(
-                                  _availableSeasons,
-                                  _selectedSeasonId!,
-                                ),
-                          searchVisible: _searchVisible,
-                          searchController: _searchController,
-                          onSearchChanged: (_) => setState(() {}),
-                          onSearchTap: _toggleSearch,
-                          onInfoTap: _showRankingSystemDialog,
-                          onFilterTap: () => _showFilterSheet(controller),
-                          onMoreTap: () => _showFilterSheet(controller),
-                          mode: _mode,
-                          onSkillTap: () {
-                            setState(() {
-                              _mode = _RankingsMode.skill;
-                            });
-                          },
-                          onSolarMlTap: () {
-                            setState(() {
-                              _mode = _RankingsMode.solarMl;
-                            });
-                            final seasonId = _selectedSeasonId;
-                            if (seasonId != null &&
-                                _activeRankings.isNotEmpty) {
-                              unawaited(
-                                _warmSolarizeRankings(
-                                  controller,
-                                  generation: _loadGeneration,
-                                  seasonId: seasonId,
-                                  gradeLevel:
-                                      _selectedGradeLevel ??
-                                      controller.defaultWorldSkillsGradeLevel,
-                                  entries: _activeRankings,
-                                  force: false,
-                                ),
-                              );
-                            }
-                          },
-                        );
-                      }
-
-                      if (index == 1) {
-                        return const SizedBox(height: 24);
-                      }
-
-                      if (showStatusCard) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
-                          child:
-                              _isBootstrapping ||
-                                  _isLoadingRankings ||
-                                  (_mode == _RankingsMode.solarMl &&
-                                      _isLoadingSolarize)
-                              ? const _RankingsStatusCard.loading()
-                              : _RankingsStatusCard.message(
-                                  _searchController.text.trim().isEmpty
-                                      ? _mode == _RankingsMode.skill
-                                            ? 'World skills rankings will appear here after the API data finishes loading.'
-                                            : 'Solarize rankings are still being prepared from match history and season form.'
-                                      : 'No ranked teams matched "${_searchController.text.trim()}".',
-                                ),
-                        );
-                      }
-
-                      if (_mode == _RankingsMode.skill) {
-                        final entry = filteredEntries[index - 2];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
-                          child: _RankingRow(
-                            entry: entry,
-                            highlighted:
-                                entry.teamNumber.trim().toUpperCase() ==
-                                account.team.number.trim().toUpperCase(),
-                            showDivider:
-                                index - 2 != filteredEntries.length - 1,
-                          ),
-                        );
-                      }
-
-                      final entry = filteredMlEntries[index - 2];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 22),
-                        child: _SolarMlRankingRow(
-                          entry: entry,
-                          highlighted:
-                              entry.teamNumber.trim().toUpperCase() ==
-                              account.team.number.trim().toUpperCase(),
-                          showDivider:
-                              index - 2 != filteredMlEntries.length - 1,
-                        ),
-                      );
+              child: Stack(
+                children: <Widget>[
+                  RefreshIndicator(
+                    color: Colors.black,
+                    onRefresh: () async {
+                      await controller.refreshTeamStats();
+                      await _bootstrapFilters(controller, forceSeasons: true);
                     },
+                    child: StretchingOverscrollIndicator(
+                      axisDirection: AxisDirection.down,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.only(bottom: 164),
+                        itemCount: listItemCount,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return _RankingsHeader(
+                              topInset: topInset,
+                              filterLabel: _filterLabel(
+                                entries: _activeRankings,
+                                fallbackGrade:
+                                    _selectedGradeLevel ??
+                                    controller.defaultWorldSkillsGradeLevel,
+                                selectedRegion: _selectedRegion,
+                              ),
+                              seasonLabel: _selectedSeasonId == null
+                                  ? 'Season loading'
+                                  : _seasonDisplayNameFromId(
+                                      _availableSeasons,
+                                      _selectedSeasonId!,
+                                    ),
+                              searchVisible: _searchVisible,
+                              searchController: _searchController,
+                              onSearchChanged: (_) => setState(() {}),
+                              onSearchTap: _toggleSearch,
+                              onInfoTap: _showRankingSystemDialog,
+                              onFilterTap: () => _showFilterSheet(controller),
+                              onMoreTap: () => _showFilterSheet(controller),
+                              mode: _mode,
+                              onSkillTap: () {
+                                setState(() {
+                                  _mode = _RankingsMode.skill;
+                                });
+                              },
+                              onSolarMlTap: () {
+                                setState(() {
+                                  _mode = _RankingsMode.solarMl;
+                                });
+                                final seasonId = _selectedSeasonId;
+                                if (seasonId != null &&
+                                    _activeRankings.isNotEmpty) {
+                                  unawaited(
+                                    _warmSolarizeRankings(
+                                      controller,
+                                      generation: _loadGeneration,
+                                      seasonId: seasonId,
+                                      gradeLevel:
+                                          _selectedGradeLevel ??
+                                          controller
+                                              .defaultWorldSkillsGradeLevel,
+                                      entries: _activeRankings,
+                                      force: false,
+                                    ),
+                                  );
+                                }
+                              },
+                            );
+                          }
+
+                          if (index == 1) {
+                            return const SizedBox(height: 24);
+                          }
+
+                          if (showStatusCard) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 22),
+                              child:
+                                  _isBootstrapping ||
+                                      _isLoadingRankings ||
+                                      (_mode == _RankingsMode.solarMl &&
+                                          _isLoadingSolarize)
+                                  ? const _RankingsStatusCard.loading()
+                                  : _RankingsStatusCard.message(
+                                      _searchController.text.trim().isEmpty
+                                          ? _mode == _RankingsMode.skill
+                                                ? 'World skills rankings will appear here after the API data finishes loading.'
+                                                : 'Solarize rankings are still being prepared from match history and season form.'
+                                          : 'No ranked teams matched "${_searchController.text.trim()}".',
+                                    ),
+                            );
+                          }
+
+                          if (_mode == _RankingsMode.skill) {
+                            final entry = filteredEntries[index - 2];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 22),
+                              child: _RankingRow(
+                                entry: entry,
+                                highlighted:
+                                    entry.teamNumber.trim().toUpperCase() ==
+                                    account.team.number.trim().toUpperCase(),
+                                showDivider:
+                                    index - 2 != filteredEntries.length - 1,
+                              ),
+                            );
+                          }
+
+                          final entry = filteredMlEntries[index - 2];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 22),
+                            child: _SolarMlRankingRow(
+                              entry: entry,
+                              highlighted:
+                                  entry.teamNumber.trim().toUpperCase() ==
+                                  account.team.number.trim().toUpperCase(),
+                              showDivider:
+                                  index - 2 != filteredMlEntries.length - 1,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                ),
+                  IgnorePointer(
+                    ignoring: !_showPinnedHeroBar,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      opacity: _showPinnedHeroBar ? 1 : 0,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(18, topInset + 8, 18, 0),
+                        child: _RankingsPinnedHeroBar(
+                          mode: _mode,
+                          onFilterTap: () => _showFilterSheet(controller),
+                          onSearchTap: _toggleSearch,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             bottomNavigationBar: SolarBottomNavBar(
@@ -996,6 +1043,63 @@ class _HeaderIconButton extends StatelessWidget {
         width: 42,
         height: 42,
         child: Icon(icon, color: Colors.white, size: 28),
+      ),
+    );
+  }
+}
+
+class _RankingsPinnedHeroBar extends StatelessWidget {
+  const _RankingsPinnedHeroBar({
+    required this.mode,
+    required this.onFilterTap,
+    required this.onSearchTap,
+  });
+
+  final _RankingsMode mode;
+  final VoidCallback onFilterTap;
+  final VoidCallback onSearchTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Text(
+            'Rankings',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              mode == _RankingsMode.skill ? 'SKILL' : solarizeLabel.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          const Spacer(),
+          _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearchTap),
+          const SizedBox(width: 8),
+          _HeaderIconButton(icon: Icons.tune_rounded, onTap: onFilterTap),
+        ],
       ),
     );
   }

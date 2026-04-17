@@ -287,9 +287,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 18),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: _QuickviewSection(
+                          child: _QuickviewTeamCarousel(
                             controller: controller,
-                            teamNumber: account.team.number,
+                            accountTeam: account.team,
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -415,7 +415,9 @@ class _HomeHeader extends StatelessWidget {
                 builder: (context, snapshot) {
                   final itemCount = snapshot.hasData
                       ? snapshot.data!.unreadCount(
-                          SolarAppScope.of(context).notificationCenterSeenAtMillis,
+                          SolarAppScope.of(
+                            context,
+                          ).notificationCenterSeenAtMillis,
                         )
                       : 0;
                   return InkWell(
@@ -484,10 +486,7 @@ class _HomeHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 20),
-              _FilterButton(
-                label: filterLabel,
-                onTap: onFilterTap,
-              ),
+              _FilterButton(label: filterLabel, onTap: onFilterTap),
             ],
           ),
           if (isRefreshing) ...<Widget>[
@@ -591,7 +590,6 @@ class _NotificationCard extends StatelessWidget {
     required this.subtitle,
     required this.meta,
     required this.accentColor,
-    this.emphasizeHeadline = false,
   });
 
   factory _NotificationCard.upcoming({
@@ -620,14 +618,13 @@ class _NotificationCard extends StatelessWidget {
           : result.won
           ? 'Win'
           : 'Loss',
-      headline: scoreLabel,
+      headline: '${result.match.name}  •  $scoreLabel',
       icon: result.tied
           ? Icons.drag_handle_rounded
           : result.won
           ? Icons.arrow_upward_rounded
           : Icons.arrow_downward_rounded,
-      subtitle:
-          '${result.match.name}  •  ${result.event?.name ?? result.match.event.name}',
+      subtitle: result.event?.name ?? result.match.event.name,
       meta: <String>[
         result.match.division.name,
         if (result.match.field.trim().isNotEmpty) result.match.field.trim(),
@@ -638,7 +635,6 @@ class _NotificationCard extends StatelessWidget {
           : result.won
           ? const Color(0xFF1F9D61)
           : const Color(0xFFD24E4E),
-      emphasizeHeadline: true,
     );
   }
 
@@ -648,36 +644,36 @@ class _NotificationCard extends StatelessWidget {
   final String subtitle;
   final String meta;
   final Color accentColor;
-  final bool emphasizeHeadline;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE8E8F0)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border(
+          left: BorderSide(color: accentColor, width: 3),
+          top: const BorderSide(color: Color(0xFFE8E8F0)),
+          right: const BorderSide(color: Color(0xFFE8E8F0)),
+          bottom: const BorderSide(color: Color(0xFFE8E8F0)),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Container(
-            width: 42,
-            height: 42,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Icon(
-              icon,
-              color: accentColor,
-              size: 20,
-            ),
+            child: Icon(icon, color: accentColor, size: 18),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,10 +692,10 @@ class _NotificationCard extends StatelessWidget {
                   headline,
                   style: TextStyle(
                     color: const Color(0xFF24243A),
-                    fontSize: emphasizeHeadline ? 28 : 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    height: 1.05,
-                    letterSpacing: emphasizeHeadline ? -0.9 : -0.2,
+                    height: 1.2,
+                    letterSpacing: -0.1,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -709,9 +705,9 @@ class _NotificationCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF4E5368),
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    height: 1.35,
+                    height: 1.3,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -722,7 +718,7 @@ class _NotificationCard extends StatelessWidget {
                   style: const TextStyle(
                     color: Color(0xFF8E92A7),
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                     height: 1.35,
                   ),
                 ),
@@ -840,10 +836,7 @@ class _SearchStrip extends StatelessWidget {
 }
 
 class _FilterButton extends StatelessWidget {
-  const _FilterButton({
-    required this.label,
-    required this.onTap,
-  });
+  const _FilterButton({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
@@ -1567,13 +1560,246 @@ class _SearchResultsBottomSheet<T> extends StatelessWidget {
 }
 
 class _QuickviewSection extends StatefulWidget {
-  const _QuickviewSection({required this.controller, required this.teamNumber});
+  const _QuickviewSection({
+    required this.controller,
+    required this.teamNumber,
+    required this.teamGrade,
+  });
 
   final AppSessionController controller;
   final String teamNumber;
+  final String teamGrade;
 
   @override
   State<_QuickviewSection> createState() => _QuickviewSectionState();
+}
+
+class _QuickviewTeamCarousel extends StatefulWidget {
+  const _QuickviewTeamCarousel({
+    required this.controller,
+    required this.accountTeam,
+  });
+
+  final AppSessionController controller;
+  final TeamSummary accountTeam;
+
+  @override
+  State<_QuickviewTeamCarousel> createState() => _QuickviewTeamCarouselState();
+}
+
+class _QuickviewTeamCarouselState extends State<_QuickviewTeamCarousel> {
+  int _selectedIndex = 0;
+  int _slideDirection = 1;
+  double _dragDeltaX = 0;
+
+  List<TeamSummary> _availableTeams() {
+    final byTeamNumber = <String, TeamSummary>{
+      widget.accountTeam.number.trim().toUpperCase(): widget.accountTeam,
+    };
+    for (final team in widget.controller.favoriteTeams) {
+      final normalized = team.number.trim().toUpperCase();
+      if (normalized.isEmpty) {
+        continue;
+      }
+      byTeamNumber[normalized] = team;
+    }
+    return byTeamNumber.values.toList(growable: false);
+  }
+
+  @override
+  void didUpdateWidget(covariant _QuickviewTeamCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller) ||
+        oldWidget.accountTeam.number != widget.accountTeam.number) {
+      _selectedIndex = 0;
+    }
+  }
+
+  void _shiftTeam(int delta) {
+    final teams = _availableTeams();
+    if (teams.length <= 1) {
+      return;
+    }
+
+    var nextIndex = (_selectedIndex + delta) % teams.length;
+    if (nextIndex < 0) {
+      nextIndex += teams.length;
+    }
+
+    setState(() {
+      _slideDirection = delta >= 0 ? 1 : -1;
+      _selectedIndex = nextIndex;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final teams = _availableTeams();
+    final selectedIndex = teams.isEmpty
+        ? 0
+        : (_selectedIndex >= teams.length ? teams.length - 1 : _selectedIndex);
+    if (selectedIndex != _selectedIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _selectedIndex = selectedIndex;
+        });
+      });
+    }
+
+    final activeTeam = teams.isEmpty
+        ? widget.accountTeam
+        : teams[selectedIndex];
+    final hasMultipleTeams = teams.length > 1;
+    final isFavorite = widget.controller.isFavoriteTeam(activeTeam.number);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Team ${activeTeam.number}',
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    activeTeam.teamName.isEmpty
+                        ? 'Quickview snapshot'
+                        : activeTeam.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            InkWell(
+              onTap: () {
+                widget.controller.toggleFavoriteTeam(activeTeam);
+              },
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: const Color(0xFF24243A),
+                  size: 19,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (hasMultipleTeams) ...<Widget>[
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              const Icon(
+                Icons.swipe_rounded,
+                size: 16,
+                color: Color(0xFF8E92A7),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${selectedIndex + 1}/${teams.length} • Swipe sideways to switch teams',
+                style: const TextStyle(
+                  color: Color(0xFF8E92A7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (_) {
+            _dragDeltaX = 0;
+          },
+          onHorizontalDragUpdate: (details) {
+            _dragDeltaX += details.primaryDelta ?? 0;
+          },
+          onHorizontalDragEnd: (_) {
+            if (_dragDeltaX.abs() < 20) {
+              _dragDeltaX = 0;
+              return;
+            }
+            _shiftTeam(_dragDeltaX < 0 ? 1 : -1);
+            _dragDeltaX = 0;
+          },
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final offsetAnimation = Tween<Offset>(
+                begin: Offset(0.16 * _slideDirection, 0),
+                end: Offset.zero,
+              ).animate(animation);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(position: offsetAnimation, child: child),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey<String>(
+                'quickview-${activeTeam.number.trim().toUpperCase()}',
+              ),
+              child: _QuickviewSection(
+                controller: widget.controller,
+                teamNumber: activeTeam.number,
+                teamGrade: activeTeam.grade.isEmpty
+                    ? widget.accountTeam.grade
+                    : activeTeam.grade,
+              ),
+            ),
+          ),
+        ),
+        if (hasMultipleTeams) ...<Widget>[
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              for (var i = 0; i < teams.length; i++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: i == selectedIndex ? 16 : 7,
+                  height: 7,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color: i == selectedIndex
+                        ? const Color(0xFF24243A)
+                        : const Color(0xFFC9CCD9),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _QuickviewSectionState extends State<_QuickviewSection> {
@@ -1585,7 +1811,8 @@ class _QuickviewSectionState extends State<_QuickviewSection> {
   void didUpdateWidget(covariant _QuickviewSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.controller, widget.controller) ||
-        oldWidget.teamNumber != widget.teamNumber) {
+        oldWidget.teamNumber != widget.teamNumber ||
+        oldWidget.teamGrade != widget.teamGrade) {
       _quickviewFuture = null;
       _heroFuture = null;
       _heroCacheKey = null;
@@ -1618,7 +1845,11 @@ class _QuickviewSectionState extends State<_QuickviewSection> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<SolarQuickviewSnapshot?>(
-      future: _quickviewFuture ??= widget.controller.fetchQuickviewSnapshot(),
+      future: _quickviewFuture ??= _loadQuickviewSnapshotForTeam(
+        controller: widget.controller,
+        teamNumber: widget.teamNumber,
+        teamGrade: widget.teamGrade,
+      ),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _QuickviewLoadingState();
@@ -1645,8 +1876,16 @@ class _QuickviewSectionState extends State<_QuickviewSection> {
         final remainingMatches = quickview.futureMatches
             .where((match) => match.id != nextMatch.id)
             .toList(growable: false);
+        final accountTeamNumber = widget.controller.currentAccount?.team.number
+            .trim()
+            .toUpperCase();
+        final quickviewTeamNumber = widget.teamNumber.trim().toUpperCase();
         final currentDivision =
-            widget.controller.currentTeamDivisionForEvent(quickview.event.id) ??
+            (accountTeamNumber == quickviewTeamNumber
+                ? widget.controller.currentTeamDivisionForEvent(
+                    quickview.event.id,
+                  )
+                : null) ??
             nextMatch.division;
 
         return Column(
@@ -2105,6 +2344,102 @@ class _QuickviewPalette {
 
   final List<Color> colors;
   final IconData icon;
+}
+
+Future<SolarQuickviewSnapshot?> _loadQuickviewSnapshotForTeam({
+  required AppSessionController controller,
+  required String teamNumber,
+  required String teamGrade,
+}) async {
+  final normalizedTeamNumber = teamNumber.trim().toUpperCase();
+  if (normalizedTeamNumber.isEmpty) {
+    return null;
+  }
+
+  final currentTeam = controller.currentAccount?.team;
+  if (currentTeam != null &&
+      currentTeam.number.trim().toUpperCase() == normalizedTeamNumber) {
+    return controller.fetchQuickviewSnapshot();
+  }
+
+  final seedTeam = controller.resolveKnownTeamSummary(
+    teamNumber: normalizedTeamNumber,
+    grade: teamGrade,
+  );
+  final teamStats = await controller.fetchTeamStatsSnapshot(seedTeam);
+  final resolvedTeam = teamStats.team;
+  if (resolvedTeam.id <= 0) {
+    return null;
+  }
+
+  final teamReference = TeamReference(
+    id: resolvedTeam.id,
+    number: resolvedTeam.number,
+    name: resolvedTeam.teamName,
+  );
+
+  final futureEvents = teamStats.futureEvents;
+  if (futureEvents.isEmpty) {
+    return null;
+  }
+
+  final trackedEvents = futureEvents.take(4).toList(growable: false);
+  final schedules =
+      await Future.wait<MapEntry<EventSummary, List<MatchSummary>>>(
+        trackedEvents.map((event) async {
+          final schedule = await controller.fetchTeamMatchesForReference(
+            teamReference,
+            eventId: event.id,
+          );
+          return MapEntry<EventSummary, List<MatchSummary>>(event, schedule);
+        }),
+      );
+
+  for (final entry in schedules) {
+    final event = entry.key;
+    final schedule = entry.value;
+    final qualificationMatches = schedule
+        .where((match) => match.round == MatchRound.qualification)
+        .toList(growable: false);
+    final futureMatches = qualificationMatches
+        .where(_isFuturePendingQuickviewMatch)
+        .toList(growable: false);
+
+    if (futureMatches.isNotEmpty) {
+      return SolarQuickviewSnapshot(
+        event: event,
+        nextQualifyingMatch: futureMatches.first,
+        futureMatches: futureMatches,
+      );
+    }
+  }
+
+  final fallbackEntry = schedules.isEmpty ? null : schedules.first;
+  final fallbackEvent = fallbackEntry?.key ?? futureEvents.first;
+  final fallbackSchedule =
+      fallbackEntry?.value ??
+      await controller.fetchTeamMatchesForReference(
+        teamReference,
+        eventId: fallbackEvent.id,
+      );
+  final fallbackMatches = fallbackSchedule
+      .where(_isFuturePendingQuickviewMatch)
+      .toList(growable: false);
+
+  return SolarQuickviewSnapshot(
+    event: fallbackEvent,
+    nextQualifyingMatch: fallbackMatches.isEmpty ? null : fallbackMatches.first,
+    futureMatches: fallbackMatches,
+  );
+}
+
+bool _isFuturePendingQuickviewMatch(MatchSummary match) {
+  final now = DateTime.now();
+  final anchor = match.scheduled ?? match.started;
+  final hasOfficialScores =
+      match.alliances.length >= 2 &&
+      match.alliances.every((alliance) => alliance.score >= 0);
+  return !hasOfficialScores && (anchor == null || !anchor.isBefore(now));
 }
 
 Future<_QuickviewHeroData> _loadQuickviewHeroData({
@@ -2666,4 +3001,3 @@ const Map<String, String> _stateAbbreviations = <String, String>{
   'Wisconsin': 'WI',
   'Wyoming': 'WY',
 };
-

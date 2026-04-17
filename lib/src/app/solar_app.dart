@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/robot_events_models.dart';
@@ -34,8 +37,16 @@ class SolarApp extends StatefulWidget {
 }
 
 class _SolarAppState extends State<SolarApp> {
+  static const MethodChannel _iosCompanionChannel = MethodChannel(
+    'solar/ios_companion',
+  );
+
   late Future<AppSessionController> _controllerFuture;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   AppSessionController? _ownedController;
+  bool _didAttachCompanionRouteHandler = false;
+  bool _isHandlingCompanionRoute = false;
+  String? _pendingCompanionRoute;
 
   @override
   void initState() {
@@ -55,6 +66,9 @@ class _SolarAppState extends State<SolarApp> {
 
   @override
   void dispose() {
+    if (_didAttachCompanionRouteHandler) {
+      _iosCompanionChannel.setMethodCallHandler(null);
+    }
     _ownedController?.dispose();
     super.dispose();
   }
@@ -126,6 +140,15 @@ class _SolarAppState extends State<SolarApp> {
     required Color textPrimary,
     required Color accent,
   }) {
+    _attachCompanionRouteHandler(controller);
+    if (_pendingCompanionRoute != null && !_isHandlingCompanionRoute) {
+      final queuedRoute = _pendingCompanionRoute!;
+      _pendingCompanionRoute = null;
+      unawaited(
+        _openCompanionRoute(controller: controller, route: queuedRoute),
+      );
+    }
+
     return SolarAppScope(
       controller: controller,
       child: AnimatedBuilder(
@@ -134,6 +157,7 @@ class _SolarAppState extends State<SolarApp> {
           return MaterialApp(
             title: 'Solar v6',
             debugShowCheckedModeBanner: false,
+            navigatorKey: _navigatorKey,
             themeMode: ThemeMode.light,
             theme: _buildTheme(
               colorScheme: colorScheme,
@@ -246,6 +270,115 @@ class _SolarAppState extends State<SolarApp> {
         },
       ),
     );
+  }
+
+  void _attachCompanionRouteHandler(AppSessionController controller) {
+    if (_didAttachCompanionRouteHandler) {
+      return;
+    }
+
+    _didAttachCompanionRouteHandler = true;
+    _iosCompanionChannel.setMethodCallHandler((call) async {
+      if (call.method != 'openCompanionRoute') {
+        return;
+      }
+      final route = _companionRouteFromArguments(call.arguments);
+      if (route == null) {
+        return;
+      }
+      await _openCompanionRoute(controller: controller, route: route);
+    });
+
+    unawaited(_consumePendingCompanionRoute(controller));
+  }
+
+  Future<void> _consumePendingCompanionRoute(
+    AppSessionController controller,
+  ) async {
+    try {
+      final route = await _iosCompanionChannel.invokeMethod<String>(
+        'consumePendingCompanionRoute',
+      );
+      if (route == null || route.trim().isEmpty) {
+        return;
+      }
+      await _openCompanionRoute(controller: controller, route: route);
+    } on MissingPluginException {
+      // Companion deep links are iOS-only.
+    } on PlatformException {
+      // Ignore route delivery issues to keep startup resilient.
+    }
+  }
+
+  String? _companionRouteFromArguments(Object? arguments) {
+    if (arguments is String) {
+      return arguments;
+    }
+    if (arguments is Map) {
+      final raw = arguments['route'] ?? arguments['action'];
+      if (raw is String) {
+        return raw;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openCompanionRoute({
+    required AppSessionController controller,
+    required String route,
+  }) async {
+    if (_isHandlingCompanionRoute) {
+      return;
+    }
+
+    _isHandlingCompanionRoute = true;
+    try {
+      await controller.refreshTeamStats();
+      final snapshot = await controller.fetchNotificationCenterSnapshot();
+      final navigator = _navigatorKey.currentState;
+      if (navigator == null) {
+        _pendingCompanionRoute = route;
+        return;
+      }
+
+      final normalizedRoute = route.trim().toLowerCase();
+      MatchSummary? targetMatch;
+      EventSummary? targetEvent;
+
+      if (normalizedRoute.contains('recent')) {
+        final recent = snapshot.recentResults.isEmpty
+            ? null
+            : snapshot.recentResults.first;
+        targetMatch = recent?.match;
+        targetEvent = recent?.event;
+      } else {
+        targetMatch = snapshot.upcomingMatch;
+        targetEvent = snapshot.upcomingEvent;
+      }
+
+      targetMatch ??= snapshot.recentResults.isEmpty
+          ? null
+          : snapshot.recentResults.first.match;
+      targetEvent ??= snapshot.recentResults.isEmpty
+          ? null
+          : snapshot.recentResults.first.event;
+
+      if (targetMatch == null) {
+        await navigator.pushNamed(HomeScreen.routeName);
+        return;
+      }
+
+      await navigator.pushNamed(
+        MatchDetailsScreen.routeName,
+        arguments: MatchDetailsScreenArgs(
+          match: targetMatch,
+          event: targetEvent,
+          highlightTeamNumber: controller.currentAccount?.team.number,
+        ),
+      );
+    } finally {
+      _isHandlingCompanionRoute = false;
+    }
   }
 }
 

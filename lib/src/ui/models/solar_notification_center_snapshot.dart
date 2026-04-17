@@ -1,14 +1,17 @@
 import '../../models/robot_events_models.dart';
+import 'solar_match_prediction.dart';
 
 class SolarNotificationCenterSnapshot {
   const SolarNotificationCenterSnapshot({
     this.upcomingEvent,
     this.upcomingMatch,
+    this.upcomingPrediction,
     this.recentResults = const <SolarRecentMatchResult>[],
   });
 
   final EventSummary? upcomingEvent;
   final MatchSummary? upcomingMatch;
+  final SolarMatchPrediction? upcomingPrediction;
   final List<SolarRecentMatchResult> recentResults;
 
   bool get hasItems => upcomingMatch != null || recentResults.isNotEmpty;

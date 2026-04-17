@@ -4,6 +4,8 @@ import WidgetKit
 
 private let appGroupIdentifier = "group.dev.minzhang.solarV6.shared"
 private let payloadKey = "solar_companion_payload"
+private let nextMatchDeepLinkURL = URL(string: "dev.minzhang.solarV6://companion/next-match")
+private let recentResultDeepLinkURL = URL(string: "dev.minzhang.solarV6://companion/recent-result")
 
 private struct SolarUpcomingPayload: Codable {
   let id: Int
@@ -38,6 +40,7 @@ private struct SolarCompanionPayload: Codable {
   let recordLabel: String?
   let worldRankLabel: String?
   let solarizeRankLabel: String?
+  let predictedScoreLine: String?
   let upcoming: SolarUpcomingPayload?
   let recentResults: [SolarRecentResultPayload]
   let updatedAt: Int64?
@@ -77,22 +80,46 @@ private struct SolarCompanionProvider: TimelineProvider {
 
 private struct SolarWidgetShell<Content: View>: View {
   let content: Content
+  let horizontalPadding: CGFloat
+  let verticalPadding: CGFloat
 
-  init(@ViewBuilder content: () -> Content) {
+  init(
+    horizontalPadding: CGFloat = 16,
+    verticalPadding: CGFloat = 18,
+    @ViewBuilder content: () -> Content
+  ) {
+    self.horizontalPadding = horizontalPadding
+    self.verticalPadding = verticalPadding
     self.content = content()
   }
 
   var body: some View {
-    ZStack {
-      LinearGradient(
-        colors: [Color(red: 0.05, green: 0.07, blue: 0.13), Color(red: 0.10, green: 0.16, blue: 0.31)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      content
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(16)
+    content
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .padding(.horizontal, horizontalPadding)
+      .padding(.vertical, verticalPadding)
+      .solarWidgetBackground()
+  }
+}
+
+private extension View {
+  @ViewBuilder
+  func solarWidgetBackground() -> some View {
+    if #available(iOSApplicationExtension 17.0, *) {
+      containerBackground(for: .widget) {
+        solarWidgetGradient
+      }
+    } else {
+      background(solarWidgetGradient)
     }
+  }
+
+  private var solarWidgetGradient: some View {
+    LinearGradient(
+      colors: [Color(red: 0.05, green: 0.07, blue: 0.13), Color(red: 0.10, green: 0.16, blue: 0.31)],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
   }
 }
 
@@ -105,7 +132,7 @@ private struct SolarQuickviewWidgetView: View {
         VStack(alignment: .leading, spacing: 10) {
           headerLine(payload)
           if let upcoming = payload.upcoming {
-            nextMatchBlock(upcoming)
+            nextMatchBlock(upcoming, predictedScoreLine: payload.predictedScoreLine)
           } else if let result = payload.recentResults.first {
             latestResultBlock(result)
           } else {
@@ -124,7 +151,10 @@ private struct SolarQuickviewWidgetView: View {
           }
         }
       } else {
-        emptyBlock(title: "Solar Quickview", body: "Your team widget appears once live match data is available.")
+        emptyBlock(
+          title: "Solar Quickview",
+          body: "No companion payload yet. Open the app and use Settings > Developer tools > Test live activity + widgets (or enable test scrimmage)."
+        )
       }
     }
   }
@@ -145,7 +175,10 @@ private struct SolarQuickviewWidgetView: View {
   }
 
   @ViewBuilder
-  private func nextMatchBlock(_ upcoming: SolarUpcomingPayload) -> some View {
+  private func nextMatchBlock(
+    _ upcoming: SolarUpcomingPayload,
+    predictedScoreLine: String?
+  ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Next Match")
         .font(.caption.weight(.semibold))
@@ -161,6 +194,12 @@ private struct SolarQuickviewWidgetView: View {
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.white.opacity(0.68))
         .lineLimit(2)
+      if let predictedScoreLine, !predictedScoreLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text("Predicted: \(predictedScoreLine)")
+          .font(.caption2.weight(.semibold))
+          .foregroundStyle(.white.opacity(0.84))
+          .lineLimit(1)
+      }
       Text(allianceLine(label: "Red", teams: upcoming.redAlliance))
         .font(.caption2.weight(.semibold))
         .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
@@ -222,64 +261,17 @@ private struct SolarQuickviewWidgetView: View {
 }
 
 private struct SolarNextMatchWidgetView: View {
+  @Environment(\.widgetFamily) private var widgetFamily
+
   let entry: SolarCompanionEntry
 
   var body: some View {
-    SolarWidgetShell {
+    SolarWidgetShell(verticalPadding: widgetFamily == .systemSmall ? 20 : 18) {
       if let upcoming = entry.payload?.upcoming {
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Next Match")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.72))
-          Text(upcoming.matchLabel ?? upcoming.matchName)
-            .font(.title2.weight(.bold))
-            .foregroundStyle(.white)
-          Text(metaLine(for: upcoming))
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.74))
-            .lineLimit(2)
-          Spacer(minLength: 0)
-          Text(allianceLine(label: "Red", teams: upcoming.redAlliance))
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
-            .lineLimit(2)
-          Text(allianceLine(label: "Blue", teams: upcoming.blueAlliance))
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
-            .lineLimit(2)
-        }
-      } else {
-        SolarQuickviewWidgetView(entry: entry)
-      }
-    }
-  }
-}
-
-private struct SolarLatestResultWidgetView: View {
-  let entry: SolarCompanionEntry
-
-  var body: some View {
-    SolarWidgetShell {
-      if let result = entry.payload?.recentResults.first {
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Latest Result")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.72))
-          Text("\(resultTitle(result)) \(resultScoreLine(result))")
-            .font(.title3.weight(.bold))
-            .foregroundStyle(.white)
-          Text(result.matchLabel ?? result.matchName)
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.84))
-          Text(result.eventName)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.68))
-            .lineLimit(2)
-          Spacer(minLength: 0)
-          HStack(spacing: 8) {
-            footerMetric("Red", result.redAlliance)
-            footerMetric("Blue", result.blueAlliance)
-          }
+        if widgetFamily == .systemSmall {
+          smallNextMatchLayout(upcoming)
+        } else {
+          mediumNextMatchLayout(upcoming)
         }
       } else {
         SolarQuickviewWidgetView(entry: entry)
@@ -288,33 +280,180 @@ private struct SolarLatestResultWidgetView: View {
   }
 
   @ViewBuilder
-  private func footerMetric(_ label: String, _ value: String) -> some View {
-    VStack(alignment: .leading, spacing: 3) {
-      Text(label.uppercased())
-        .font(.caption2.weight(.heavy))
-        .foregroundStyle(.white.opacity(0.56))
-      Text(value)
+  private func smallNextMatchLayout(_ upcoming: SolarUpcomingPayload) -> some View {
+    VStack(alignment: .leading, spacing: 7) {
+      Text("Next")
         .font(.caption2.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.72))
+
+      Text(upcoming.matchLabel ?? upcoming.matchName)
+        .font(.title3.weight(.bold))
         .foregroundStyle(.white)
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+
+      Text(metaLine(for: upcoming))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.74))
+        .lineLimit(1)
+        .minimumScaleFactor(0.74)
+
+      if let predicted = entry.payload?.predictedScoreLine,
+         !predicted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text("Pred \(predicted)")
+          .font(.caption2.weight(.semibold))
+          .foregroundStyle(.white.opacity(0.86))
+          .lineLimit(1)
+          .minimumScaleFactor(0.74)
+      }
+
+      Spacer(minLength: 4)
+
+      Text(allianceLine(label: "Red", teams: upcoming.redAlliance))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
+        .lineLimit(1)
+        .minimumScaleFactor(0.66)
+      Text(allianceLine(label: "Blue", teams: upcoming.blueAlliance))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
+        .lineLimit(1)
+        .minimumScaleFactor(0.66)
+    }
+  }
+
+  @ViewBuilder
+  private func mediumNextMatchLayout(_ upcoming: SolarUpcomingPayload) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Next Match")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.72))
+      Text(upcoming.matchLabel ?? upcoming.matchName)
+        .font(.title2.weight(.bold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+      Text(metaLine(for: upcoming))
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.74))
+        .lineLimit(2)
+      if let predicted = entry.payload?.predictedScoreLine,
+         !predicted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text("Predicted \(predicted)")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.white.opacity(0.84))
+          .lineLimit(1)
+      }
+      Spacer(minLength: 4)
+      Text(allianceLine(label: "Red", teams: upcoming.redAlliance))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
+        .lineLimit(2)
+      Text(allianceLine(label: "Blue", teams: upcoming.blueAlliance))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
         .lineLimit(2)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
   }
 }
 
-struct SolarCompanionWidget: Widget {
-  let kind: String = "SolarCompanionWidget"
+private struct SolarLatestResultWidgetView: View {
+  @Environment(\.widgetFamily) private var widgetFamily
 
-  var body: some WidgetConfiguration {
-    StaticConfiguration(kind: kind, provider: SolarCompanionProvider()) { entry in
-      SolarQuickviewWidgetView(entry: entry)
+  let entry: SolarCompanionEntry
+
+  var body: some View {
+    SolarWidgetShell(verticalPadding: 20) {
+      if let result = entry.payload?.recentResults.first {
+        if widgetFamily == .systemSmall {
+          smallResultLayout(result)
+        } else {
+          mediumResultLayout(result)
+        }
+      } else {
+        SolarQuickviewWidgetView(entry: entry)
+      }
     }
-    .configurationDisplayName("Solar Quickview")
-    .description("Shows your next match, last result, and rank snapshot.")
-    .supportedFamilies([.systemSmall, .systemMedium])
+  }
+
+  @ViewBuilder
+  private func smallResultLayout(_ result: SolarRecentResultPayload) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Latest")
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.72))
+
+      Text(resultScoreLine(result))
+        .font(.title2.weight(.heavy))
+        .foregroundStyle(.white)
+        .minimumScaleFactor(0.7)
+        .lineLimit(1)
+
+      Text(result.matchLabel ?? result.matchName)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.88))
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+
+      Text(result.eventName)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.7))
+        .lineLimit(2)
+        .minimumScaleFactor(0.8)
+
+      Spacer(minLength: 2)
+
+      Text(allianceLine(label: "Red", teams: result.redAlliance))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
+        .lineLimit(1)
+        .minimumScaleFactor(0.68)
+      Text(allianceLine(label: "Blue", teams: result.blueAlliance))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
+        .lineLimit(1)
+        .minimumScaleFactor(0.68)
+    }
+  }
+
+  @ViewBuilder
+  private func mediumResultLayout(_ result: SolarRecentResultPayload) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Latest Result")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.72))
+
+      Text("\(resultTitle(result)) \(resultScoreLine(result))")
+        .font(.title3.weight(.bold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+
+      Text(result.matchLabel ?? result.matchName)
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.86))
+        .lineLimit(1)
+
+      Text(result.eventName)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.white.opacity(0.68))
+        .lineLimit(2)
+
+      Spacer(minLength: 4)
+
+      VStack(alignment: .leading, spacing: 5) {
+        Text(allianceLine(label: "Red", teams: result.redAlliance))
+          .font(.caption2.weight(.bold))
+          .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
+          .lineLimit(1)
+          .minimumScaleFactor(0.72)
+        Text(allianceLine(label: "Blue", teams: result.blueAlliance))
+          .font(.caption2.weight(.bold))
+          .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
+          .lineLimit(1)
+          .minimumScaleFactor(0.72)
+      }
+    }
   }
 }
 
@@ -324,6 +463,7 @@ struct SolarNextMatchWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: SolarCompanionProvider()) { entry in
       SolarNextMatchWidgetView(entry: entry)
+        .widgetURL(nextMatchDeepLinkURL)
     }
     .configurationDisplayName("Solar Next Match")
     .description("Focused view for your next published match.")
@@ -337,6 +477,7 @@ struct SolarLatestResultWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: SolarCompanionProvider()) { entry in
       SolarLatestResultWidgetView(entry: entry)
+        .widgetURL(recentResultDeepLinkURL)
     }
     .configurationDisplayName("Solar Latest Result")
     .description("Shows your most recent published score.")
@@ -355,7 +496,7 @@ struct SolarCompanionLiveActivity: Widget {
           endPoint: .bottomTrailing
         )
 
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
           HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
               Text(context.state.matchLabel)
@@ -391,18 +532,33 @@ struct SolarCompanionLiveActivity: Widget {
           }
           .font(.caption2.weight(.semibold))
 
+          if let countdownDate = countdownTargetDate(for: context.state.scheduledAt),
+             countdownDate > Date() {
+            HStack(spacing: 6) {
+              Text("Starts in")
+                .foregroundStyle(.white.opacity(0.64))
+              Text(countdownDate, style: .timer)
+                .foregroundStyle(.white)
+                .monospacedDigit()
+              Spacer(minLength: 0)
+            }
+            .font(.caption2.weight(.semibold))
+          }
+
           Divider().overlay(Color.white.opacity(0.12))
 
           HStack(spacing: 10) {
             compactMetric("Last", "\(context.state.recentResultTitle) \(context.state.recentResultScore)")
+            compactMetric("Pred", context.state.predictedScoreLine)
             compactMetric("Skills", context.state.worldRankLabel)
             compactMetric("Solarize", context.state.solarizeRankLabel)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 18)
       }
+      .widgetURL(nextMatchDeepLinkURL)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
@@ -434,7 +590,7 @@ struct SolarCompanionLiveActivity: Widget {
           }
         }
         DynamicIslandExpandedRegion(.bottom) {
-          VStack(alignment: .leading, spacing: 6) {
+          VStack(alignment: .leading, spacing: 7) {
             HStack {
               Text(context.state.redAlliance)
                 .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
@@ -453,9 +609,18 @@ struct SolarCompanionLiveActivity: Widget {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
               Spacer()
+              Text("Pred \(context.state.predictedScoreLine)")
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.82))
+
+            HStack {
               Text("Skills \(context.state.worldRankLabel)")
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+              Spacer()
               Text("Solarize \(context.state.solarizeRankLabel)")
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -463,6 +628,9 @@ struct SolarCompanionLiveActivity: Widget {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.white.opacity(0.80))
           }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.top, 2)
+          .padding(.bottom, 6)
         }
       } compactLeading: {
         Text(shortMatchLabel(context.state.matchLabel))
@@ -488,6 +656,7 @@ struct SolarCompanionLiveActivity: Widget {
           .lineLimit(1)
           .minimumScaleFactor(0.72)
       }
+      .widgetURL(nextMatchDeepLinkURL)
     }
   }
 
@@ -509,7 +678,6 @@ struct SolarCompanionLiveActivity: Widget {
 @main
 struct SolarCompanionWidgetBundle: WidgetBundle {
   var body: some Widget {
-    SolarCompanionWidget()
     SolarNextMatchWidget()
     SolarLatestResultWidget()
     if #available(iOSApplicationExtension 16.1, *) {
@@ -581,4 +749,11 @@ private func compactTimeLabel(for timestampMillis: Int64) -> String {
 
   let date = Date(timeIntervalSince1970: TimeInterval(timestampMillis) / 1000)
   return date.formatted(date: .omitted, time: .shortened)
+}
+
+private func countdownTargetDate(for timestampMillis: Int64) -> Date? {
+  guard timestampMillis > 0 else {
+    return nil
+  }
+  return Date(timeIntervalSince1970: TimeInterval(timestampMillis) / 1000)
 }

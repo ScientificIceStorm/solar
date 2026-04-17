@@ -46,9 +46,9 @@ class AppSessionController extends ChangeNotifier {
   static const _solarizeHistoryService = SolarizeHistoryService();
   static const _iosCompanionService = SolarIosCompanionService();
   static final _diskCacheStore = SolarDiskCacheStore.instance;
-  static const _solarizeHistoryTeamLimit = 192;
+  static const _solarizeHistoryTeamLimit = 768;
   static const _solarizeHistoryBatchSize = 12;
-  static const _solarizeMatchHistoryTeamLimit = 128;
+  static const _solarizeMatchHistoryTeamLimit = 512;
   static const _solarizeMatchHistoryBatchSize = 8;
   static const _worldsScheduleAnnouncementKey = worldsScheduleAnnouncementId;
   static const _localAccountDomain = 'solar.local';
@@ -798,10 +798,12 @@ class AppSessionController extends ChangeNotifier {
               : null,
         );
         seasons.sort(_compareSeasonSummaries);
-        return seasons.where((season) {
-          return _matchesSeasonProgramFilter(season, programFilter) &&
-              _isPublishedSeason(season);
-        }).toList(growable: false);
+        return seasons
+            .where((season) {
+              return _matchesSeasonProgramFilter(season, programFilter) &&
+                  _isPublishedSeason(season);
+            })
+            .toList(growable: false);
       } catch (_) {
         return const <SeasonSummary>[];
       }
@@ -871,7 +873,7 @@ class AppSessionController extends ChangeNotifier {
       }
 
       final entries = await _loadCachedList<OpenSkillCacheEntry>(
-        namespace: 'solarize_rankings',
+        namespace: 'solarize_rankings_v4',
         cacheKey: cacheKey,
         force: force,
         ttl: _dailyCacheTtl(),
@@ -2144,7 +2146,8 @@ class AppSessionController extends ChangeNotifier {
     final fallbackEntry = schedules.isEmpty ? null : schedules.first;
     final fallbackEvent = fallbackEntry?.key ?? futureEvents.first;
     final fallbackSchedule =
-        fallbackEntry?.value ?? await fetchTeamScheduleForEvent(fallbackEvent.id);
+        fallbackEntry?.value ??
+        await fetchTeamScheduleForEvent(fallbackEvent.id);
     final fallbackMatches = fallbackSchedule
         .where((match) {
           return _isFuturePendingMatch(match);
@@ -2164,13 +2167,72 @@ class AppSessionController extends ChangeNotifier {
   _loadNotificationCenterSnapshot() async {
     final quickview = await fetchQuickviewSnapshot();
     final recentResults = await _loadRecentMatchResults(limit: 4);
+
+    var upcomingEvent = quickview?.event;
+    var upcomingMatch =
+        quickview?.nextQualifyingMatch ??
+        (quickview?.futureMatches.isEmpty ?? true
+            ? null
+            : quickview!.futureMatches.first);
+
+    if (upcomingMatch == null && _developerScrimmageEnabled) {
+      final scrimmage = _scrimmagePackageForCurrentTeam();
+      if (scrimmage != null) {
+        final pendingMatches =
+            scrimmage.matches
+                .where((match) {
+                  final hasOfficialScores =
+                      match.alliances.length >= 2 &&
+                      match.alliances.every((alliance) => alliance.score >= 0);
+                  return !hasOfficialScores;
+                })
+                .toList(growable: false)
+              ..sort((a, b) {
+                final aTime =
+                    a.scheduled ??
+                    a.started ??
+                    DateTime.fromMillisecondsSinceEpoch(0);
+                final bTime =
+                    b.scheduled ??
+                    b.started ??
+                    DateTime.fromMillisecondsSinceEpoch(0);
+                return aTime.compareTo(bTime);
+              });
+
+        MatchSummary? scrimmageUpcoming;
+        for (final match in pendingMatches) {
+          if (_isFuturePendingMatch(match)) {
+            scrimmageUpcoming = match;
+            break;
+          }
+        }
+        scrimmageUpcoming ??= pendingMatches.isEmpty
+            ? null
+            : pendingMatches.first;
+
+        if (scrimmageUpcoming != null) {
+          upcomingEvent = scrimmage.event;
+          upcomingMatch = scrimmageUpcoming;
+        }
+      }
+    }
+
+    SolarMatchPrediction? upcomingPrediction;
+    if (upcomingMatch != null) {
+      try {
+        upcomingPrediction = await predictMatch(
+          match: upcomingMatch,
+          event: upcomingEvent,
+        );
+      } catch (_) {
+        upcomingPrediction = null;
+      }
+    }
+
     return SolarNotificationCenterSnapshot(
-      upcomingEvent: quickview?.event,
-      upcomingMatch:
-          quickview?.nextQualifyingMatch ??
-          (quickview?.futureMatches.isEmpty ?? true
-              ? null
-              : quickview!.futureMatches.first),
+      upcomingEvent: upcomingEvent,
+      upcomingMatch: upcomingMatch,
+      upcomingPrediction: upcomingPrediction,
       recentResults: recentResults,
     );
   }
@@ -2682,12 +2744,14 @@ class AppSessionController extends ChangeNotifier {
 
   TeamStatsSnapshot _applyKnownSignalsToTeamStats(TeamStatsSnapshot snapshot) {
     final normalizedTeamNumber = snapshot.team.number.trim().toUpperCase();
-    final seededWorldSkillsEntry = snapshot.worldSkillsEntry ??
+    final seededWorldSkillsEntry =
+        snapshot.worldSkillsEntry ??
         _seedWorldSkillsEntryForTeam(
           teamNumber: normalizedTeamNumber,
           teamId: snapshot.team.id,
         );
-    final seededOpenSkillEntry = snapshot.openSkillEntry ??
+    final seededOpenSkillEntry =
+        snapshot.openSkillEntry ??
         _seedOpenSkillEntryForTeam(
           teamNumber: normalizedTeamNumber,
           teamId: snapshot.team.id,
@@ -2851,14 +2915,38 @@ class AppSessionController extends ChangeNotifier {
       return true;
     }
 
-    final sample = entries.take(12).toList(growable: false);
+    final sample = <OpenSkillCacheEntry>[
+      ...entries.take(8),
+      if (entries.length > 16) ...entries.skip(entries.length - 8),
+    ];
     final validCount = sample.where((entry) {
       return entry.ranking > 0 &&
           entry.id > 0 &&
           entry.teamNumber.trim().isNotEmpty;
     }).length;
+    final distinctOrdinals = sample
+        .map((entry) => entry.openSkillOrdinal.toStringAsFixed(2))
+        .toSet()
+        .length;
+    final distinctApValues = sample
+        .map((entry) => entry.apPerMatch.toStringAsFixed(2))
+        .toSet()
+        .length;
+    final distinctWpValues = sample
+        .map((entry) => entry.wpPerMatch.toStringAsFixed(2))
+        .toSet()
+        .length;
 
-    return validCount >= (sample.length / 2).ceil();
+    if (validCount < (sample.length / 2).ceil()) {
+      return false;
+    }
+    if (sample.length >= 10 && distinctOrdinals < 4) {
+      return false;
+    }
+    if (sample.length >= 10 && distinctApValues < 3 && distinctWpValues < 3) {
+      return false;
+    }
+    return true;
   }
 
   Future<void> _saveSettings({

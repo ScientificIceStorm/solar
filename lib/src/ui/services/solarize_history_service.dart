@@ -93,33 +93,100 @@ class SolarizeHistoryService {
     );
     final hasHistory = history.events > 0 || matchHistory.matches > 0;
 
-    final blendedWinRate = matchHistory.matches > 0
+    final worldSkillPrior = _worldSkillPrior(entry);
+    final historyConfidence =
+      (((history.weightedEvents / 6).clamp(0.0, 1.0) * 0.55) +
+          ((matchHistory.weightedMatches / 14).clamp(0.0, 1.0) * 0.45))
+        .clamp(0.0, 1.0)
+        .toDouble();
+
+    final priorWinRate =
+      (0.34 + (worldSkillPrior * 0.56)).clamp(0.30, 0.90).toDouble();
+    final priorAveragePoints =
+      (20 + (worldSkillPrior * 58)).clamp(16.0, 92.0).toDouble();
+    final priorApPerMatch =
+      (1.5 + (worldSkillPrior * 6.4)).clamp(1.0, 9.4).toDouble();
+    final priorTopCutRate =
+      (0.08 + (worldSkillPrior * 0.52)).clamp(0.08, 0.76).toDouble();
+    final priorStrengthOfSchedule =
+      (0.40 + (worldSkillPrior * 0.44)).clamp(0.25, 0.92).toDouble();
+    final priorEliminationWinRate =
+      (0.38 + (worldSkillPrior * 0.48)).clamp(0.30, 0.88).toDouble();
+    final priorEventStrength =
+      (0.86 + (worldSkillPrior * 0.72)).clamp(0.86, 1.70).toDouble();
+
+    final rawBlendedWinRate = matchHistory.matches > 0
         ? ((matchHistory.winRate * 0.72) + (history.winRate * 0.28))
         : history.winRate;
-    final averagePoints = history.averagePoints > 0
+    final blendedWinRate = _blendMetric(
+      primary: rawBlendedWinRate,
+      fallback: priorWinRate,
+      confidence: historyConfidence,
+    );
+
+    final rawAveragePoints = history.averagePoints > 0
         ? history.averagePoints
         : matchHistory.offenseAvg > 0
         ? matchHistory.offenseAvg
-        : 36.0;
-    final apPerMatch = history.apPerMatch > 0
+      : 0.0;
+    final averagePoints = _blendMetric(
+      primary: rawAveragePoints > 0 ? rawAveragePoints : priorAveragePoints,
+      fallback: priorAveragePoints,
+      confidence: historyConfidence,
+    );
+
+    final rawApPerMatch = history.apPerMatch > 0
         ? history.apPerMatch
         : matchHistory.matches > 0
         ? (matchHistory.offenseAvg / 12).clamp(1.6, 8.2).toDouble()
-        : 3.2;
-    final topCutRate = history.topCutRate > 0
+      : 0.0;
+    final apPerMatch = _blendMetric(
+      primary: rawApPerMatch > 0 ? rawApPerMatch : priorApPerMatch,
+      fallback: priorApPerMatch,
+      confidence: historyConfidence,
+    );
+
+    final rawTopCutRate = history.topCutRate > 0
         ? history.topCutRate
         : matchHistory.eliminationMatches > 0
         ? (matchHistory.eliminationWinRate * 0.58).clamp(0.16, 0.78).toDouble()
-        : 0.22;
-    final strengthOfSchedule = matchHistory.matches > 0
-        ? matchHistory.strengthOfSchedule
-        : null;
-    final eliminationWinRate = matchHistory.eliminationMatches > 0
+      : 0.0;
+    final topCutRate = _blendMetric(
+      primary: rawTopCutRate > 0 ? rawTopCutRate : priorTopCutRate,
+      fallback: priorTopCutRate,
+      confidence: historyConfidence,
+    );
+
+    final rawStrengthOfSchedule = matchHistory.matches > 0
+      ? matchHistory.strengthOfSchedule
+      : 0.0;
+    final strengthOfSchedule = _blendMetric(
+      primary: rawStrengthOfSchedule > 0
+        ? rawStrengthOfSchedule
+        : priorStrengthOfSchedule,
+      fallback: priorStrengthOfSchedule,
+      confidence: historyConfidence,
+    );
+
+    final rawEliminationWinRate = matchHistory.eliminationMatches > 0
         ? matchHistory.eliminationWinRate
-        : null;
-    final eventStrength = math.max(
+      : 0.0;
+    final eliminationWinRate = _blendMetric(
+      primary: rawEliminationWinRate > 0
+        ? rawEliminationWinRate
+        : priorEliminationWinRate,
+      fallback: priorEliminationWinRate,
+      confidence: historyConfidence,
+    );
+
+    final rawEventStrength = math.max(
       history.eventStrength,
       matchHistory.eventStrength,
+    );
+    final eventStrength = _blendMetric(
+      primary: rawEventStrength > 1.0 ? rawEventStrength : priorEventStrength,
+      fallback: priorEventStrength,
+      confidence: historyConfidence,
     );
 
     final averagePointsBoost = ((averagePoints - 20) / 40)
@@ -131,21 +198,24 @@ class SolarizeHistoryService {
     final eventVolumeBoost =
         (math.min(history.weightedEvents, 7.5) * 0.18) +
         math.min(matchHistory.weightedMatches / 12, 1.2);
-    final scheduleBoost = ((strengthOfSchedule ?? 0.5) - 0.5) * 5.8;
-    final eliminationBoost =
-        (((eliminationWinRate ?? blendedWinRate) - 0.5) * 6.7);
+    final scheduleBoost = (strengthOfSchedule - 0.5) * 5.8;
+    final eliminationBoost = ((eliminationWinRate - 0.5) * 6.7);
     final eventStrengthBoost = (eventStrength - 1.0) * 4.6;
     final qualityWinBoost = (matchHistory.qualityWinRate - 0.5) * 5.0;
     final marginBoost = (matchHistory.marginAvg / 17)
         .clamp(-1.3, 2.7)
         .toDouble();
+    final worldRankPenalty = (1 - worldSkillPrior) * 0.85;
     final rankPenalty = history.events == 0
-        ? 0.0
-        : ((history.averageRank - 1).clamp(0, 24) / 16.0);
+      ? worldRankPenalty
+      : ((history.averageRank - 1).clamp(0, 24) / 16.0) +
+          (worldRankPenalty * 0.45);
     final badFinishPenalty = history.badFinishRate * 1.25;
     final volatilityPenalty = hasHistory
         ? (1 - matchHistory.reliability) * 0.95
-        : 0.0;
+      : (0.52 - (worldSkillPrior * 0.28)).clamp(0.18, 0.52);
+    final repeatedHeavyLossPenalty =
+      math.max(0, matchHistory.corroboratedHeavyLosses - 1) * 0.95;
 
     final mu =
         15.0 +
@@ -161,7 +231,8 @@ class SolarizeHistoryService {
         marginBoost -
         rankPenalty -
         badFinishPenalty -
-        volatilityPenalty;
+        volatilityPenalty -
+        repeatedHeavyLossPenalty;
     final sigma =
         (8.4 -
                 (math.min(history.weightedEvents, 8) * 0.24) -
@@ -177,12 +248,12 @@ class SolarizeHistoryService {
     final ccwm =
         ((blendedWinRate - 0.5) * 22) +
         (matchHistory.marginAvg / 7.0) +
-        ((strengthOfSchedule ?? 0.5) - 0.5) * 6.2 +
-        (((eliminationWinRate ?? blendedWinRate) - 0.5) * 5.8);
+      ((strengthOfSchedule - 0.5) * 6.2) +
+      ((eliminationWinRate - 0.5) * 5.8);
     final opr =
         (averagePoints +
                 math.max(matchHistory.offenseAvg * 0.32, 0) +
-                (((strengthOfSchedule ?? 0.5) - 0.5) * 14) +
+          ((strengthOfSchedule - 0.5) * 14) +
                 (((eventStrength - 1.0).clamp(-0.1, 0.6)) * 10))
             .clamp(10, 145)
             .toDouble();
@@ -191,10 +262,9 @@ class SolarizeHistoryService {
     final awpPerMatch =
         (((apPerMatch / 10).clamp(0.0, 1.0) * 0.44) +
                 (topCutRate * 0.18) +
-                (((eliminationWinRate ?? blendedWinRate).clamp(0.0, 1.0)) *
-                    0.18) +
+            ((eliminationWinRate.clamp(0.0, 1.0)) * 0.18) +
                 (((eventStrength - 0.9) / 0.7).clamp(0.0, 1.0) * 0.10) +
-                (((strengthOfSchedule ?? 0.5).clamp(0.0, 1.0)) * 0.10))
+            ((strengthOfSchedule.clamp(0.0, 1.0)) * 0.10))
             .clamp(0.05, 0.97)
             .toDouble();
     final totalWins = matchHistory.matches > 0
@@ -234,13 +304,13 @@ class SolarizeHistoryService {
       eventStrength: eventStrength > 1.0 ? eventStrength : null,
       qualifiedForRegionals:
           hasHistory &&
-              (history.topCutRate >= 0.35 || (eliminationWinRate ?? 0.5) >= 0.6)
+            (history.topCutRate >= 0.35 || eliminationWinRate >= 0.6)
           ? 1
           : 0,
       qualifiedForWorlds:
           history.podiumRate >= 0.2 ||
               history.topCutRate >= 0.45 ||
-              (eliminationWinRate ?? 0.0) >= 0.72
+            eliminationWinRate >= 0.72
           ? 1
           : 0,
     );
@@ -457,6 +527,7 @@ class _MatchHistorySnapshot {
     required this.totalLosses,
     required this.totalTies,
     required this.eliminationMatches,
+    required this.corroboratedHeavyLosses,
     required this.weightedMatches,
     required this.winRate,
     required this.eliminationWinRate,
@@ -474,6 +545,7 @@ class _MatchHistorySnapshot {
       totalLosses = 0,
       totalTies = 0,
       eliminationMatches = 0,
+      corroboratedHeavyLosses = 0,
       weightedMatches = 0,
       winRate = 0.5,
       eliminationWinRate = 0.5,
@@ -489,6 +561,7 @@ class _MatchHistorySnapshot {
   final int totalLosses;
   final int totalTies;
   final int eliminationMatches;
+  final int corroboratedHeavyLosses;
   final double weightedMatches;
   final double winRate;
   final double eliminationWinRate;
@@ -611,6 +684,7 @@ class _MatchHistorySnapshot {
     var weightedEliminationMatches = 0.0;
     var weightedEliminationWins = 0.0;
     var weightedEliminationTies = 0.0;
+    var corroboratedHeavyLosses = 0;
 
     for (final sample in analyzedMatches) {
       if (_isLikelyErrantLoss(
@@ -624,12 +698,14 @@ class _MatchHistorySnapshot {
 
       var weight =
           sample.eventWeight * sample.roundWeight * sample.recencyWeight;
-      if (_isCorroboratedHeavyLoss(
+      final corroboratedHeavyLoss = _isCorroboratedHeavyLoss(
         sample,
         analyzedMatches,
         severeLossMarginFloor: severeLossMarginFloor,
-      )) {
+      );
+      if (corroboratedHeavyLoss) {
         weight *= 1.08;
+        corroboratedHeavyLosses += 1;
       }
 
       weightedMatches += weight;
@@ -672,6 +748,7 @@ class _MatchHistorySnapshot {
       totalLosses: totalLosses,
       totalTies: totalTies,
       eliminationMatches: eliminationMatches,
+        corroboratedHeavyLosses: corroboratedHeavyLosses,
       weightedMatches: weightedMatches,
       winRate: (weightedWins + (weightedTies * 0.5)) / weightedMatches,
       eliminationWinRate: weightedEliminationMatches <= 0
@@ -734,6 +811,37 @@ class _PerformanceProfile {
               .toDouble(),
     );
   }
+}
+
+double _worldSkillPrior(WorldSkillsEntry entry) {
+  final rankSignal = entry.rank <= 0
+      ? 0.35
+      : (1.0 - (math.log(entry.rank + 1) / math.log(4200)))
+            .clamp(0.0, 1.0)
+            .toDouble();
+  final combinedSignal = (entry.combinedScore / 230).clamp(0.0, 1.0).toDouble();
+  final programmingSignal =
+      (entry.programmingScore / 120).clamp(0.0, 1.0).toDouble();
+  final driverSignal = (entry.driverScore / 120).clamp(0.0, 1.0).toDouble();
+
+  return ((rankSignal * 0.55) +
+          (combinedSignal * 0.30) +
+          (programmingSignal * 0.08) +
+          (driverSignal * 0.07))
+      .clamp(0.0, 1.0)
+      .toDouble();
+}
+
+double _blendMetric({
+  required double primary,
+  required double fallback,
+  required double confidence,
+}) {
+  if (primary.isNaN || primary.isInfinite) {
+    return fallback;
+  }
+  final weight = confidence.clamp(0.0, 1.0).toDouble();
+  return (primary * weight) + (fallback * (1 - weight));
 }
 
 double _eventTierWeight(String name) {

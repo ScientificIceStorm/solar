@@ -72,58 +72,13 @@ class EventDivisionScreen extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: <Widget>[
-                  FutureBuilder<List<Object>>(
-                    future: Future.wait<Object>(<Future<Object>>[
-                      rankingsFuture.then<Object>((value) => value),
-                      matchesFuture.then<Object>((value) => value),
-                      eventTeamsFuture.then<Object>((value) => value),
-                    ]),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const _CenteredLoader();
-                      }
-
-                      final values = snapshot.data!;
-                      final rankings = values[0] as List<RankingRecord>;
-                      final matches = values[1] as List<MatchSummary>;
-                      final eventTeams = values[2] as List<TeamSummary>;
-                      if (rankings.isEmpty) {
-                        return const _EmptyEventState(
-                          title: 'No rankings yet',
-                          body:
-                              'This division has no published rankings right now.',
-                        );
-                      }
-
-                      final teamsByKey = _eventTeamsByKey(
-                        controller: controller,
-                        rankings: rankings,
-                        eventTeams: eventTeams,
-                      );
-                      final performanceTable =
-                          _DivisionPerformanceTable.fromMatches(matches);
-
-                      return StretchingOverscrollIndicator(
-                        axisDirection: AxisDirection.down,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          itemCount: rankings.length,
-                          itemBuilder: (context, index) {
-                            final ranking = rankings[index];
-                            final team =
-                                teamsByKey[ranking.team.number.trim().toUpperCase()] ??
-                                _teamFromRanking(controller, ranking);
-                            return _RankingCard(
-                              event: args.event,
-                              ranking: ranking,
-                              team: team,
-                              highlightTeamNumber: args.highlightTeamNumber,
-                              metrics: performanceTable.forTeam(team.number),
-                            );
-                          },
-                        ),
-                      );
-                    },
+                  _DivisionRankingsTab(
+                    controller: controller,
+                    event: args.event,
+                    highlightTeamNumber: args.highlightTeamNumber,
+                    rankingsFuture: rankingsFuture,
+                    matchesFuture: matchesFuture,
+                    eventTeamsFuture: eventTeamsFuture,
                   ),
                   FutureBuilder<List<Object>>(
                     future: Future.wait<Object>(<Future<Object>>[
@@ -325,6 +280,265 @@ TeamSummary _teamFromRanking(
   );
 }
 
+enum _DivisionRankingSortMode {
+  rank,
+  opr,
+  dpr,
+  ccwm,
+  wp,
+  ap,
+  sp,
+}
+
+class _DivisionRankingsTab extends StatefulWidget {
+  const _DivisionRankingsTab({
+    required this.controller,
+    required this.event,
+    required this.highlightTeamNumber,
+    required this.rankingsFuture,
+    required this.matchesFuture,
+    required this.eventTeamsFuture,
+  });
+
+  final AppSessionController controller;
+  final EventSummary event;
+  final String? highlightTeamNumber;
+  final Future<List<RankingRecord>> rankingsFuture;
+  final Future<List<MatchSummary>> matchesFuture;
+  final Future<List<TeamSummary>> eventTeamsFuture;
+
+  @override
+  State<_DivisionRankingsTab> createState() => _DivisionRankingsTabState();
+}
+
+class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
+  _DivisionRankingSortMode _sortMode = _DivisionRankingSortMode.rank;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Object>>(
+      future: Future.wait<Object>(<Future<Object>>[
+        widget.rankingsFuture.then<Object>((value) => value),
+        widget.matchesFuture.then<Object>((value) => value),
+        widget.eventTeamsFuture.then<Object>((value) => value),
+      ]),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const _CenteredLoader();
+        }
+
+        final values = snapshot.data!;
+        final rankings = values[0] as List<RankingRecord>;
+        final matches = values[1] as List<MatchSummary>;
+        final eventTeams = values[2] as List<TeamSummary>;
+        if (rankings.isEmpty) {
+          return const _EmptyEventState(
+            title: 'No rankings yet',
+            body: 'This division has no published rankings right now.',
+          );
+        }
+
+        final teamsByKey = _eventTeamsByKey(
+          controller: widget.controller,
+          rankings: rankings,
+          eventTeams: eventTeams,
+        );
+        final performanceTable = _DivisionPerformanceTable.fromMatches(matches);
+        final sortedRankings = _sortDivisionRankings(
+          rankings: rankings,
+          performanceTable: performanceTable,
+          sortMode: _sortMode,
+        );
+
+        return StretchingOverscrollIndicator(
+          axisDirection: AxisDirection.down,
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 8),
+            itemCount: sortedRankings.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _DivisionRankingSortStrip(
+                  selectedMode: _sortMode,
+                  onModeSelected: (value) {
+                    setState(() {
+                      _sortMode = value;
+                    });
+                  },
+                );
+              }
+
+              final ranking = sortedRankings[index - 1];
+              final team =
+                  teamsByKey[ranking.team.number.trim().toUpperCase()] ??
+                  _teamFromRanking(widget.controller, ranking);
+              return _RankingCard(
+                event: widget.event,
+                ranking: ranking,
+                team: team,
+                highlightTeamNumber: widget.highlightTeamNumber,
+                metrics: performanceTable.forTeam(team.number),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DivisionRankingSortStrip extends StatelessWidget {
+  const _DivisionRankingSortStrip({
+    required this.selectedMode,
+    required this.onModeSelected,
+  });
+
+  final _DivisionRankingSortMode selectedMode;
+  final ValueChanged<_DivisionRankingSortMode> onModeSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _DivisionRankingSortMode.values.map((mode) {
+            final selected = mode == selectedMode;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () => onModeSelected(mode),
+                borderRadius: BorderRadius.circular(999),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected ? const Color(0xFF16182C) : Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF16182C)
+                          : const Color(0xFFE2E4F0),
+                    ),
+                  ),
+                  child: Text(
+                    _divisionSortModeLabel(mode),
+                    style: TextStyle(
+                      color: selected ? Colors.white : const Color(0xFF24243A),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(growable: false),
+        ),
+      ),
+    );
+  }
+}
+
+List<RankingRecord> _sortDivisionRankings({
+  required List<RankingRecord> rankings,
+  required _DivisionPerformanceTable performanceTable,
+  required _DivisionRankingSortMode sortMode,
+}) {
+  final sorted = rankings.toList(growable: false);
+  sorted.sort((a, b) {
+    final aMetrics = performanceTable.forTeam(a.team.number);
+    final bMetrics = performanceTable.forTeam(b.team.number);
+
+    int metricCompare;
+    switch (sortMode) {
+      case _DivisionRankingSortMode.rank:
+        metricCompare = _safeRank(a.rank).compareTo(_safeRank(b.rank));
+        break;
+      case _DivisionRankingSortMode.opr:
+        metricCompare = _compareDescendingDouble(
+          aMetrics?.opr ?? _fallbackOpr(a),
+          bMetrics?.opr ?? _fallbackOpr(b),
+        );
+        break;
+      case _DivisionRankingSortMode.dpr:
+        metricCompare = _compareAscendingDouble(
+          aMetrics?.dpr,
+          bMetrics?.dpr,
+        );
+        break;
+      case _DivisionRankingSortMode.ccwm:
+        metricCompare = _compareDescendingDouble(
+          aMetrics?.ccwm,
+          bMetrics?.ccwm,
+        );
+        break;
+      case _DivisionRankingSortMode.wp:
+        metricCompare = _compareDescendingInt(a.wp, b.wp);
+        break;
+      case _DivisionRankingSortMode.ap:
+        metricCompare = _compareDescendingInt(a.ap, b.ap);
+        break;
+      case _DivisionRankingSortMode.sp:
+        metricCompare = _compareDescendingInt(a.sp, b.sp);
+        break;
+    }
+
+    if (metricCompare != 0) {
+      return metricCompare;
+    }
+    return _safeRank(a.rank).compareTo(_safeRank(b.rank));
+  });
+  return sorted;
+}
+
+String _divisionSortModeLabel(_DivisionRankingSortMode mode) {
+  switch (mode) {
+    case _DivisionRankingSortMode.rank:
+      return 'RANK';
+    case _DivisionRankingSortMode.opr:
+      return 'OPR';
+    case _DivisionRankingSortMode.dpr:
+      return 'DPR';
+    case _DivisionRankingSortMode.ccwm:
+      return 'CCWM';
+    case _DivisionRankingSortMode.wp:
+      return 'WP';
+    case _DivisionRankingSortMode.ap:
+      return 'AP';
+    case _DivisionRankingSortMode.sp:
+      return 'SP';
+  }
+}
+
+int _safeRank(int value) => value > 0 ? value : 999999;
+
+int _compareDescendingInt(int a, int b) {
+  final aValue = a < 0 ? -999999 : a;
+  final bValue = b < 0 ? -999999 : b;
+  return bValue.compareTo(aValue);
+}
+
+int _compareDescendingDouble(double? a, double? b) {
+  final aValue = a ?? -999999;
+  final bValue = b ?? -999999;
+  return bValue.compareTo(aValue);
+}
+
+int _compareAscendingDouble(double? a, double? b) {
+  final aValue = a ?? 999999;
+  final bValue = b ?? 999999;
+  return aValue.compareTo(bValue);
+}
+
+double _fallbackOpr(RankingRecord ranking) {
+  if (ranking.averagePoints >= 0) {
+    return ranking.averagePoints;
+  }
+  return -999999;
+}
+
 class _RankingCard extends StatelessWidget {
   const _RankingCard({
     required this.event,
@@ -425,12 +639,32 @@ class _RankingCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  '${_rankingRecordLabel(ranking, metrics)}  •  WP ${_intLabel(ranking.wp)}  •  AP ${_intLabel(ranking.ap)}',
-                  style: const TextStyle(
-                    color: Color(0xFF8E92A7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    children: <TextSpan>[
+                      TextSpan(
+                        text: '${_rankingRecordLabel(ranking, metrics)}  •  ',
+                      ),
+                      TextSpan(
+                        text: 'WP ${_intLabel(ranking.wp)}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const TextSpan(text: '  •  '),
+                      TextSpan(
+                        text: 'AP ${_intLabel(ranking.ap)}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const TextSpan(text: '  •  '),
+                      TextSpan(
+                        text: 'SP ${_intLabel(ranking.sp)}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -459,7 +693,7 @@ String _teamSubtitle(TeamSummary team) {
   if (parts.isNotEmpty) {
     return parts.join('  •  ');
   }
-return 'Team profile pending';
+  return 'Team profile pending';
 }
 
 class _DivisionPerformanceTable {
@@ -642,7 +876,7 @@ class _PredictionsTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Lightweight forecast from live seed order, event record, and in-division scoring. Strong captains can still decline if holding their own slot looks better.',
+            'Lightweight forecast from live seed order, event record, and in-division scoring. Alliance count scales with field size (up to 16), and top-seed invitations are weighted to be accepted more often.',
             style: TextStyle(
               color: Color(0xFF8E92A7),
               fontSize: 14,
@@ -831,13 +1065,17 @@ class _PredictedAllianceSelection {
         .where((ranking) => ranking.rank > 0)
         .toList(growable: false)
       ..sort((a, b) => a.rank.compareTo(b.rank));
-    if (rankedTeams.length < 8) {
+    final allianceCount = _predictedAllianceCount(rankedTeams.length);
+    if (allianceCount <= 0 || rankedTeams.length < allianceCount) {
       return const <_PredictedAllianceSelection>[];
     }
 
     final predicted = <_PredictedAllianceSelection>[];
-    final captains = rankedTeams.take(8).map((entry) => entry.team.number).toList();
-    var nextCaptainIndex = 8;
+    final captains = rankedTeams
+        .take(allianceCount)
+        .map((entry) => entry.team.number)
+        .toList();
+    var nextCaptainIndex = allianceCount;
     final unavailable = <String>{};
 
     TeamSummary teamForNumber(String teamNumber) {
@@ -882,18 +1120,28 @@ class _PredictedAllianceSelection {
       RankingRecord captain,
       RankingRecord candidate,
     ) {
+      if (captain.rank == 1 && candidate.rank == 2) {
+        return false;
+      }
+
       final candidateScore = captainScore(candidate);
       final captainSeedScore = captainScore(captain);
       if (candidate.rank < captain.rank) {
         return true;
       }
-      if (candidate.rank <= 4 && candidateScore >= captainSeedScore - 0.6) {
-        return true;
+      if (candidate.rank <= 2) {
+        return candidateScore >= captainSeedScore + 2.8;
       }
-      return candidateScore >= captainSeedScore + 0.8;
+      if (candidate.rank <= 4) {
+        return candidateScore >= captainSeedScore + 2.3;
+      }
+      if (candidate.rank <= allianceCount) {
+        return candidateScore >= captainSeedScore + 2.9;
+      }
+      return candidateScore >= captainSeedScore + 3.4;
     }
 
-    for (var seedIndex = 0; seedIndex < 8; seedIndex++) {
+    for (var seedIndex = 0; seedIndex < allianceCount; seedIndex++) {
       final captainNumber = captains[seedIndex].trim().toUpperCase();
       if (unavailable.contains(captainNumber)) {
         continue;
@@ -921,7 +1169,8 @@ class _PredictedAllianceSelection {
           return a.rank.compareTo(b.rank);
         });
 
-      for (final candidate in candidates.take(12)) {
+      final candidateWindow = allianceCount >= 16 ? 24 : 12;
+      for (final candidate in candidates.take(candidateWindow)) {
         final candidateKey = candidate.team.number.trim().toUpperCase();
         final candidateIsCaptain = captains.any(
           (captain) => captain.trim().toUpperCase() == candidateKey,
@@ -974,6 +1223,19 @@ class _PredictedAllianceSelection {
     }
 
     return predicted;
+  }
+
+  static int _predictedAllianceCount(int rankedTeamCount) {
+    if (rankedTeamCount >= 32) {
+      return 16;
+    }
+    if (rankedTeamCount >= 16) {
+      return 8;
+    }
+    if (rankedTeamCount >= 8) {
+      return 4;
+    }
+    return 0;
   }
 }
 
