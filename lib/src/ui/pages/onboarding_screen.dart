@@ -99,16 +99,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         teamNumber: _teamController.text,
         competitionPreference: _competition,
       );
-      await controller.completeOnboarding(
-        competitionPreference: _competition,
-      );
+      await controller.completeOnboarding(competitionPreference: _competition);
       if (!mounted) {
         return;
       }
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        HomeScreen.routeName,
-        (route) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(HomeScreen.routeName, (route) => false);
     } on FormatException catch (error) {
       if (!mounted) {
         return;
@@ -178,10 +175,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.12),
                         ),
-                        child: Image.asset(
-                          slide.imageAsset,
-                          fit: BoxFit.cover,
-                        ),
+                        child: Image.asset(slide.imageAsset, fit: BoxFit.cover),
                       ),
                     ),
                   );
@@ -285,7 +279,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Your team will be stored locally on this device.',
+                      'Team number is optional. You can skip this and favorite teams later.',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.68),
                         fontSize: 12,

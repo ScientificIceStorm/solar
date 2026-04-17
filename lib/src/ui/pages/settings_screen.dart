@@ -29,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSavingProfile = false;
   int? _selectedSeasonId;
   bool _showDeveloperTools = false;
+  AppCompetitionPreference? _seasonCompetitionPreference;
 
   @override
   void didChangeDependencies() {
@@ -46,9 +47,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _didSeedProfile = true;
     }
 
-    _seasonsFuture ??= controller.fetchWorldSkillsSeasons(
-      programFilter: solarPrimaryProgramFilter,
-    );
+    if (_seasonCompetitionPreference != controller.competitionPreference ||
+        _seasonsFuture == null) {
+      _seasonCompetitionPreference = controller.competitionPreference;
+      _seasonsFuture = controller.fetchWorldSkillsSeasons(
+        programFilter: _programFilterForCompetition(
+          controller.competitionPreference,
+        ),
+      );
+    }
   }
 
   @override
@@ -114,6 +121,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     }
+  }
+
+  String _programFilterForCompetition(AppCompetitionPreference preference) {
+    return switch (preference) {
+      AppCompetitionPreference.vexV5 => solarPrimaryProgramFilter,
+      AppCompetitionPreference.vexIQ => 'vex iq',
+      AppCompetitionPreference.vexU => 'vex u',
+      AppCompetitionPreference.vexAI => 'vex ai',
+    };
   }
 
   Future<void> _pickSeason(List<SeasonSummary> seasons) async {
@@ -386,7 +402,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         AppCompetitionPreference.vexU => 'VEX U',
                         AppCompetitionPreference.vexAI => 'VEX AI',
                       },
-                      onSelected: controller.setCompetitionPreference,
+                      onSelected: (value) async {
+                        await controller.setCompetitionPreference(value);
+                        if (!mounted) {
+                          return;
+                        }
+                        setState(() {
+                          _seasonCompetitionPreference = value;
+                          _selectedSeasonId = controller.preferredSeasonId;
+                          _seasonsFuture = controller.fetchWorldSkillsSeasons(
+                            programFilter: _programFilterForCompetition(value),
+                            force: true,
+                          );
+                        });
+                      },
                     ),
                     const SizedBox(height: 12),
                     Align(

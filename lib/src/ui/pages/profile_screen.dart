@@ -50,11 +50,17 @@ class ProfileScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.only(bottom: 14),
             children: <Widget>[
-              SolarTeamOverviewCard(
-                team: account.team,
-                teamStats: teamStats,
-                onTap: () {
-                  openSolarTeamProfileForSummary(context, account.team);
+              FutureBuilder<int>(
+                future: controller.fetchTeamAwardsCount(teamStats.team),
+                builder: (context, snapshot) {
+                  return SolarTeamOverviewCard(
+                    team: account.team,
+                    teamStats: teamStats,
+                    awardsCount: snapshot.data,
+                    onTap: () {
+                      openSolarTeamProfileForSummary(context, account.team);
+                    },
+                  );
                 },
               ),
               if (favoriteTeams.isNotEmpty) ...<Widget>[
@@ -397,7 +403,9 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFEEF2FF),
-                                        borderRadius: BorderRadius.circular(999),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
                                       ),
                                       child: Text(
                                         '${data.skillsHistory[i].combined}',
@@ -497,7 +505,9 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
                                               .isNotEmpty) ...<Widget>[
                                             const SizedBox(height: 3),
                                             Text(
-                                              data.awardsHistory[i].recipientLabel,
+                                              data
+                                                  .awardsHistory[i]
+                                                  .recipientLabel,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
@@ -691,7 +701,9 @@ Future<List<_ProfileAwardsHistoryEntry>> _awardsHistoryFromPastEvents({
         entries.add(
           _ProfileAwardsHistoryEntry(
             eventLabel: _eventLabel(event.start),
-            eventName: event.name.trim().isEmpty ? event.sku : event.name.trim(),
+            eventName: event.name.trim().isEmpty
+                ? event.sku
+                : event.name.trim(),
             awardTitle: award.title.trim().isEmpty
                 ? 'Award'
                 : award.title.trim(),
@@ -703,9 +715,9 @@ Future<List<_ProfileAwardsHistoryEntry>> _awardsHistoryFromPastEvents({
     }),
   );
 
-  final flattened = awardChunks.expand((entries) => entries).toList(
-    growable: false,
-  );
+  final flattened = awardChunks
+      .expand((entries) => entries)
+      .toList(growable: false);
   if (flattened.length <= 18) {
     return flattened;
   }

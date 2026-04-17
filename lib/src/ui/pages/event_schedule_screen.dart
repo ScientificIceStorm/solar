@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/solar_app_scope.dart';
 import '../../models/robot_events_models.dart';
 import 'match_details_screen.dart';
+import 'event_team_screen.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
 
@@ -53,6 +54,19 @@ class EventScheduleScreen extends StatelessWidget {
                       event: event,
                       highlightTeamNumber: teamNumber,
                     ),
+                  );
+                },
+                onTeamTap: (team) {
+                  final resolvedTeam = controller.resolveKnownTeamSummary(
+                    teamNumber: team.number,
+                    teamId: team.id,
+                    teamName: team.name,
+                  );
+                  openSolarEventTeamScreen(
+                    context,
+                    event: event,
+                    team: resolvedTeam,
+                    highlightTeamNumber: team.number,
                   );
                 },
               ),

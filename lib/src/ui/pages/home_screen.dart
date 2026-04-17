@@ -19,6 +19,7 @@ import '../widgets/solar_team_link.dart';
 import '../widgets/solar_team_overview_card.dart';
 import '../widgets/worlds_schedule_banner.dart';
 import 'event_division_screen.dart';
+import 'event_team_screen.dart';
 import 'match_details_screen.dart';
 import 'onboarding_screen.dart';
 import 'search_screen.dart';
@@ -37,6 +38,7 @@ enum _HomeSearchScope { all, teams, events }
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _homeScrollController = ScrollController();
   AppSessionController? _sessionController;
   _HomeSearchScope _searchScope = _HomeSearchScope.all;
 
@@ -54,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _homeScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -70,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (normalizedQuery.length >= 2) {
       unawaited(controller.preloadSearchEvents());
       unawaited(controller.preloadSearchTeams());
+      unawaited(controller.preloadLiveSearchTeams(normalizedQuery));
     }
 
     setState(() {});
@@ -217,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: StretchingOverscrollIndicator(
                   axisDirection: AxisDirection.down,
                   child: ListView(
+                    controller: _homeScrollController,
                     physics: const BouncingScrollPhysics(
                       parent: AlwaysScrollableScrollPhysics(),
                     ),
@@ -1830,6 +1835,20 @@ class _QuickviewSectionState extends State<_QuickviewSection> {
                       ),
                     );
                   },
+                  onTeamTap: (teamReference) {
+                    final resolvedTeam = widget.controller
+                        .resolveKnownTeamSummary(
+                          teamNumber: teamReference.number,
+                          teamId: teamReference.id,
+                          teamName: teamReference.name,
+                        );
+                    openSolarEventTeamScreen(
+                      context,
+                      event: quickview.event,
+                      team: resolvedTeam,
+                      highlightTeamNumber: teamReference.number,
+                    );
+                  },
                 ),
             ] else
               const Text(
@@ -1950,27 +1969,41 @@ class _QuickviewHeroCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        _displayEventTitle(event.name),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          height: 1.15,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _quickviewMetaLine(match: match, event: event),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.62),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          height: 1.25,
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () {
+                          Navigator.of(context).pushNamed(
+                            EventDetailsScreen.routeName,
+                            arguments: event,
+                          );
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              _displayEventTitle(event.name),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                height: 1.15,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _quickviewMetaLine(match: match, event: event),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.62),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -2073,6 +2106,7 @@ class _QuickviewHeroCard extends StatelessWidget {
                     label: 'Your alliance',
                     teams: yourAlliance?.teams ?? const <TeamReference>[],
                     color: const Color(0xFFFF8E87),
+                    event: event,
                     highlightTeamNumber: teamNumber,
                   ),
                 ),
@@ -2082,6 +2116,7 @@ class _QuickviewHeroCard extends StatelessWidget {
                     label: 'Opponents',
                     teams: opponents?.teams ?? const <TeamReference>[],
                     color: const Color(0xFF8FB0FF),
+                    event: event,
                     highlightTeamNumber: teamNumber,
                   ),
                 ),
@@ -2099,16 +2134,19 @@ class _AlliancePreviewColumn extends StatelessWidget {
     required this.label,
     required this.teams,
     required this.color,
+    required this.event,
     required this.highlightTeamNumber,
   });
 
   final String label;
   final List<TeamReference> teams;
   final Color color;
+  final EventSummary event;
   final String highlightTeamNumber;
 
   @override
   Widget build(BuildContext context) {
+    final controller = SolarAppScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -2139,6 +2177,19 @@ class _AlliancePreviewColumn extends StatelessWidget {
                 teamNumber: team.number,
                 teamId: team.id,
                 teamName: team.name,
+                onTap: () {
+                  final resolvedTeam = controller.resolveKnownTeamSummary(
+                    teamNumber: team.number,
+                    teamId: team.id,
+                    teamName: team.name,
+                  );
+                  openSolarEventTeamScreen(
+                    context,
+                    event: event,
+                    team: resolvedTeam,
+                    highlightTeamNumber: team.number,
+                  );
+                },
                 style: TextStyle(
                   color:
                       team.number.trim().toUpperCase() ==

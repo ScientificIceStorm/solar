@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_account.dart';
 import 'solar_team_link.dart';
 
-enum SolarNavDestination { home, rankings, calendar, profile }
+enum SolarNavDestination { home, rankings, search, calendar, profile }
 
 enum SolarDrawerAction { profile, settings, calendar }
 
@@ -13,6 +13,8 @@ String solarRouteForDestination(SolarNavDestination destination) {
       return '/home';
     case SolarNavDestination.rankings:
       return '/rankings';
+    case SolarNavDestination.search:
+      return '/search';
     case SolarNavDestination.calendar:
       return '/calendar';
     case SolarNavDestination.profile:
@@ -178,11 +180,11 @@ class SolarBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      minimum: const EdgeInsets.only(bottom: 20),
+      minimum: const EdgeInsets.only(bottom: 18),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 22),
         child: Container(
-          height: 78,
+          height: 74,
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(999),
@@ -195,9 +197,9 @@ class SolarBottomNavBar extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
                 _BottomBarIconButton(
                   key: const ValueKey<String>('nav-home'),
@@ -210,6 +212,12 @@ class SolarBottomNavBar extends StatelessWidget {
                   icon: Icons.public_outlined,
                   selected: current == SolarNavDestination.rankings,
                   onTap: () => onSelected(SolarNavDestination.rankings),
+                ),
+                _BottomBarIconButton(
+                  key: const ValueKey<String>('nav-search'),
+                  icon: Icons.search_rounded,
+                  selected: current == SolarNavDestination.search,
+                  onTap: () => onSelected(SolarNavDestination.search),
                 ),
                 _BottomBarIconButton(
                   key: const ValueKey<String>('nav-calendar'),
@@ -307,7 +315,7 @@ class _BottomBarIconButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(30),
       child: SizedBox(
-        width: 60,
+        width: 46,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[

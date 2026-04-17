@@ -10,6 +10,7 @@ abstract class TeamDirectoryService {
   Future<TeamSummary> validateTeamNumber(
     String teamNumber, {
     int? preferredSeasonId,
+    List<int> programIds = solarPrimaryProgramIds,
   });
 
   Future<TeamStatsSnapshot> loadTeamStats(
@@ -131,6 +132,7 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
   Future<TeamSummary> validateTeamNumber(
     String teamNumber, {
     int? preferredSeasonId,
+    List<int> programIds = solarPrimaryProgramIds,
   }) async {
     final normalizedNumber = teamNumber.trim().toUpperCase();
     if (normalizedNumber.isEmpty) {
@@ -145,6 +147,7 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
 
     final matches = await _api.robotEvents.searchTeams(
       number: normalizedNumber,
+      programIds: programIds,
     );
     final exactMatch = matches.where((team) {
       return team.number.trim().toUpperCase() == normalizedNumber;
@@ -406,6 +409,7 @@ class FakeTeamDirectoryService implements TeamDirectoryService {
   Future<TeamSummary> validateTeamNumber(
     String teamNumber, {
     int? preferredSeasonId,
+    List<int> programIds = solarPrimaryProgramIds,
   }) async {
     final normalizedNumber = teamNumber.trim().toUpperCase();
     final team = _teamsByNumber[normalizedNumber];

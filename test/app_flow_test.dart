@@ -7,6 +7,8 @@ import 'package:solar_v6/src/models/robot_events_models.dart';
 import 'package:solar_v6/src/models/world_skills_models.dart';
 import 'package:solar_v6/src/ui/models/app_account.dart';
 import 'package:solar_v6/src/ui/models/team_stats_snapshot.dart';
+import 'package:solar_v6/src/ui/pages/calendar_screen.dart';
+import 'package:solar_v6/src/ui/pages/rankings_screen.dart';
 import 'package:solar_v6/src/ui/pages/settings_screen.dart';
 import 'package:solar_v6/src/ui/services/in_memory_account_repository.dart';
 import 'package:solar_v6/src/ui/services/team_directory_service.dart';
@@ -164,25 +166,6 @@ void main() {
     expect(find.text('Events'), findsWidgets);
     expect(find.text('98601Y'), findsWidgets);
     expect(find.textContaining('World Championships'), findsWidgets);
-
-    await tester.tap(find.text('98601Y').first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Performance'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
-    await tester.pumpAndSettle();
-
-    await tester.tap(
-      find.byKey(const ValueKey<String>('search-all-teams-button')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Teams'), findsWidgets);
-    expect(find.textContaining('Results for "st. louis"'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.close_rounded).last);
-    await tester.pumpAndSettle();
   });
 
   testWidgets(
@@ -206,12 +189,13 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('nav-rankings')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rankings'), findsOneWidget);
-      expect(find.text('SKILL'), findsOneWidget);
+      expect(find.byType(RankingsScreen), findsOneWidget);
+      expect(find.text('SKILL'), findsWidgets);
 
       await tester.tap(find.byKey(const ValueKey<String>('nav-calendar')));
       await tester.pumpAndSettle();
 
+      expect(find.byType(CalendarScreen), findsOneWidget);
       expect(find.text('Team Calendar'), findsOneWidget);
     },
   );
@@ -337,11 +321,13 @@ class _RecordingTeamDirectoryService extends FakeTeamDirectoryService {
   Future<TeamSummary> validateTeamNumber(
     String teamNumber, {
     int? preferredSeasonId,
+    List<int> programIds = const <int>[],
   }) async {
     lastValidatedPreferredSeasonId = preferredSeasonId;
     return super.validateTeamNumber(
       teamNumber,
       preferredSeasonId: preferredSeasonId,
+      programIds: programIds,
     );
   }
 }

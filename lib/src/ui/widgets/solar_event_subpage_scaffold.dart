@@ -26,6 +26,7 @@ class SolarEventSubpageScaffold extends StatelessWidget {
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        extendBody: true,
         drawer: account == null
             ? null
             : SolarAppDrawer(
@@ -46,8 +47,6 @@ class SolarEventSubpageScaffold extends StatelessWidget {
                 },
               ),
         body: SolarScreenBackground(
-          topFillColor: Colors.black,
-          topFillHeight: MediaQuery.paddingOf(context).top + 26,
           child: Column(
             children: <Widget>[
               Row(

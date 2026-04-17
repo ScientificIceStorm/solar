@@ -116,11 +116,23 @@ private extension View {
   }
 
   private var solarWidgetGradient: some View {
-    LinearGradient(
-      colors: [Color(red: 0.05, green: 0.07, blue: 0.13), Color(red: 0.10, green: 0.16, blue: 0.31)],
-      startPoint: .topLeading,
-      endPoint: .bottomTrailing
-    )
+    ZStack {
+      LinearGradient(
+        colors: [
+          Color(red: 0.04, green: 0.06, blue: 0.14),
+          Color(red: 0.09, green: 0.14, blue: 0.32),
+          Color(red: 0.15, green: 0.22, blue: 0.42)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      RadialGradient(
+        colors: [Color.white.opacity(0.20), Color.white.opacity(0.0)],
+        center: .topLeading,
+        startRadius: 0,
+        endRadius: 220
+      )
+    }
   }
 }
 
@@ -497,34 +509,41 @@ struct SolarCompanionLiveActivity: Widget {
     ActivityConfiguration(for: SolarMatchActivityAttributes.self) { context in
       ZStack {
         LinearGradient(
-          colors: [Color.black, Color(red: 0.08, green: 0.11, blue: 0.22)],
+          colors: [
+            Color(red: 0.02, green: 0.03, blue: 0.08),
+            Color(red: 0.07, green: 0.11, blue: 0.24),
+            Color(red: 0.10, green: 0.17, blue: 0.34)
+          ],
           startPoint: .topLeading,
           endPoint: .bottomTrailing
         )
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
           HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
               Text(context.state.mode == "recent" ? "Latest Result" : context.state.matchLabel)
-                .font(solarRounded(context.state.mode == "recent" ? 14 : 22, weight: .bold))
+                .font(solarRounded(context.state.mode == "recent" ? 13 : 18, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
+                .minimumScaleFactor(0.76)
               Text(context.state.eventName)
-                .font(solarRounded(14, weight: .semibold))
+                .font(solarRounded(12, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.82))
-                .lineLimit(2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
             }
             Spacer()
             if context.state.mode == "recent" {
               Text(context.state.recentResultScore)
-                .font(solarRounded(22, weight: .bold))
+                .font(solarRounded(17, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.74)
             } else if context.state.scheduledAt > 0 {
               Text(Date(timeIntervalSince1970: TimeInterval(context.state.scheduledAt) / 1000), style: .time)
-                .font(solarRounded(18, weight: .bold))
+                .font(solarRounded(16, weight: .bold))
                 .foregroundStyle(.white)
+                .minimumScaleFactor(0.76)
             }
           }
 
@@ -533,17 +552,23 @@ struct SolarCompanionLiveActivity: Widget {
               .filter { !$0.isEmpty }
               .joined(separator: " • ")
           )
-          .font(solarRounded(12, weight: .semibold))
+          .font(solarRounded(10, weight: .semibold))
           .foregroundStyle(.white.opacity(0.65))
+          .lineLimit(1)
+          .minimumScaleFactor(0.74)
 
           HStack(spacing: 10) {
             Text(allianceLine(label: "Red", teams: context.state.redAlliance))
               .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
+              .lineLimit(1)
+              .minimumScaleFactor(0.66)
             Spacer()
             Text(allianceLine(label: "Blue", teams: context.state.blueAlliance))
               .foregroundStyle(Color(red: 0.61, green: 0.74, blue: 1.0))
+              .lineLimit(1)
+              .minimumScaleFactor(0.66)
           }
-          .font(solarRounded(12, weight: .semibold))
+          .font(solarRounded(10, weight: .semibold))
 
           if let countdownDate = countdownTargetDate(for: context.state.scheduledAt),
              countdownDate > Date() {
@@ -555,21 +580,18 @@ struct SolarCompanionLiveActivity: Widget {
                 .monospacedDigit()
               Spacer(minLength: 0)
             }
-            .font(solarRounded(12, weight: .semibold))
+            .font(solarRounded(10, weight: .semibold))
           }
 
-          Divider().overlay(Color.white.opacity(0.12))
-
           HStack(spacing: 10) {
-            compactMetric("Last", "\(context.state.recentResultTitle) \(context.state.recentResultScore)")
+            compactMetric("Last", context.state.recentResultScore)
             compactMetric("Rank", context.state.rankingSummary)
             compactMetric("Skills", context.state.worldRankLabel)
-            compactMetric("Solarize", context.state.solarizeRankLabel)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 22)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
       }
       .widgetURL(context.state.mode == "recent" ? recentResultDeepLinkURL : nextMatchDeepLinkURL)
     } dynamicIsland: { context in
@@ -583,11 +605,11 @@ struct SolarCompanionLiveActivity: Widget {
         DynamicIslandExpandedRegion(.center) {
           VStack(spacing: 4) {
             Text(context.state.matchLabel)
-              .font(solarRounded(18, weight: .bold))
+              .font(solarRounded(16, weight: .bold))
               .lineLimit(1)
               .minimumScaleFactor(0.72)
             Text(context.state.eventName)
-              .font(solarRounded(12, weight: .semibold))
+              .font(solarRounded(11, weight: .semibold))
               .lineLimit(1)
               .minimumScaleFactor(0.72)
           }
@@ -605,7 +627,7 @@ struct SolarCompanionLiveActivity: Widget {
           .minimumScaleFactor(0.72)
         }
         DynamicIslandExpandedRegion(.bottom) {
-          VStack(alignment: .leading, spacing: 7) {
+          VStack(alignment: .leading, spacing: 5) {
             HStack {
               Text(context.state.redAlliance)
                 .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.60))
@@ -617,39 +639,23 @@ struct SolarCompanionLiveActivity: Widget {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             }
-            .font(solarRounded(12, weight: .semibold))
+            .font(solarRounded(11, weight: .semibold))
 
             HStack {
-              Text("\(context.state.recentResultTitle) \(context.state.recentResultScore)")
+              Text("Last \(context.state.recentResultScore)")
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
               Spacer()
-              Text(
-                context.state.mode == "recent"
-                    ? context.state.rankingSummary
-                    : "Pred \(context.state.predictedScoreLine)"
-              )
+              Text("Rank \(context.state.rankingSummary)")
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             }
-            .font(solarRounded(12, weight: .semibold))
+            .font(solarRounded(10, weight: .semibold))
             .foregroundStyle(.white.opacity(0.82))
-
-            HStack {
-              Text("Skills \(context.state.worldRankLabel)")
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-              Spacer()
-              Text("Solarize \(context.state.solarizeRankLabel)")
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            }
-            .font(solarRounded(12, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.80))
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 4)
-          .padding(.bottom, 8)
+          .padding(.top, 2)
+          .padding(.bottom, 4)
         }
       } compactLeading: {
         Text(context.state.mode == "recent" ? shortResultLabel(context.state.recentResultTitle) : shortMatchLabel(context.state.matchLabel))
@@ -680,12 +686,12 @@ struct SolarCompanionLiveActivity: Widget {
   private func compactMetric(_ label: String, _ value: String) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(label.uppercased())
-        .font(solarRounded(10, weight: .heavy))
+        .font(solarRounded(9, weight: .heavy))
         .foregroundStyle(.white.opacity(0.56))
       Text(value)
-        .font(solarRounded(11, weight: .semibold))
+        .font(solarRounded(10, weight: .semibold))
         .foregroundStyle(.white)
-        .lineLimit(2)
+        .lineLimit(1)
         .minimumScaleFactor(0.78)
     }
     .frame(maxWidth: .infinity, alignment: .leading)

@@ -301,6 +301,7 @@ class _ScheduleTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = SolarAppScope.of(context);
     if (matches.isEmpty) {
       return const _InlineEmptyState(
         title: 'No published event schedule yet',
@@ -323,6 +324,19 @@ class _ScheduleTab extends StatelessWidget {
                   event: event,
                   highlightTeamNumber: highlightTeamNumber,
                 ),
+              );
+            },
+            onTeamTap: (reference) {
+              final resolvedTeam = controller.resolveKnownTeamSummary(
+                teamNumber: reference.number,
+                teamId: reference.id,
+                teamName: reference.name,
+              );
+              openSolarEventTeamScreen(
+                context,
+                event: event,
+                team: resolvedTeam,
+                highlightTeamNumber: reference.number,
               );
             },
           ),

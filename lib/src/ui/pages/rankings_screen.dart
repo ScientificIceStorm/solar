@@ -29,10 +29,7 @@ class RankingsScreen extends StatefulWidget {
 
 class _RankingsScreenState extends State<RankingsScreen> {
   static const _allRegionsLabel = 'All Regions';
-  static const _gradeOptions = <String>[
-    'High School',
-    'Middle School',
-  ];
+  static const _gradeOptions = <String>['High School', 'Middle School'];
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -53,12 +50,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
   String _selectedRegion = _allRegionsLabel;
   _RankingsMode _mode = _RankingsMode.skill;
   String? _loadedSolarizeCacheKey;
-  bool _showPinnedHeroBar = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_handleScrollOffset);
   }
 
   @override
@@ -73,25 +68,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   @override
   void dispose() {
-    _scrollController.removeListener(_handleScrollOffset);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  void _handleScrollOffset() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-
-    final shouldShow = _scrollController.offset > 110;
-    if (shouldShow == _showPinnedHeroBar || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _showPinnedHeroBar = shouldShow;
-    });
   }
 
   Future<void> _bootstrapFilters(
@@ -412,8 +391,20 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   void _toggleSearch() {
+    final revealSearch = !_searchVisible;
+    if (revealSearch &&
+        _scrollController.hasClients &&
+        _scrollController.offset > 0) {
+      unawaited(
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        ),
+      );
+    }
     setState(() {
-      _searchVisible = !_searchVisible;
+      _searchVisible = revealSearch;
       if (!_searchVisible) {
         _searchController.clear();
       }
@@ -578,7 +569,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
           value: SystemUiOverlayStyle.light,
           child: Scaffold(
             extendBody: true,
-            backgroundColor: Colors.black,
+            backgroundColor: Colors.transparent,
             drawerEnableOpenDragGesture: true,
             drawerEdgeDragWidth: 36,
             drawer: SolarAppDrawer(
@@ -613,9 +604,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
                       axisDirection: AxisDirection.down,
                       child: ListView.builder(
                         controller: _scrollController,
-                        physics: const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: ClampingScrollPhysics(),
                         ),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.only(bottom: 164),
                         itemCount: listItemCount,
                         itemBuilder: (context, index) {
@@ -679,7 +672,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
                           if (showStatusCard) {
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 22),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 22,
+                              ),
                               child:
                                   _isBootstrapping ||
                                       _isLoadingRankings ||
@@ -699,7 +694,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           if (_mode == _RankingsMode.skill) {
                             final entry = filteredEntries[index - 2];
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 22),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 22,
+                              ),
                               child: _RankingRow(
                                 entry: entry,
                                 highlighted:
@@ -724,22 +721,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                             ),
                           );
                         },
-                      ),
-                    ),
-                  ),
-                  IgnorePointer(
-                    ignoring: !_showPinnedHeroBar,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      opacity: _showPinnedHeroBar ? 1 : 0,
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(18, topInset + 8, 18, 0),
-                        child: _RankingsPinnedHeroBar(
-                          mode: _mode,
-                          onFilterTap: () => _showFilterSheet(controller),
-                          onSearchTap: _toggleSearch,
-                        ),
                       ),
                     ),
                   ),
@@ -833,7 +814,10 @@ class _RankingsHeader extends StatelessWidget {
               ),
               _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearchTap),
               const SizedBox(width: 8),
-              _HeaderIconButton(icon: Icons.help_outline_rounded, onTap: onInfoTap),
+              _HeaderIconButton(
+                icon: Icons.help_outline_rounded,
+                onTap: onInfoTap,
+              ),
               const SizedBox(width: 8),
               _HeaderIconButton(
                 icon: Icons.more_vert_rounded,
@@ -1043,63 +1027,6 @@ class _HeaderIconButton extends StatelessWidget {
         width: 42,
         height: 42,
         child: Icon(icon, color: Colors.white, size: 28),
-      ),
-    );
-  }
-}
-
-class _RankingsPinnedHeroBar extends StatelessWidget {
-  const _RankingsPinnedHeroBar({
-    required this.mode,
-    required this.onFilterTap,
-    required this.onSearchTap,
-  });
-
-  final _RankingsMode mode;
-  final VoidCallback onFilterTap;
-  final VoidCallback onSearchTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        children: <Widget>[
-          const Text(
-            'Rankings',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              mode == _RankingsMode.skill ? 'SKILL' : solarizeLabel.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-          const Spacer(),
-          _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearchTap),
-          const SizedBox(width: 8),
-          _HeaderIconButton(icon: Icons.tune_rounded, onTap: onFilterTap),
-        ],
       ),
     );
   }
@@ -1480,6 +1407,7 @@ class _SeasonDropdownField extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
           isExpanded: true,
+          dropdownColor: Colors.white,
           value: seasons.any((season) => season.id == selectedSeasonId)
               ? selectedSeasonId
               : (seasons.isEmpty ? null : seasons.first.id),
@@ -1534,6 +1462,7 @@ class _StringDropdownField extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           isExpanded: true,
+          dropdownColor: Colors.white,
           value: value,
           hint: Text(hint),
           items: values
@@ -1682,10 +1611,14 @@ String _filterLabel({
 
 String _seasonDisplayName(SeasonSummary season) {
   final name = season.name.trim();
-  if (name.isEmpty) {
-    return '${season.programName} ${season.id}';
+  if (name.isNotEmpty) {
+    return name;
   }
-  return name;
+  final programName = season.programName.trim();
+  if (programName.isNotEmpty) {
+    return '$programName season';
+  }
+  return 'Season unavailable';
 }
 
 String _seasonDisplayNameFromId(List<SeasonSummary> seasons, int seasonId) {
@@ -1694,7 +1627,7 @@ String _seasonDisplayNameFromId(List<SeasonSummary> seasons, int seasonId) {
       return _seasonDisplayName(season);
     }
   }
-  return 'Season $seasonId';
+  return 'Season unavailable';
 }
 
 String _teamSubtitle(String primary, String secondary) {
@@ -1716,7 +1649,8 @@ bool _isUsableSolarMlEntries(List<SolarMlRankingEntry> entries) {
     return entry.rank > 0 &&
         entry.teamId > 0 &&
         entry.teamNumber.trim().isNotEmpty &&
-        (entry.teamName.trim().isNotEmpty || entry.organization.trim().isNotEmpty);
+        (entry.teamName.trim().isNotEmpty ||
+            entry.organization.trim().isNotEmpty);
   }).length;
   final distinctRatings = sample
       .map((entry) => entry.solarRating.toStringAsFixed(2))

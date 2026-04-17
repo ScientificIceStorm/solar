@@ -52,6 +52,7 @@ class AppSessionController extends ChangeNotifier {
   static const _solarizeMatchHistoryBatchSize = 8;
   static const _worldsScheduleAnnouncementKey = worldsScheduleAnnouncementId;
   static const _localAccountDomain = 'solar.local';
+  static const _teamScheduleCacheNamespace = 'team_schedule_v1';
 
   AppAccount? _currentAccount;
   TeamStatsSnapshot? _teamStats;
@@ -99,10 +100,16 @@ class AppSessionController extends ChangeNotifier {
       <int, Future<List<SkillAttempt>>>{};
   final Map<int, Future<List<AwardSummary>>> _eventAwardsCache =
       <int, Future<List<AwardSummary>>>{};
+  final Map<String, Future<int>> _teamAwardsCountCache =
+      <String, Future<int>>{};
   final Map<String, Future<List<MatchSummary>>> _teamScheduleCache =
       <String, Future<List<MatchSummary>>>{};
   final Map<String, Future<List<MatchSummary>>> _teamMatchHistoryCache =
       <String, Future<List<MatchSummary>>>{};
+  final Map<String, Future<List<TeamSummary>>> _liveSearchTeamRequestCache =
+      <String, Future<List<TeamSummary>>>{};
+  final Map<String, List<TeamSummary>> _liveSearchTeamsByQuery =
+      <String, List<TeamSummary>>{};
   final Set<String> _solarizeCoverageInflight = <String>{};
   final Map<String, Future<SolarMatchPrediction?>> _matchPredictionCache =
       <String, Future<SolarMatchPrediction?>>{};
@@ -273,6 +280,12 @@ class AppSessionController extends ChangeNotifier {
     _developerScrimmageStartAtMillis = settings.developerScrimmageStartAtMillis;
     _teamRatings = settings.teamRatings;
 
+    // Never auto-enable test scrimmage data in production launches.
+    if (kReleaseMode && _developerScrimmageEnabled) {
+      _developerScrimmageEnabled = false;
+      await _saveSettings(currentUserEmail: settings.currentUserEmail);
+    }
+
     if (_developerScrimmageEnabled &&
         _developerScrimmageStartAtMillis == null) {
       final defaultStartAt = _defaultDeveloperScrimmageStartAt();
@@ -319,16 +332,37 @@ class AppSessionController extends ChangeNotifier {
     AppCompetitionPreference? competitionPreference,
   }) async {
     final normalizedTeamNumber = teamNumber.trim().toUpperCase();
+    final normalizedName = fullName?.trim() ?? '';
+    if (competitionPreference != null) {
+      _competitionPreference = competitionPreference;
+    }
+
     if (normalizedTeamNumber.isEmpty) {
-      throw const FormatException('Enter your team number.');
+      final existingAccount = _currentAccount;
+      final guestTeam = _guestTeamSummary(
+        grade:
+            existingAccount?.team.grade ??
+            _defaultGradeForCompetition(_competitionPreference),
+      );
+      final account = AppAccount(
+        fullName: normalizedName.isNotEmpty ? normalizedName : 'Solar Guest',
+        email:
+            existingAccount?.normalizedEmail ??
+            _localAccountEmailForTeam(guestTeam.number),
+        password: '',
+        team: guestTeam,
+        createdAt: existingAccount?.createdAt ?? DateTime.now(),
+      );
+      await _setSignedInAccount(account);
+      return;
     }
 
     final activeSeasonId = await _resolveActiveSeasonId();
     final validatedTeam = await _teamDirectory.validateTeamNumber(
       normalizedTeamNumber,
       preferredSeasonId: activeSeasonId,
+      programIds: _searchProgramIdsForCurrentCompetition(),
     );
-    final normalizedName = fullName?.trim() ?? '';
     final displayName = normalizedName.isNotEmpty
         ? normalizedName
         : (validatedTeam.teamName.trim().isNotEmpty
@@ -344,10 +378,6 @@ class AppSessionController extends ChangeNotifier {
       team: validatedTeam,
       createdAt: existingAccount?.createdAt ?? DateTime.now(),
     );
-
-    if (competitionPreference != null) {
-      _competitionPreference = competitionPreference;
-    }
 
     await _setSignedInAccount(account);
     await refreshTeamStats();
@@ -497,6 +527,7 @@ class AppSessionController extends ChangeNotifier {
     final team = await _teamDirectory.validateTeamNumber(
       teamNumber,
       preferredSeasonId: await _resolveActiveSeasonId(),
+      programIds: _searchProgramIdsForCurrentCompetition(),
     );
     await _authService.signUp(
       fullName: normalizedName,
@@ -540,11 +571,17 @@ class AppSessionController extends ChangeNotifier {
           teamId: account.team.id,
         ),
       );
+      final scheduleHydratedSnapshot = await _withOfflineScheduleFallback(
+        account.team,
+        snapshot,
+      );
       if (_currentAccount?.normalizedEmail != account.normalizedEmail) {
         return;
       }
 
-      final hydratedSnapshot = _applyKnownSignalsToTeamStats(snapshot);
+      final hydratedSnapshot = _applyKnownSignalsToTeamStats(
+        scheduleHydratedSnapshot,
+      );
       _teamStats = _withLocalScrimmage(hydratedSnapshot);
       _quickviewSnapshotFuture = null;
       _notificationCenterSnapshotFuture = null;
@@ -740,6 +777,69 @@ class AppSessionController extends ChangeNotifier {
       _isPreloadingSearchTeams = false;
       notifyListeners();
     }
+  }
+
+  Future<void> preloadLiveSearchTeams(
+    String query, {
+    bool force = false,
+  }) async {
+    final normalizedQuery = query.trim().toUpperCase();
+    if (normalizedQuery.length < 2) {
+      return;
+    }
+
+    final api = _api;
+    if (api == null || !api.config.hasRobotEventsApiKey) {
+      return;
+    }
+
+    final requestKey = '${_competitionPreference.name}|$normalizedQuery';
+    if (force) {
+      _liveSearchTeamRequestCache.remove(requestKey);
+      _liveSearchTeamsByQuery.remove(normalizedQuery);
+    } else if (_liveSearchTeamsByQuery.containsKey(normalizedQuery)) {
+      return;
+    }
+
+    final request = _liveSearchTeamRequestCache.putIfAbsent(
+      requestKey,
+      () async {
+        try {
+          final searchedTeams = await api.robotEvents.searchTeams(
+            number: normalizedQuery,
+            programIds: _searchProgramIdsForCurrentCompetition(),
+          );
+          final mergedTeams = <String, TeamSummary>{};
+          for (final team in searchedTeams) {
+            final teamKey = team.number.trim().toUpperCase();
+            if (teamKey.isEmpty) {
+              continue;
+            }
+            final existing = mergedTeams[teamKey];
+            mergedTeams[teamKey] = existing == null
+                ? team
+                : _preferSearchTeamCandidate(existing, team);
+          }
+
+          final ordered = mergedTeams.values.toList(growable: false)
+            ..sort((a, b) {
+              final aScore = _teamRelevance(a, normalizedQuery.toLowerCase());
+              final bScore = _teamRelevance(b, normalizedQuery.toLowerCase());
+              if (aScore != bScore) {
+                return bScore.compareTo(aScore);
+              }
+              return a.number.compareTo(b.number);
+            });
+          return ordered;
+        } catch (_) {
+          return const <TeamSummary>[];
+        }
+      },
+    );
+
+    final results = await request;
+    _liveSearchTeamsByQuery[normalizedQuery] = results;
+    notifyListeners();
   }
 
   OpenSkillCacheEntry? openSkillEntryForTeam(String teamNumber) {
@@ -1033,6 +1133,7 @@ class AppSessionController extends ChangeNotifier {
   }
 
   List<TeamSummary> searchCachedTeams(String query, {int? limit}) {
+    final normalizedKey = query.trim().toUpperCase();
     final normalizedQuery = query.trim().toLowerCase();
     if (normalizedQuery.length < 2) {
       return const <TeamSummary>[];
@@ -1047,6 +1148,14 @@ class AppSessionController extends ChangeNotifier {
     }
 
     for (final team in _preloadedSearchTeams) {
+      if (_matchesTeamQuery(team, normalizedQuery)) {
+        mergedTeams[team.number.trim().toUpperCase()] = team;
+      }
+    }
+
+    final liveResults =
+        _liveSearchTeamsByQuery[normalizedKey] ?? const <TeamSummary>[];
+    for (final team in liveResults) {
       if (_matchesTeamQuery(team, normalizedQuery)) {
         mergedTeams[team.number.trim().toUpperCase()] = team;
       }
@@ -1180,6 +1289,7 @@ class AppSessionController extends ChangeNotifier {
       return await _teamDirectory.validateTeamNumber(
         team.number,
         preferredSeasonId: preferredSeasonId,
+        programIds: _searchProgramIdsForCurrentCompetition(),
       );
     } catch (_) {
       return team;
@@ -1240,6 +1350,7 @@ class AppSessionController extends ChangeNotifier {
       final validated = await _teamDirectory.validateTeamNumber(
         normalizedNumber,
         preferredSeasonId: preferredSeasonId,
+        programIds: _searchProgramIdsForCurrentCompetition(),
       );
       final recovered = _mergeTeamSummary(validated, originalTeam);
       if (_sameTeamSummary(recovered, currentTeam)) {
@@ -1393,6 +1504,70 @@ class AppSessionController extends ChangeNotifier {
       }
       return fallback;
     }
+  }
+
+  Future<TeamStatsSnapshot> _withOfflineScheduleFallback(
+    TeamSummary team,
+    TeamStatsSnapshot snapshot,
+  ) async {
+    final cacheKey = _teamScheduleCacheKey(team);
+    final hasLiveSchedule = snapshot.allEvents.isNotEmpty;
+
+    if (hasLiveSchedule) {
+      await _diskCacheStore.writeList<EventSummary>(
+        namespace: _teamScheduleCacheNamespace,
+        key: cacheKey,
+        items: snapshot.allEvents,
+        toJson: (item) => item.toJson(),
+        ttl: const Duration(days: 30),
+      );
+      return snapshot;
+    }
+
+    final cachedEvents = await _diskCacheStore.readList<EventSummary>(
+      namespace: _teamScheduleCacheNamespace,
+      key: cacheKey,
+      fromJson: EventSummary.fromJson,
+      allowExpired: true,
+    );
+    if (cachedEvents == null || cachedEvents.isEmpty) {
+      return snapshot;
+    }
+
+    final mergedMessage = snapshot.errorMessage == null
+        ? 'Offline mode: showing saved match schedule from this device.'
+        : '${snapshot.errorMessage} Showing saved match schedule from this device.';
+
+    return TeamStatsSnapshot(
+      team: snapshot.team,
+      allEvents: cachedEvents,
+      upcomingEvents: _upcomingEventsFromSchedule(cachedEvents),
+      rankings: snapshot.rankings,
+      matchHistory: snapshot.matchHistory,
+      openSkillEntry: snapshot.openSkillEntry,
+      worldSkillsEntry: snapshot.worldSkillsEntry,
+      lastUpdated: snapshot.lastUpdated,
+      errorMessage: mergedMessage,
+    );
+  }
+
+  String _teamScheduleCacheKey(TeamSummary team) {
+    final normalizedNumber = team.number.trim().toUpperCase();
+    final safeNumber = normalizedNumber.isEmpty
+        ? 'team_unknown'
+        : normalizedNumber;
+    return '${team.id}_$safeNumber';
+  }
+
+  List<EventSummary> _upcomingEventsFromSchedule(List<EventSummary> allEvents) {
+    final now = DateTime.now();
+    final upcoming = allEvents
+        .where((event) {
+          final anchor = event.end ?? event.start;
+          return anchor == null || !anchor.isBefore(now);
+        })
+        .toList(growable: false);
+    return upcoming.take(6).toList(growable: false);
   }
 
   Duration _dailyCacheTtl() {
@@ -1622,6 +1797,7 @@ class AppSessionController extends ChangeNotifier {
     final validatedTeam = await _teamDirectory.validateTeamNumber(
       normalizedNumber,
       preferredSeasonId: activeSeasonId,
+      programIds: _searchProgramIdsForCurrentCompetition(),
     );
     _currentAccount = await _authService.saveAccount(
       account.copyWith(team: validatedTeam),
@@ -1980,6 +2156,49 @@ class AppSessionController extends ChangeNotifier {
         _eventAwardsCache.remove(eventId);
       }
       return awards;
+    });
+  }
+
+  Future<int> fetchTeamAwardsCount(
+    TeamSummary team, {
+    bool force = false,
+    int maxEvents = 12,
+  }) {
+    final normalizedTeamNumber = team.number.trim().toUpperCase();
+    final cacheKey = '${team.id}:$normalizedTeamNumber:$maxEvents';
+    if (force) {
+      _teamAwardsCountCache.remove(cacheKey);
+    }
+
+    return _teamAwardsCountCache.putIfAbsent(cacheKey, () async {
+      final snapshot = await fetchTeamStatsSnapshot(team, force: force);
+      if (snapshot.pastEvents.isEmpty) {
+        return 0;
+      }
+
+      final trackedEvents = snapshot.pastEvents
+          .take(maxEvents)
+          .toList(growable: false);
+      var totalAwards = 0;
+      for (final event in trackedEvents) {
+        final awards = await fetchEventAwards(event.id);
+        for (final award in awards) {
+          if (_awardMentionsTeamNumber(award, normalizedTeamNumber)) {
+            totalAwards += 1;
+          }
+        }
+      }
+      return totalAwards;
+    });
+  }
+
+  bool _awardMentionsTeamNumber(AwardSummary award, String teamNumber) {
+    final normalized = teamNumber.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    return award.recipients.any((recipient) {
+      return recipient.trim().toUpperCase().contains(normalized);
     });
   }
 
@@ -2541,6 +2760,46 @@ class AppSessionController extends ChangeNotifier {
     return haystack.contains(query);
   }
 
+  List<int> _searchProgramIdsForCurrentCompetition() {
+    switch (_competitionPreference) {
+      case AppCompetitionPreference.vexV5:
+        return solarPrimaryProgramIds;
+      case AppCompetitionPreference.vexIQ:
+      case AppCompetitionPreference.vexU:
+      case AppCompetitionPreference.vexAI:
+        return const <int>[];
+    }
+  }
+
+  TeamSummary _preferSearchTeamCandidate(
+    TeamSummary existing,
+    TeamSummary candidate,
+  ) {
+    if (existing.registered != candidate.registered) {
+      return existing.registered ? existing : candidate;
+    }
+
+    final existingHasId = existing.id > 0;
+    final candidateHasId = candidate.id > 0;
+    if (existingHasId != candidateHasId) {
+      return candidateHasId ? candidate : existing;
+    }
+
+    final existingHasName = existing.teamName.trim().isNotEmpty;
+    final candidateHasName = candidate.teamName.trim().isNotEmpty;
+    if (existingHasName != candidateHasName) {
+      return candidateHasName ? candidate : existing;
+    }
+
+    final existingHasOrg = existing.organization.trim().isNotEmpty;
+    final candidateHasOrg = candidate.organization.trim().isNotEmpty;
+    if (existingHasOrg != candidateHasOrg) {
+      return candidateHasOrg ? candidate : existing;
+    }
+
+    return existing;
+  }
+
   int _eventRelevance(EventSummary event, String query) {
     final name = event.name.toLowerCase();
     final sku = event.sku.toLowerCase();
@@ -2717,8 +2976,11 @@ class AppSessionController extends ChangeNotifier {
     _divisionMatchesCache.clear();
     _eventSkillsCache.clear();
     _eventAwardsCache.clear();
+    _teamAwardsCountCache.clear();
     _teamScheduleCache.clear();
     _teamMatchHistoryCache.clear();
+    _liveSearchTeamRequestCache.clear();
+    _liveSearchTeamsByQuery.clear();
     _matchPredictionCache.clear();
     _teamStatsCache.clear();
     _quickviewSnapshotFuture = null;
@@ -3213,6 +3475,38 @@ class AppSessionController extends ChangeNotifier {
       throw const FormatException('Enter a valid email address.');
     }
     return normalizedEmail;
+  }
+
+  TeamSummary _guestTeamSummary({required String grade}) {
+    return TeamSummary(
+      id: 0,
+      number: 'GUEST',
+      teamName: 'Guest Account',
+      organization: '',
+      robotName: '',
+      location: const LocationSummary(
+        venue: '',
+        address1: '',
+        city: '',
+        region: '',
+        postcode: '',
+        country: '',
+      ),
+      grade: grade,
+      registered: false,
+    );
+  }
+
+  String _defaultGradeForCompetition(AppCompetitionPreference preference) {
+    switch (preference) {
+      case AppCompetitionPreference.vexIQ:
+        return 'Middle School';
+      case AppCompetitionPreference.vexU:
+        return 'College';
+      case AppCompetitionPreference.vexAI:
+      case AppCompetitionPreference.vexV5:
+        return 'High School';
+    }
   }
 
   String _localAccountEmailForTeam(String teamNumber) {

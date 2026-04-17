@@ -12,6 +12,7 @@ class SolarSwipeBack extends StatefulWidget {
 
 class _SolarSwipeBackState extends State<SolarSwipeBack> {
   bool _didPopThisDrag = false;
+  double _dragDistance = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -27,12 +28,25 @@ class _SolarSwipeBackState extends State<SolarSwipeBack> {
             behavior: HitTestBehavior.translucent,
             onHorizontalDragStart: (_) {
               _didPopThisDrag = false;
+              _dragDistance = 0;
             },
             onHorizontalDragUpdate: (details) {
               if (_didPopThisDrag) {
                 return;
               }
-              if ((details.primaryDelta ?? 0) > 14) {
+              final delta = details.primaryDelta ?? 0;
+              if (delta > 0) {
+                _dragDistance += delta;
+              } else {
+                _dragDistance = (_dragDistance + delta).clamp(0, double.infinity);
+              }
+            },
+            onHorizontalDragEnd: (details) {
+              if (_didPopThisDrag) {
+                return;
+              }
+              final velocity = details.primaryVelocity ?? 0;
+              if (_dragDistance >= 72 || velocity >= 680) {
                 _didPopThisDrag = true;
                 Navigator.of(context).maybePop();
               }

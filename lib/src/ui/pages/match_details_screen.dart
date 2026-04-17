@@ -7,6 +7,7 @@ import '../models/solar_match_prediction.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_team_link.dart';
+import 'event_team_screen.dart';
 
 class MatchDetailsScreenArgs {
   const MatchDetailsScreenArgs({
@@ -68,12 +69,14 @@ class MatchDetailsScreen extends StatelessWidget {
                 title: 'Red Alliance',
                 alliance: prediction.redAlliance,
                 color: const Color(0xFFFF6B64),
+                event: event,
               ),
               const SizedBox(height: 24),
               _AllianceSection(
                 title: 'Blue Alliance',
                 alliance: prediction.blueAlliance,
                 color: const Color(0xFF7A9DFF),
+                event: event,
               ),
               const SizedBox(height: 24),
               _FlatSection(
@@ -130,7 +133,33 @@ class _MatchMetaHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        SolarMatchRow(match: match, highlightTeamNumber: null),
+        SolarMatchRow(
+          match: match,
+          highlightTeamNumber: null,
+          onTeamTap: (teamReference) {
+            if (event != null) {
+              final controller = SolarAppScope.of(context);
+              final resolvedTeam = controller.resolveKnownTeamSummary(
+                teamNumber: teamReference.number,
+                teamId: teamReference.id,
+                teamName: teamReference.name,
+              );
+              openSolarEventTeamScreen(
+                context,
+                event: event!,
+                team: resolvedTeam,
+                highlightTeamNumber: teamReference.number,
+              );
+              return;
+            }
+            openSolarTeamProfileForReference(
+              context,
+              teamNumber: teamReference.number,
+              teamId: teamReference.id,
+              teamName: teamReference.name,
+            );
+          },
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 14,
@@ -216,11 +245,13 @@ class _AllianceSection extends StatelessWidget {
     required this.title,
     required this.alliance,
     required this.color,
+    required this.event,
   });
 
   final String title;
   final SolarAlliancePrediction alliance;
   final Color color;
+  final EventSummary? event;
 
   @override
   Widget build(BuildContext context) {
@@ -250,6 +281,7 @@ class _AllianceSection extends StatelessWidget {
             _TeamModelRow(
               team: alliance.teams[i],
               color: color,
+              event: event,
               showDivider: i != alliance.teams.length - 1,
             ),
         ],
@@ -310,15 +342,18 @@ class _TeamModelRow extends StatelessWidget {
   const _TeamModelRow({
     required this.team,
     required this.color,
+    required this.event,
     required this.showDivider,
   });
 
   final SolarTeamPrediction team;
   final Color color;
+  final EventSummary? event;
   final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
+    final controller = SolarAppScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
@@ -337,6 +372,28 @@ class _TeamModelRow extends StatelessWidget {
                   teamNumber: team.team.number,
                   teamId: team.team.id,
                   teamName: team.team.name,
+                  onTap: () {
+                    if (event != null) {
+                      final resolvedTeam = controller.resolveKnownTeamSummary(
+                        teamNumber: team.team.number,
+                        teamId: team.team.id,
+                        teamName: team.team.name,
+                      );
+                      openSolarEventTeamScreen(
+                        context,
+                        event: event!,
+                        team: resolvedTeam,
+                        highlightTeamNumber: team.team.number,
+                      );
+                      return;
+                    }
+                    openSolarTeamProfileForReference(
+                      context,
+                      teamNumber: team.team.number,
+                      teamId: team.team.id,
+                      teamName: team.team.name,
+                    );
+                  },
                   style: TextStyle(
                     color: color,
                     fontSize: 20,

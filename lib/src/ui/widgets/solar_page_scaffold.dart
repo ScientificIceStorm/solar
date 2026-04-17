@@ -51,8 +51,6 @@ class SolarPageScaffold extends StatelessWidget {
           },
         ),
         body: SolarScreenBackground(
-          topFillColor: Colors.black,
-          topFillHeight: MediaQuery.paddingOf(context).top + 26,
           child: Column(
             children: <Widget>[
               Row(

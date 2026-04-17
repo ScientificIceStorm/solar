@@ -9,8 +9,8 @@ import '../models/solar_match_prediction.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_page_scaffold.dart';
-import '../widgets/solar_team_link.dart';
 import 'event_details_screen.dart';
+import 'event_team_screen.dart';
 import 'match_details_screen.dart';
 import 'team_profile_screen.dart';
 
@@ -54,6 +54,10 @@ class _SearchScreenState extends State<SearchScreen> {
       _quickviewFuture = controller.fetchQuickviewSnapshot();
       unawaited(controller.preloadSearchEvents());
       unawaited(controller.preloadSearchTeams());
+      final initialQuery = _searchController.text.trim();
+      if (initialQuery.length >= 2) {
+        unawaited(controller.preloadLiveSearchTeams(initialQuery));
+      }
     }
   }
 
@@ -63,13 +67,24 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
+  void _handleSearchChanged(String value) {
+    final normalizedQuery = value.trim();
+    final controller = _sessionController;
+    if (controller != null && normalizedQuery.length >= 2) {
+      unawaited(controller.preloadSearchEvents());
+      unawaited(controller.preloadSearchTeams());
+      unawaited(controller.preloadLiveSearchTeams(normalizedQuery));
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
 
     return SolarPageScaffold(
       title: 'Search',
-      currentDestination: SolarNavDestination.home,
+      currentDestination: SolarNavDestination.search,
       body: AnimatedBuilder(
         animation: controller,
         builder: (context, _) {
@@ -94,7 +109,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   _SearchInputCard(
                     controller: _searchController,
                     scope: _scope,
-                    onChanged: (_) => setState(() {}),
+                    onChanged: _handleSearchChanged,
                     onScopeSelected: (scope) {
                       setState(() {
                         _scope = scope;
@@ -496,11 +511,17 @@ class _SearchTeamMatchesSection extends StatelessWidget {
                             );
                           },
                           onTeamTap: (reference) {
-                            openSolarTeamProfileForReference(
+                            final resolvedTeam = controller
+                                .resolveKnownTeamSummary(
+                                  teamNumber: reference.number,
+                                  teamId: reference.id,
+                                  teamName: reference.name,
+                                );
+                            openSolarEventTeamScreen(
                               context,
-                              teamNumber: reference.number,
-                              teamId: reference.id,
-                              teamName: reference.name,
+                              event: event!,
+                              team: resolvedTeam,
+                              highlightTeamNumber: reference.number,
                             );
                           },
                         ),
@@ -523,11 +544,17 @@ class _SearchTeamMatchesSection extends StatelessWidget {
                             );
                           },
                           onTeamTap: (reference) {
-                            openSolarTeamProfileForReference(
+                            final resolvedTeam = controller
+                                .resolveKnownTeamSummary(
+                                  teamNumber: reference.number,
+                                  teamId: reference.id,
+                                  teamName: reference.name,
+                                );
+                            openSolarEventTeamScreen(
                               context,
-                              teamNumber: reference.number,
-                              teamId: reference.id,
-                              teamName: reference.name,
+                              event: event!,
+                              team: resolvedTeam,
+                              highlightTeamNumber: reference.number,
                             );
                           },
                         ),

@@ -34,12 +34,8 @@ class SolarScrimmageService {
     required Map<String, OpenSkillCacheEntry> openSkillByTeam,
     required DateTime baseTime,
     required int seasonId,
-    DateTime? now,
   }) {
-    final anchorNow = now ?? DateTime.now();
-    final resolvedBaseTime = baseTime.isBefore(anchorNow)
-        ? anchorNow.add(const Duration(minutes: 2))
-        : baseTime;
+    final resolvedBaseTime = baseTime;
     final division = const DivisionSummary(id: divisionId, name: 'Tonight');
     final event = EventSummary(
       id: eventId,

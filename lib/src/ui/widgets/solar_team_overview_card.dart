@@ -8,23 +8,46 @@ class SolarTeamOverviewCard extends StatelessWidget {
     required this.team,
     required this.teamStats,
     super.key,
+    this.awardsCount,
     this.onTap,
   });
 
   final TeamSummary team;
   final TeamStatsSnapshot teamStats;
+  final int? awardsCount;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final solarizeRank = teamStats.openSkillEntry?.ranking;
+    final winRateLabel = teamStats.winRate == null
+        ? '--'
+        : '${teamStats.winRate!.toStringAsFixed(1)}%';
+    final totalEvents = teamStats.allEvents.isNotEmpty
+        ? teamStats.allEvents.length
+        : teamStats.futureEvents.length + teamStats.pastEvents.length;
     final metricRows = <_TeamPosterMetric>[
       _TeamPosterMetric(label: 'W/L/T', value: teamStats.recordLabel),
-      _TeamPosterMetric(label: 'SKILLS SCORE', value: teamStats.skillsScoreLabel),
+      _TeamPosterMetric(label: 'WIN RATE', value: winRateLabel),
+      _TeamPosterMetric(label: 'MATCHES', value: '${teamStats.totalMatches}'),
+      _TeamPosterMetric(
+        label: 'AWARDS',
+        value: awardsCount == null ? '--' : '$awardsCount',
+      ),
+      _TeamPosterMetric(
+        label: 'SKILLS SCORE',
+        value: teamStats.skillsScoreLabel,
+      ),
       _TeamPosterMetric(label: 'SKILLS RANK', value: teamStats.skillsRankLabel),
       _TeamPosterMetric(
         label: 'SOLARIZE RANK',
-        value: solarizeRank == null || solarizeRank <= 0 ? '--' : '#$solarizeRank',
+        value: solarizeRank == null || solarizeRank <= 0
+            ? '--'
+            : '#$solarizeRank',
+      ),
+      _TeamPosterMetric(
+        label: 'UPCOMING',
+        value: '${teamStats.futureEvents.length}/$totalEvents',
       ),
       _TeamPosterMetric(
         label: 'CCWM',
@@ -34,7 +57,9 @@ class SolarTeamOverviewCard extends StatelessWidget {
       _TeamPosterMetric(label: 'DPR', value: _decimalLabel(teamStats.dpr)),
     ];
 
-    final title = team.teamName.trim().isEmpty ? 'Team profile' : team.teamName.trim();
+    final title = team.teamName.trim().isEmpty
+        ? 'Team profile'
+        : team.teamName.trim();
     final organization = team.organization.trim();
     final location = _heroLocationLabel(teamStats);
 

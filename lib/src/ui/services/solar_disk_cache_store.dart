@@ -20,7 +20,9 @@ class SolarDiskCacheStore {
     }
 
     final expiresAt = envelope.expiresAt;
-    if (!allowExpired && expiresAt != null && DateTime.now().isAfter(expiresAt)) {
+    if (!allowExpired &&
+        expiresAt != null &&
+        DateTime.now().isAfter(expiresAt)) {
       return null;
     }
 
@@ -46,7 +48,9 @@ class SolarDiskCacheStore {
       storedAt: DateTime.now(),
       expiresAt: ttl == null ? null : DateTime.now().add(ttl),
       payload: <String, dynamic>{
-        'items': items.map<Map<String, dynamic>>(toJson).toList(growable: false),
+        'items': items
+            .map<Map<String, dynamic>>(toJson)
+            .toList(growable: false),
       },
     );
     await _writeEnvelope(namespace: namespace, key: key, envelope: envelope);
@@ -100,12 +104,12 @@ class SolarDiskCacheStore {
     final directory = await _cacheDirectory();
     final safeNamespace = _sanitize(namespace);
     final safeKey = _sanitize(key);
-    return File('${directory.path}\\$safeNamespace\\$safeKey.json');
+    return File('${directory.path}/$safeNamespace/$safeKey.json');
   }
 
   Future<Directory> _cacheDirectory() async {
     final root = await getApplicationSupportDirectory();
-    return Directory('${root.path}\\solar_cache');
+    return Directory('${root.path}/solar_cache');
   }
 
   String _sanitize(String value) {
@@ -136,7 +140,8 @@ class _SolarCacheEnvelope {
           DateTime.fromMillisecondsSinceEpoch(0),
       expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? ''),
       payload: Map<String, dynamic>.from(
-        (json['payload'] as Map<Object?, Object?>?) ?? const <Object?, Object?>{},
+        (json['payload'] as Map<Object?, Object?>?) ??
+            const <Object?, Object?>{},
       ),
     );
   }

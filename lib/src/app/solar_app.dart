@@ -392,10 +392,28 @@ class _SolarAppState extends State<SolarApp> {
   }
 }
 
+const Set<String> _tabRouteNames = <String>{
+  HomeScreen.routeName,
+  RankingsScreen.routeName,
+  SearchScreen.routeName,
+  CalendarScreen.routeName,
+  ProfileScreen.routeName,
+};
+
 PageRoute<T> _buildPageRoute<T>({
   required RouteSettings settings,
   required WidgetBuilder builder,
 }) {
+  final routeName = settings.name;
+  if (routeName != null && _tabRouteNames.contains(routeName)) {
+    return PageRouteBuilder<T>(
+      settings: settings,
+      pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+    );
+  }
+
   switch (defaultTargetPlatform) {
     case TargetPlatform.iOS:
     case TargetPlatform.macOS:
@@ -415,15 +433,15 @@ ThemeData _buildTheme({
   required Color accent,
   required bool dark,
 }) {
-  final baseTextTheme = GoogleFonts.manropeTextTheme().apply(
+  final baseTextTheme = GoogleFonts.plusJakartaSansTextTheme().apply(
     bodyColor: textPrimary,
     displayColor: textPrimary,
   );
-  final displayFamily = GoogleFonts.spaceGrotesk().fontFamily;
+  final displayFamily = GoogleFonts.outfit().fontFamily;
   final titleWeight = dark ? FontWeight.w700 : FontWeight.w800;
 
   return ThemeData(
-    fontFamily: GoogleFonts.manrope().fontFamily,
+    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: surface,
     canvasColor: dark ? const Color(0xFF060810) : const Color(0xFF050607),

@@ -29,8 +29,7 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   AppSessionController? _sessionController;
   _CalendarView _selectedView = _CalendarView.team;
-  _TeamCalendarPresentation _teamPresentation =
-      _TeamCalendarPresentation.list;
+  _TeamCalendarPresentation _teamPresentation = _TeamCalendarPresentation.list;
   DateTime _focusedMonth = _monthStart(DateTime.now());
   DateTime _selectedDay = _dateOnly(DateTime.now())!;
 
@@ -44,18 +43,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  void _shiftMonth(int offset) {
-    final nextMonth = _monthStart(
-      DateTime(_focusedMonth.year, _focusedMonth.month + offset, 1),
-    );
-    final lastDay = DateTime(nextMonth.year, nextMonth.month + 1, 0).day;
+  void _setDisplayedMonth(DateTime month) {
     setState(() {
-      _focusedMonth = nextMonth;
-      _selectedDay = DateTime(
-        nextMonth.year,
-        nextMonth.month,
-        _selectedDay.day.clamp(1, lastDay),
-      );
+      _focusedMonth = _monthStart(month);
     });
   }
 
@@ -130,8 +120,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             isLoadingAllEvents:
                                 controller.isPreloadingSearchEvents &&
                                 controller.preloadedSearchEvents.isEmpty,
-                            onPreviousMonth: () => _shiftMonth(-1),
-                            onNextMonth: () => _shiftMonth(1),
+                            onDisplayedMonthChanged: _setDisplayedMonth,
                             onDaySelected: _selectDay,
                           )
                         : _WorldsCalendarBody(
@@ -170,43 +159,47 @@ class _CalendarViewBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
       ),
       child: Row(
-        children: _CalendarView.values.map((view) {
-          final selected = view == selectedView;
-          final label = view == _CalendarView.team ? 'Team' : 'Worlds 2026';
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelected(view),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                decoration: BoxDecoration(
-                  color: selected ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: selected
-                      ? const <BoxShadow>[
-                          BoxShadow(
-                            color: Color(0x0E000000),
-                            blurRadius: 16,
-                            offset: Offset(0, 8),
-                          ),
-                        ]
-                      : const <BoxShadow>[],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected
-                        ? const Color(0xFF24243A)
-                        : const Color(0xFF7A7F92),
-                    fontSize: 14,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+        children: _CalendarView.values
+            .map((view) {
+              final selected = view == selectedView;
+              final label = view == _CalendarView.team ? 'Team' : 'Worlds 2026';
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onSelected(view),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    decoration: BoxDecoration(
+                      color: selected ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: selected
+                          ? const <BoxShadow>[
+                              BoxShadow(
+                                color: Color(0x0E000000),
+                                blurRadius: 16,
+                                offset: Offset(0, 8),
+                              ),
+                            ]
+                          : const <BoxShadow>[],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: selected
+                            ? const Color(0xFF24243A)
+                            : const Color(0xFF7A7F92),
+                        fontSize: 14,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(growable: false),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -221,8 +214,7 @@ class _TeamCalendarBody extends StatelessWidget {
     required this.selectedDay,
     required this.mergedEvents,
     required this.isLoadingAllEvents,
-    required this.onPreviousMonth,
-    required this.onNextMonth,
+    required this.onDisplayedMonthChanged,
     required this.onDaySelected,
     super.key,
   });
@@ -234,8 +226,7 @@ class _TeamCalendarBody extends StatelessWidget {
   final DateTime selectedDay;
   final List<_CalendarEventItem> mergedEvents;
   final bool isLoadingAllEvents;
-  final VoidCallback onPreviousMonth;
-  final VoidCallback onNextMonth;
+  final ValueChanged<DateTime> onDisplayedMonthChanged;
   final ValueChanged<DateTime> onDaySelected;
 
   @override
@@ -261,8 +252,7 @@ class _TeamCalendarBody extends StatelessWidget {
                   selectedDay: selectedDay,
                   mergedEvents: mergedEvents,
                   isLoadingAllEvents: isLoadingAllEvents,
-                  onPreviousMonth: onPreviousMonth,
-                  onNextMonth: onNextMonth,
+                  onDisplayedMonthChanged: onDisplayedMonthChanged,
                   onDaySelected: onDaySelected,
                 ),
         ),
@@ -283,49 +273,51 @@ class _TeamPresentationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: _TeamCalendarPresentation.values.map((presentation) {
-        final selected = presentation == selectedPresentation;
-        final label = presentation == _TeamCalendarPresentation.list
-            ? 'List'
-            : 'Calendar';
-        return Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: InkWell(
-            onTap: () => onSelected(presentation),
-            borderRadius: BorderRadius.circular(999),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFF16182C) : Colors.white,
+      children: _TeamCalendarPresentation.values
+          .map((presentation) {
+            final selected = presentation == selectedPresentation;
+            final label = presentation == _TeamCalendarPresentation.list
+                ? 'List'
+                : 'Calendar';
+            return Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: InkWell(
+                onTap: () => onSelected(presentation),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFF16182C)
-                      : const Color(0xFFE3E5EF),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected ? const Color(0xFF16182C) : Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF16182C)
+                          : const Color(0xFFE3E5EF),
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? Colors.white : const Color(0xFF5F6478),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: selected ? Colors.white : const Color(0xFF5F6478),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(growable: false),
+            );
+          })
+          .toList(growable: false),
     );
   }
 }
 
 class _TeamCalendarListBody extends StatelessWidget {
-  const _TeamCalendarListBody({
-    required this.teamStats,
-    super.key,
-  });
+  const _TeamCalendarListBody({required this.teamStats, super.key});
 
   final TeamStatsSnapshot teamStats;
 
@@ -356,8 +348,7 @@ class _TeamCalendarMonthBody extends StatelessWidget {
     required this.selectedDay,
     required this.mergedEvents,
     required this.isLoadingAllEvents,
-    required this.onPreviousMonth,
-    required this.onNextMonth,
+    required this.onDisplayedMonthChanged,
     required this.onDaySelected,
     super.key,
   });
@@ -366,14 +357,12 @@ class _TeamCalendarMonthBody extends StatelessWidget {
   final DateTime selectedDay;
   final List<_CalendarEventItem> mergedEvents;
   final bool isLoadingAllEvents;
-  final VoidCallback onPreviousMonth;
-  final VoidCallback onNextMonth;
+  final ValueChanged<DateTime> onDisplayedMonthChanged;
   final ValueChanged<DateTime> onDaySelected;
 
   @override
   Widget build(BuildContext context) {
     final monthBuckets = _bucketEventsByDay(mergedEvents, focusedMonth);
-    final monthDays = _monthGridDays(focusedMonth);
     final selectedEvents =
         monthBuckets[_dayKey(selectedDay)] ?? const <_CalendarEventItem>[];
     final monthEventIds = <int>{
@@ -392,76 +381,51 @@ class _TeamCalendarMonthBody extends StatelessWidget {
         Row(
           children: <Widget>[
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    _monthYearLabel(focusedMonth),
-                    style: const TextStyle(
-                      color: Color(0xFF24243A),
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${monthTeamEventIds.length} team events • ${monthEventIds.length} VEX events',
-                    style: const TextStyle(
-                      color: Color(0xFF7C8093),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              child: Text(
+                '${monthTeamEventIds.length} team events • ${monthEventIds.length} VEX events',
+                style: const TextStyle(
+                  color: Color(0xFF7C8093),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            _MonthArrowButton(
-              icon: Icons.chevron_left_rounded,
-              onTap: onPreviousMonth,
-            ),
-            const SizedBox(width: 8),
-            _MonthArrowButton(
-              icon: Icons.chevron_right_rounded,
-              onTap: onNextMonth,
-            ),
+            if (isLoadingAllEvents)
+              const Text(
+                'Loading season events...',
+                style: TextStyle(
+                  color: Color(0xFF8E92A7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Container(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.94),
             borderRadius: BorderRadius.circular(26),
             border: Border.all(color: const Color(0xFFE3E6F0)),
           ),
-          child: Column(
-            children: <Widget>[
-              const _WeekdayHeader(),
-              const SizedBox(height: 10),
-              ...List<Widget>.generate(6, (rowIndex) {
-                final start = rowIndex * 7;
-                final rowDays = monthDays.skip(start).take(7).toList();
-                return Padding(
-                  padding: EdgeInsets.only(bottom: rowIndex == 5 ? 0 : 6),
-                  child: Row(
-                    children: rowDays.map((day) {
-                      final events = monthBuckets[_dayKey(day)] ??
-                          const <_CalendarEventItem>[];
-                      return Expanded(
-                        child: _CalendarDayCell(
-                          day: day,
-                          focusedMonth: focusedMonth,
-                          selectedDay: selectedDay,
-                          events: events,
-                          onTap: () => onDaySelected(day),
-                        ),
-                      );
-                    }).toList(growable: false),
-                  ),
-                );
-              }),
-            ],
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: const Color(0xFF1D4ED8),
+                onPrimary: Colors.white,
+                onSurface: const Color(0xFF24243A),
+              ),
+            ),
+            child: CalendarDatePicker(
+              key: const ValueKey<String>('team-calendar-date-picker'),
+              initialDate: selectedDay,
+              firstDate: DateTime(2000, 1, 1),
+              lastDate: DateTime(2100, 12, 31),
+              currentDate: DateTime.now(),
+              onDateChanged: onDaySelected,
+              onDisplayedMonthChanged: onDisplayedMonthChanged,
+            ),
           ),
         ),
         const SizedBox(height: 18),
@@ -478,15 +442,6 @@ class _TeamCalendarMonthBody extends StatelessWidget {
                 ),
               ),
             ),
-            if (isLoadingAllEvents)
-              const Text(
-                'Loading season events...',
-                style: TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
           ],
         ),
         const SizedBox(height: 12),
@@ -515,182 +470,6 @@ class _TeamCalendarMonthBody extends StatelessWidget {
   }
 }
 
-class _CalendarDayCell extends StatelessWidget {
-  const _CalendarDayCell({
-    required this.day,
-    required this.focusedMonth,
-    required this.selectedDay,
-    required this.events,
-    required this.onTap,
-  });
-
-  final DateTime day;
-  final DateTime focusedMonth;
-  final DateTime selectedDay;
-  final List<_CalendarEventItem> events;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final inMonth =
-        day.month == focusedMonth.month && day.year == focusedMonth.year;
-    final isSelected = _isSameDay(day, selectedDay);
-    final isToday = _isSameDay(day, DateTime.now());
-    final hasTeamEvent = events.any((event) => event.isTeamEvent);
-    final extraEvents = events.length > 2 ? events.length - 2 : 0;
-
-    return AspectRatio(
-      aspectRatio: 0.9,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 7),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? const Color(0xFF16182C)
-                  : inMonth
-                  ? const Color(0xFFF8F8FC)
-                  : const Color(0xFFF2F3F7),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isToday && !isSelected
-                    ? const Color(0xFF2A5FFF)
-                    : Colors.transparent,
-                width: 1.4,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  '${day.day}',
-                  style: TextStyle(
-                    color: isSelected
-                        ? Colors.white
-                        : inMonth
-                        ? const Color(0xFF24243A)
-                        : const Color(0xFFADB1C1),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                if (events.isNotEmpty)
-                  Row(
-                    children: <Widget>[
-                      if (hasTeamEvent)
-                        _EventDot(
-                          color: isSelected
-                              ? const Color(0xFF79A8FF)
-                              : const Color(0xFF2A5FFF),
-                        ),
-                      if (events.any((event) => !event.isTeamEvent))
-                        Padding(
-                          padding: EdgeInsets.only(left: hasTeamEvent ? 4 : 0),
-                          child: _EventDot(
-                            color: isSelected
-                                ? const Color(0xFFE8EBF7)
-                                : const Color(0xFF737991),
-                          ),
-                        ),
-                      if (extraEvents > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 5),
-                          child: Text(
-                            '+$extraEvents',
-                            style: TextStyle(
-                              color: isSelected
-                                  ? const Color(0xFFE8EBF7)
-                                  : const Color(0xFF7A8094),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EventDot extends StatelessWidget {
-  const _EventDot({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-class _WeekdayHeader extends StatelessWidget {
-  const _WeekdayHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const labels = <String>['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    return Row(
-      children: labels.map((label) {
-        return Expanded(
-          child: Center(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF8E92A7),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-        );
-      }).toList(growable: false),
-    );
-  }
-}
-
-class _MonthArrowButton extends StatelessWidget {
-  const _MonthArrowButton({
-    required this.icon,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE3E6F0)),
-        ),
-        child: Icon(icon, color: const Color(0xFF24243A)),
-      ),
-    );
-  }
-}
-
 class _CalendarAgendaRow extends StatelessWidget {
   const _CalendarAgendaRow(this.item);
 
@@ -705,21 +484,18 @@ class _CalendarAgendaRow extends StatelessWidget {
           context,
         ).pushNamed(EventDetailsScreen.routeName, arguments: event);
       },
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE3E6F0)),
+          border: const Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Container(
-              width: 10,
-              height: 54,
+              width: 7,
+              height: 46,
               decoration: BoxDecoration(
                 color: item.isTeamEvent
                     ? const Color(0xFF2A5FFF)
@@ -771,7 +547,7 @@ class _CalendarAgendaRow extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
-                    vertical: 6,
+                    vertical: 5,
                   ),
                   decoration: BoxDecoration(
                     color: item.isTeamEvent
@@ -807,10 +583,7 @@ class _CalendarAgendaRow extends StatelessWidget {
 }
 
 class _WorldsCalendarBody extends StatelessWidget {
-  const _WorldsCalendarBody({
-    required this.defaultTrack,
-    super.key,
-  });
+  const _WorldsCalendarBody({required this.defaultTrack, super.key});
 
   final WorldsScheduleTrack defaultTrack;
 
@@ -866,14 +639,8 @@ class _CalendarSection extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         if (events.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE7E8F1)),
-            ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               emptyLabel,
               style: const TextStyle(
@@ -903,19 +670,16 @@ class _CalendarEventTile extends StatelessWidget {
           context,
         ).pushNamed(EventDetailsScreen.routeName, arguments: event);
       },
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
+        padding: const EdgeInsets.fromLTRB(4, 14, 4, 14),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE7E8F1)),
+          border: const Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            _CalendarDateChip(date: event.start),
+            _CalendarDateChip(date: event.start, compact: true),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -954,10 +718,13 @@ class _CalendarEventTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 14,
-              color: Color(0xFF8E92A7),
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Color(0xFF8E92A7),
+              ),
             ),
           ],
         ),
@@ -967,27 +734,31 @@ class _CalendarEventTile extends StatelessWidget {
 }
 
 class _CalendarDateChip extends StatelessWidget {
-  const _CalendarDateChip({required this.date});
+  const _CalendarDateChip({required this.date, this.compact = false});
 
   final DateTime? date;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final label = _eventDateTile(date);
     return Container(
-      width: 66,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      width: compact ? 58 : 66,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFF7F7FB),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(compact ? 14 : 16),
       ),
       child: Column(
         children: <Widget>[
           Text(
             label.day,
-            style: const TextStyle(
+            style: TextStyle(
               color: Color(0xFF24243A),
-              fontSize: 22,
+              fontSize: compact ? 18 : 22,
               fontWeight: FontWeight.w700,
               height: 1,
             ),
@@ -1071,10 +842,7 @@ String _eventSpan(EventSummary event) {
 }
 
 class _CalendarEventItem {
-  const _CalendarEventItem({
-    required this.event,
-    required this.isTeamEvent,
-  });
+  const _CalendarEventItem({required this.event, required this.isTeamEvent});
 
   final EventSummary event;
   final bool isTeamEvent;
@@ -1083,10 +851,7 @@ class _CalendarEventItem {
 List<EventSummary> _teamCalendarEvents(TeamStatsSnapshot teamStats) {
   final source = teamStats.allEvents.isNotEmpty
       ? teamStats.allEvents
-      : <EventSummary>[
-          ...teamStats.futureEvents,
-          ...teamStats.pastEvents,
-        ];
+      : <EventSummary>[...teamStats.futureEvents, ...teamStats.pastEvents];
   final deduped = <int, EventSummary>{};
   for (final event in source) {
     if (_isLeagueEvent(event)) {
@@ -1094,12 +859,11 @@ List<EventSummary> _teamCalendarEvents(TeamStatsSnapshot teamStats) {
     }
     deduped[event.id] = event;
   }
-  return deduped.values.toList(growable: false)
-    ..sort((a, b) {
-      final aStart = a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
-      return aStart.compareTo(bStart);
-    });
+  return deduped.values.toList(growable: false)..sort((a, b) {
+    final aStart = a.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final bStart = b.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return aStart.compareTo(bStart);
+  });
 }
 
 List<_CalendarEventItem> _mergeCalendarEvents({
@@ -1110,10 +874,10 @@ List<_CalendarEventItem> _mergeCalendarEvents({
   final merged = <int, _CalendarEventItem>{
     for (final event in allEvents)
       if (!_isLeagueEvent(event))
-      event.id: _CalendarEventItem(
-        event: event,
-        isTeamEvent: teamIds.contains(event.id),
-      ),
+        event.id: _CalendarEventItem(
+          event: event,
+          isTeamEvent: teamIds.contains(event.id),
+        ),
   };
   for (final event in teamEvents) {
     if (_isLeagueEvent(event)) {
@@ -1121,19 +885,18 @@ List<_CalendarEventItem> _mergeCalendarEvents({
     }
     merged[event.id] = _CalendarEventItem(event: event, isTeamEvent: true);
   }
-  return merged.values.toList(growable: false)
-    ..sort((a, b) {
-      if (a.isTeamEvent != b.isTeamEvent) {
-        return a.isTeamEvent ? -1 : 1;
-      }
-      final aStart = a.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bStart = b.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final dateCompare = aStart.compareTo(bStart);
-      if (dateCompare != 0) {
-        return dateCompare;
-      }
-      return a.event.name.compareTo(b.event.name);
-    });
+  return merged.values.toList(growable: false)..sort((a, b) {
+    if (a.isTeamEvent != b.isTeamEvent) {
+      return a.isTeamEvent ? -1 : 1;
+    }
+    final aStart = a.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final bStart = b.event.start ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final dateCompare = aStart.compareTo(bStart);
+    if (dateCompare != 0) {
+      return dateCompare;
+    }
+    return a.event.name.compareTo(b.event.name);
+  });
 }
 
 bool _isLeagueEvent(EventSummary event) {
@@ -1183,17 +946,6 @@ Map<int, List<_CalendarEventItem>> _bucketEventsByDay(
   return buckets;
 }
 
-List<DateTime> _monthGridDays(DateTime month) {
-  final firstOfMonth = _monthStart(month);
-  final leadingDays = firstOfMonth.weekday % 7;
-  final gridStart = firstOfMonth.subtract(Duration(days: leadingDays));
-  return List<DateTime>.generate(
-    42,
-    (index) => gridStart.add(Duration(days: index)),
-    growable: false,
-  );
-}
-
 DateTime _monthStart(DateTime value) {
   return DateTime(value.year, value.month);
 }
@@ -1205,30 +957,8 @@ DateTime? _dateOnly(DateTime? value) {
   return DateTime(value.year, value.month, value.day);
 }
 
-bool _isSameDay(DateTime a, DateTime b) {
-  return a.year == b.year && a.month == b.month && a.day == b.day;
-}
-
 int _dayKey(DateTime day) {
   return (day.year * 10000) + (day.month * 100) + day.day;
-}
-
-String _monthYearLabel(DateTime month) {
-  const months = <String>[
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  return '${months[month.month - 1]} ${month.year}';
 }
 
 String _selectedDayLabel(DateTime day) {
