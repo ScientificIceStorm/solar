@@ -59,7 +59,7 @@ class WorldsScheduleBanner extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           Text(
-                            'Worlds schedule is live',
+                            'Worlds schedule update',
                             style: TextStyle(
                               color: Color(0xFF1A223B),
                               fontSize: 16,

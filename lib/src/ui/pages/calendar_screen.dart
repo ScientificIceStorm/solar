@@ -80,7 +80,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           );
 
           return RefreshIndicator(
-            color: Colors.black,
+            color: Colors.white,
             onRefresh: () async {
               await controller.refreshTeamStats();
               await controller.preloadSearchEvents(force: true);
@@ -272,46 +272,45 @@ class _TeamPresentationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: _TeamCalendarPresentation.values
-          .map((presentation) {
-            final selected = presentation == selectedPresentation;
-            final label = presentation == _TeamCalendarPresentation.list
-                ? 'List'
-                : 'Calendar';
-            return Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: InkWell(
-                onTap: () => onSelected(presentation),
-                borderRadius: BorderRadius.circular(999),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected ? const Color(0xFF16182C) : Colors.white,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: selected
-                          ? const Color(0xFF16182C)
-                          : const Color(0xFFE3E5EF),
-                    ),
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : const Color(0xFF5F6478),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3E6F0)),
+      ),
+      child: Row(
+        children: _TeamCalendarPresentation.values.map((presentation) {
+          final selected = presentation == selectedPresentation;
+          final label = presentation == _TeamCalendarPresentation.list
+              ? 'List'
+              : 'Calendar';
+          return Expanded(
+            child: InkWell(
+              onTap: () => onSelected(presentation),
+              borderRadius: BorderRadius.circular(11),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected ? const Color(0xFF16182C) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : const Color(0xFF5F6478),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-            );
-          })
-          .toList(growable: false),
+            ),
+          );
+        }).toList(growable: false),
+      ),
     );
   }
 }

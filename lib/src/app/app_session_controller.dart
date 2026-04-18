@@ -62,6 +62,10 @@ class AppSessionController extends ChangeNotifier {
   AppThemeModePreference _themeModePreference = AppThemeModePreference.system;
   AppCompetitionPreference _competitionPreference =
       AppCompetitionPreference.vexV5;
+  AppFollowMode _followMode = AppFollowMode.single;
+  AppChromeAccentPreference _chromeAccentPreference =
+      AppChromeAccentPreference.midnight;
+  int? _customChromeAccentValue;
   String? _dismissedWorldsScheduleAnnouncementId;
   int? _notificationCenterSeenAtMillis;
   List<String> _favoriteTeamNumbers = const <String>[];
@@ -135,6 +139,13 @@ class AppSessionController extends ChangeNotifier {
 
   AppCompetitionPreference get competitionPreference => _competitionPreference;
 
+  AppFollowMode get followMode => _followMode;
+
+  AppChromeAccentPreference get chromeAccentPreference =>
+      _chromeAccentPreference;
+
+  int? get customChromeAccentValue => _customChromeAccentValue;
+
   int? get notificationCenterSeenAtMillis => _notificationCenterSeenAtMillis;
 
   List<String> get favoriteTeamNumbers => _favoriteTeamNumbers;
@@ -170,6 +181,29 @@ class AppSessionController extends ChangeNotifier {
           ),
         )
         .toList(growable: false);
+  }
+
+  List<TeamSummary> get followedTeams {
+    final account = _currentAccount;
+    if (account == null) {
+      return const <TeamSummary>[];
+    }
+
+    final teamsByNumber = <String, TeamSummary>{
+      account.team.number.trim().toUpperCase(): account.team,
+    };
+
+    if (_followMode == AppFollowMode.multi) {
+      for (final team in favoriteTeams) {
+        final normalized = team.number.trim().toUpperCase();
+        if (normalized.isEmpty) {
+          continue;
+        }
+        teamsByNumber[normalized] = team;
+      }
+    }
+
+    return teamsByNumber.values.toList(growable: false);
   }
 
   bool get showWorldsScheduleReleaseBanner {
@@ -271,6 +305,9 @@ class AppSessionController extends ChangeNotifier {
     _preferredSeasonId = settings.preferredSeasonId;
     _themeModePreference = settings.themeModePreference;
     _competitionPreference = settings.competitionPreference;
+    _followMode = settings.followMode;
+    _chromeAccentPreference = settings.chromeAccentPreference;
+    _customChromeAccentValue = settings.customChromeAccentValue;
     _dismissedWorldsScheduleAnnouncementId =
         settings.dismissedWorldsScheduleAnnouncementId;
     _notificationCenterSeenAtMillis = settings.notificationCenterSeenAtMillis;
@@ -408,6 +445,34 @@ class AppSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setFollowMode(AppFollowMode value) async {
+    if (_followMode == value) {
+      return;
+    }
+    _followMode = value;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> setFavoriteTeamNumbers(List<String> teamNumbers) async {
+    final accountTeamNumber =
+        _currentAccount?.team.number.trim().toUpperCase() ?? '';
+    final normalized = <String>{
+      for (final value in teamNumbers)
+        value.trim().toUpperCase(),
+    }
+      ..removeWhere((value) => value.isEmpty || value == accountTeamNumber);
+    final nextFavorites = normalized.toList(growable: false)..sort();
+
+    if (listEquals(nextFavorites, _favoriteTeamNumbers)) {
+      return;
+    }
+
+    _favoriteTeamNumbers = nextFavorites;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
   Future<void> setDeveloperScrimmageEnabled(bool value) async {
     if (_developerScrimmageEnabled == value) {
       return;
@@ -416,6 +481,27 @@ class AppSessionController extends ChangeNotifier {
     _developerScrimmageStartAtMillis ??=
         _defaultDeveloperScrimmageStartAt().millisecondsSinceEpoch;
     _clearTeamDerivedCaches();
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> setChromeAccentPreference(
+    AppChromeAccentPreference value,
+  ) async {
+    if (_chromeAccentPreference == value) {
+      return;
+    }
+    _chromeAccentPreference = value;
+    await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
+    notifyListeners();
+  }
+
+  Future<void> setCustomChromeAccentValue(int? value) async {
+    final normalized = value == null || value == 0 ? null : value;
+    if (_customChromeAccentValue == normalized) {
+      return;
+    }
+    _customChromeAccentValue = normalized;
     await _saveSettings(currentUserEmail: _currentAccount?.normalizedEmail);
     notifyListeners();
   }
@@ -458,6 +544,9 @@ class AppSessionController extends ChangeNotifier {
     } else {
       nextFavorites.add(normalized);
       nextFavorites.sort();
+      if (_followMode == AppFollowMode.single) {
+        _followMode = AppFollowMode.multi;
+      }
     }
 
     _favoriteTeamNumbers = nextFavorites.toList(growable: false);
@@ -559,22 +648,40 @@ class AppSessionController extends ChangeNotifier {
     try {
       final activeSeasonId = await _resolveActiveSeasonId();
       final normalizedTeamNumber = account.team.number.trim().toUpperCase();
-      final snapshot = await _teamDirectory.loadTeamStats(
+      final seedWorldSkillsEntry = _seedWorldSkillsEntryForTeam(
+        teamNumber: normalizedTeamNumber,
+        teamId: account.team.id,
+      );
+      final seedOpenSkillEntry = _seedOpenSkillEntryForTeam(
+        teamNumber: normalizedTeamNumber,
+        teamId: account.team.id,
+      );
+      var snapshot = await _teamDirectory.loadTeamStats(
         account.team,
         preferredSeasonId: activeSeasonId,
-        seedWorldSkillsEntry: _seedWorldSkillsEntryForTeam(
-          teamNumber: normalizedTeamNumber,
-          teamId: account.team.id,
-        ),
-        seedOpenSkillEntry: _seedOpenSkillEntryForTeam(
-          teamNumber: normalizedTeamNumber,
-          teamId: account.team.id,
-        ),
+        seedWorldSkillsEntry: seedWorldSkillsEntry,
+        seedOpenSkillEntry: seedOpenSkillEntry,
       );
-      final scheduleHydratedSnapshot = await _withOfflineScheduleFallback(
+      var scheduleHydratedSnapshot = await _withOfflineScheduleFallback(
         account.team,
         snapshot,
       );
+
+      if (!_hasRobotEventsCoverage(scheduleHydratedSnapshot) &&
+          (scheduleHydratedSnapshot.errorMessage?.trim().isNotEmpty ??
+              false)) {
+        snapshot = await _teamDirectory.loadTeamStats(
+          account.team,
+          preferredSeasonId: activeSeasonId,
+          seedWorldSkillsEntry: seedWorldSkillsEntry,
+          seedOpenSkillEntry: seedOpenSkillEntry,
+        );
+        scheduleHydratedSnapshot = await _withOfflineScheduleFallback(
+          account.team,
+          snapshot,
+        );
+      }
+
       if (_currentAccount?.normalizedEmail != account.normalizedEmail) {
         return;
       }
@@ -1285,15 +1392,11 @@ class AppSessionController extends ChangeNotifier {
     if (team.id > 0) {
       return team;
     }
-    try {
-      return await _teamDirectory.validateTeamNumber(
-        team.number,
-        preferredSeasonId: preferredSeasonId,
-        programIds: _searchProgramIdsForCurrentCompetition(),
-      );
-    } catch (_) {
-      return team;
-    }
+    final validated = await _validateTeamNumberForCurrentCompetition(
+      team.number,
+      preferredSeasonId: preferredSeasonId,
+    );
+    return validated ?? team;
   }
 
   Future<TeamStatsSnapshot> _loadResolvedTeamStats(
@@ -1346,26 +1449,27 @@ class AppSessionController extends ChangeNotifier {
       return null;
     }
 
-    try {
-      final validated = await _teamDirectory.validateTeamNumber(
-        normalizedNumber,
-        preferredSeasonId: preferredSeasonId,
-        programIds: _searchProgramIdsForCurrentCompetition(),
-      );
-      final recovered = _mergeTeamSummary(validated, originalTeam);
-      if (_sameTeamSummary(recovered, currentTeam)) {
-        return null;
-      }
-      return recovered;
-    } catch (_) {
+    final validated = await _validateTeamNumberForCurrentCompetition(
+      normalizedNumber,
+      preferredSeasonId: preferredSeasonId,
+    );
+    if (validated == null) {
       return null;
     }
+
+    final recovered = _mergeTeamSummary(validated, originalTeam);
+    if (_sameTeamSummary(recovered, currentTeam)) {
+      return null;
+    }
+    return recovered;
   }
 
   bool _hasRobotEventsCoverage(TeamStatsSnapshot snapshot) {
     return snapshot.allEvents.isNotEmpty ||
         snapshot.rankings.isNotEmpty ||
-        snapshot.matchHistory.isNotEmpty;
+        snapshot.matchHistory.isNotEmpty ||
+        snapshot.worldSkillsEntry != null ||
+        snapshot.openSkillEntry != null;
   }
 
   bool _shouldCacheTeamStatsSnapshot(TeamStatsSnapshot snapshot) {
@@ -2162,7 +2266,7 @@ class AppSessionController extends ChangeNotifier {
   Future<int> fetchTeamAwardsCount(
     TeamSummary team, {
     bool force = false,
-    int maxEvents = 12,
+    int maxEvents = 24,
   }) {
     final normalizedTeamNumber = team.number.trim().toUpperCase();
     final cacheKey = '${team.id}:$normalizedTeamNumber:$maxEvents';
@@ -2171,24 +2275,40 @@ class AppSessionController extends ChangeNotifier {
     }
 
     return _teamAwardsCountCache.putIfAbsent(cacheKey, () async {
-      final snapshot = await fetchTeamStatsSnapshot(team, force: force);
-      if (snapshot.pastEvents.isEmpty) {
-        return 0;
-      }
+      try {
+        final snapshot = await fetchTeamStatsSnapshot(team, force: force);
+        if (snapshot.pastEvents.isEmpty) {
+          return 0;
+        }
 
-      final trackedEvents = snapshot.pastEvents
-          .take(maxEvents)
-          .toList(growable: false);
-      var totalAwards = 0;
-      for (final event in trackedEvents) {
-        final awards = await fetchEventAwards(event.id);
-        for (final award in awards) {
-          if (_awardMentionsTeamNumber(award, normalizedTeamNumber)) {
-            totalAwards += 1;
+        final trackedEvents = snapshot.pastEvents.toList(growable: false)
+          ..sort((a, b) {
+            final aDate =
+                (a.end ?? a.start) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                (b.end ?? b.start) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return bDate.compareTo(aDate);
+          });
+
+        var totalAwards = 0;
+        for (final event in trackedEvents.take(maxEvents)) {
+          List<AwardSummary> awards;
+          try {
+            awards = await fetchEventAwards(event.id);
+          } catch (_) {
+            continue;
+          }
+
+          for (final award in awards) {
+            if (_awardMentionsTeamNumber(award, normalizedTeamNumber)) {
+              totalAwards += 1;
+            }
           }
         }
+        return totalAwards;
+      } catch (_) {
+        return 0;
       }
-      return totalAwards;
     });
   }
 
@@ -2197,8 +2317,20 @@ class AppSessionController extends ChangeNotifier {
     if (normalized.isEmpty) {
       return false;
     }
+    final boundaryPattern = RegExp(
+      '(^|[^A-Z0-9])${RegExp.escape(normalized)}(\$|[^A-Z0-9])',
+    );
     return award.recipients.any((recipient) {
-      return recipient.trim().toUpperCase().contains(normalized);
+      final recipientLabel = recipient.trim().toUpperCase();
+      if (recipientLabel.isEmpty) {
+        return false;
+      }
+      if (boundaryPattern.hasMatch(recipientLabel)) {
+        return true;
+      }
+
+      final compressed = recipientLabel.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      return compressed == normalized;
     });
   }
 
@@ -2768,6 +2900,34 @@ class AppSessionController extends ChangeNotifier {
       case AppCompetitionPreference.vexU:
       case AppCompetitionPreference.vexAI:
         return const <int>[];
+    }
+  }
+
+  Future<TeamSummary?> _validateTeamNumberForCurrentCompetition(
+    String teamNumber, {
+    required int? preferredSeasonId,
+  }) async {
+    final scopedProgramIds = _searchProgramIdsForCurrentCompetition();
+    try {
+      return await _teamDirectory.validateTeamNumber(
+        teamNumber,
+        preferredSeasonId: preferredSeasonId,
+        programIds: scopedProgramIds,
+      );
+    } catch (_) {
+      if (scopedProgramIds.isEmpty) {
+        return null;
+      }
+    }
+
+    try {
+      return await _teamDirectory.validateTeamNumber(
+        teamNumber,
+        preferredSeasonId: preferredSeasonId,
+        programIds: const <int>[],
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -3417,6 +3577,9 @@ class AppSessionController extends ChangeNotifier {
         preferredSeasonId: _preferredSeasonId,
         themeModePreference: _themeModePreference,
         competitionPreference: _competitionPreference,
+        followMode: _followMode,
+        chromeAccentPreference: _chromeAccentPreference,
+        customChromeAccentValue: _customChromeAccentValue,
         dismissedWorldsScheduleAnnouncementId:
             _dismissedWorldsScheduleAnnouncementId,
         notificationCenterSeenAtMillis: _notificationCenterSeenAtMillis,

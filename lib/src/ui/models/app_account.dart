@@ -4,6 +4,18 @@ enum AppThemeModePreference { system, light, dark }
 
 enum AppCompetitionPreference { vexV5, vexIQ, vexU, vexAI }
 
+enum AppFollowMode { single, multi }
+
+enum AppChromeAccentPreference {
+  midnight,
+  ocean,
+  forest,
+  sunset,
+  graphite,
+  light,
+  custom,
+}
+
 class AppAccount {
   const AppAccount({
     required this.fullName,
@@ -72,6 +84,9 @@ class AppSettings {
     this.preferredSeasonId,
     this.themeModePreference = AppThemeModePreference.system,
     this.competitionPreference = AppCompetitionPreference.vexV5,
+    this.followMode = AppFollowMode.single,
+    this.chromeAccentPreference = AppChromeAccentPreference.midnight,
+    this.customChromeAccentValue,
     this.dismissedWorldsScheduleAnnouncementId,
     this.notificationCenterSeenAtMillis,
     this.favoriteTeamNumbers = const <String>[],
@@ -88,6 +103,9 @@ class AppSettings {
   final int? preferredSeasonId;
   final AppThemeModePreference themeModePreference;
   final AppCompetitionPreference competitionPreference;
+  final AppFollowMode followMode;
+  final AppChromeAccentPreference chromeAccentPreference;
+  final int? customChromeAccentValue;
   final String? dismissedWorldsScheduleAnnouncementId;
   final int? notificationCenterSeenAtMillis;
   final List<String> favoriteTeamNumbers;
@@ -102,6 +120,9 @@ class AppSettings {
     int? preferredSeasonId,
     AppThemeModePreference? themeModePreference,
     AppCompetitionPreference? competitionPreference,
+    AppFollowMode? followMode,
+    AppChromeAccentPreference? chromeAccentPreference,
+    int? customChromeAccentValue,
     String? dismissedWorldsScheduleAnnouncementId,
     int? notificationCenterSeenAtMillis,
     List<String>? favoriteTeamNumbers,
@@ -113,6 +134,7 @@ class AppSettings {
     bool clearPreferredSeasonId = false,
     bool clearDismissedWorldsScheduleAnnouncementId = false,
     bool clearNotificationCenterSeenAtMillis = false,
+    bool clearCustomChromeAccentValue = false,
     bool clearDeveloperScrimmageStartAtMillis = false,
   }) {
     return AppSettings(
@@ -127,6 +149,12 @@ class AppSettings {
       themeModePreference: themeModePreference ?? this.themeModePreference,
       competitionPreference:
           competitionPreference ?? this.competitionPreference,
+          followMode: followMode ?? this.followMode,
+          chromeAccentPreference:
+          chromeAccentPreference ?? this.chromeAccentPreference,
+          customChromeAccentValue: clearCustomChromeAccentValue
+            ? null
+            : customChromeAccentValue ?? this.customChromeAccentValue,
       dismissedWorldsScheduleAnnouncementId:
           clearDismissedWorldsScheduleAnnouncementId
           ? null
@@ -163,6 +191,22 @@ class AppSettings {
       competitionPreference: _competitionFromJson(
         json['competitionPreference'],
       ),
+      followMode: _followModeFromJson(
+        json['followMode'],
+        fallback: ((json['favoriteTeamNumbers'] as List<Object?>?)
+                        ?.whereType<String>()
+                        .where((value) => value.trim().isNotEmpty)
+                        .isNotEmpty ??
+                    false)
+            ? AppFollowMode.multi
+            : AppFollowMode.single,
+      ),
+      chromeAccentPreference: _chromeAccentFromJson(
+        json['chromeAccentPreference'],
+      ),
+      customChromeAccentValue: json['customChromeAccentValue'] is num
+          ? (json['customChromeAccentValue'] as num).toInt()
+          : null,
       dismissedWorldsScheduleAnnouncementId:
           (json['dismissedWorldsScheduleAnnouncementId'] as String?)
                   ?.trim()
@@ -212,6 +256,9 @@ class AppSettings {
       'preferredSeasonId': preferredSeasonId,
       'themeModePreference': themeModePreference.name,
       'competitionPreference': competitionPreference.name,
+      'followMode': followMode.name,
+      'chromeAccentPreference': chromeAccentPreference.name,
+      'customChromeAccentValue': customChromeAccentValue,
       'dismissedWorldsScheduleAnnouncementId':
           dismissedWorldsScheduleAnnouncementId,
       'notificationCenterSeenAtMillis': notificationCenterSeenAtMillis,
@@ -222,6 +269,19 @@ class AppSettings {
       'teamRatings': teamRatings,
     };
   }
+}
+
+AppFollowMode _followModeFromJson(
+  Object? value, {
+  required AppFollowMode fallback,
+}) {
+  final raw = (value as String?)?.trim();
+  for (final followMode in AppFollowMode.values) {
+    if (followMode.name == raw) {
+      return followMode;
+    }
+  }
+  return fallback;
 }
 
 AppThemeModePreference _themeModeFromJson(Object? value) {
@@ -242,4 +302,14 @@ AppCompetitionPreference _competitionFromJson(Object? value) {
     }
   }
   return AppCompetitionPreference.vexV5;
+}
+
+AppChromeAccentPreference _chromeAccentFromJson(Object? value) {
+  final raw = (value as String?)?.trim();
+  for (final accent in AppChromeAccentPreference.values) {
+    if (accent.name == raw) {
+      return accent;
+    }
+  }
+  return AppChromeAccentPreference.midnight;
 }

@@ -7,6 +7,7 @@ import '../models/team_stats_snapshot.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_trend_chart.dart';
 import 'event_details_screen.dart';
+import 'event_team_screen.dart';
 
 enum _TeamProfileTab { overview, trends, events }
 
@@ -608,12 +609,14 @@ class _EventsTab extends StatelessWidget {
         _EventSection(
           title: 'Upcoming Events',
           emptyLabel: 'No upcoming events for this team.',
+          team: teamStats.team,
           events: teamStats.futureEvents,
         ),
         const SizedBox(height: 24),
         _EventSection(
           title: 'Past Events',
           emptyLabel: 'No past events published yet.',
+          team: teamStats.team,
           events: teamStats.pastEvents,
           awardsByEvent: details.awardsByEvent,
         ),
@@ -731,12 +734,14 @@ class _EventSection extends StatelessWidget {
   const _EventSection({
     required this.title,
     required this.emptyLabel,
+    required this.team,
     required this.events,
     this.awardsByEvent = const <int, List<AwardSummary>>{},
   });
 
   final String title;
   final String emptyLabel;
+  final TeamSummary team;
   final List<EventSummary> events;
   final Map<int, List<AwardSummary>> awardsByEvent;
 
@@ -750,6 +755,7 @@ class _EventSection extends StatelessWidget {
               children: <Widget>[
                 for (var i = 0; i < events.length; i++)
                   _TeamEventRow(
+                    team: team,
                     event: events[i],
                     awards:
                         awardsByEvent[events[i].id] ?? const <AwardSummary>[],
@@ -763,11 +769,13 @@ class _EventSection extends StatelessWidget {
 
 class _TeamEventRow extends StatelessWidget {
   const _TeamEventRow({
+    required this.team,
     required this.event,
     required this.awards,
     required this.showDivider,
   });
 
+  final TeamSummary team;
   final EventSummary event;
   final List<AwardSummary> awards;
   final bool showDivider;
@@ -874,6 +882,41 @@ class _TeamEventRow extends StatelessWidget {
                     .toList(growable: false),
               ),
             ],
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                OutlinedButton.icon(
+                  onPressed: () {
+                    openSolarEventTeamScreen(
+                      context,
+                      event: event,
+                      team: team,
+                      highlightTeamNumber: team.number,
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    side: const BorderSide(color: Color(0xFFCBD2E7)),
+                    foregroundColor: const Color(0xFF16182C),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                  ),
+                  icon: const Icon(Icons.view_list_rounded, size: 16),
+                  label: const Text('Team schedule'),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(
+                      EventDetailsScreen.routeName,
+                      arguments: event,
+                    );
+                  },
+                  child: const Text('Event details'),
+                ),
+              ],
+            ),
           ],
         ),
       ),

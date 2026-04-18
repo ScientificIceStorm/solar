@@ -79,7 +79,7 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
                     decoration: BoxDecoration(
                       color: selected
                           ? const Color(0xFF16182C)
-                          : Colors.white.withValues(alpha: 0.94),
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: selected
@@ -125,7 +125,7 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
                   width: 114,
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.96),
+                    color: Colors.transparent,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: selected
@@ -178,7 +178,7 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.95),
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: const Color(0xFFE7E8F1)),
           ),
@@ -211,25 +211,6 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
                   showDivider: i != selectedDay.sessions.length - 1,
                 ),
             ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7F7FB),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE7E8F1)),
-          ),
-          child: const Text(
-            'Source: REC Foundation detailed agenda page for the 2026 VEX Robotics World Championship in St. Louis.',
-            style: TextStyle(
-              color: Color(0xFF5C6074),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.45,
-            ),
           ),
         ),
       ],

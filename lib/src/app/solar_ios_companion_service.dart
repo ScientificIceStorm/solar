@@ -56,6 +56,11 @@ class SolarIosCompanionService {
       return null;
     }
 
+    final scheduledAt = _estimatedScheduledAt(snapshot);
+    if (scheduledAt == null) {
+      return null;
+    }
+
     return <String, Object?>{
       'id': match.id,
       'eventName': snapshot.upcomingEvent?.name ?? match.event.name,
@@ -63,7 +68,7 @@ class SolarIosCompanionService {
       'matchName': match.name,
       'matchLabel': _matchLabel(match),
       'fieldName': match.field,
-      'scheduledAt': _estimatedScheduledAt(snapshot)?.millisecondsSinceEpoch,
+      'scheduledAt': scheduledAt.millisecondsSinceEpoch,
       'redAlliance': _allianceLabel(match, 'red'),
       'blueAlliance': _allianceLabel(match, 'blue'),
     };

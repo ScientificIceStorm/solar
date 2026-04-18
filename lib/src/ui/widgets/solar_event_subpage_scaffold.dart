@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/solar_app_scope.dart';
+import '../theme/solar_chrome_palette.dart';
 import '../pages/onboarding_screen.dart';
 import 'solar_navigation.dart';
 import 'solar_screen_background.dart';
@@ -21,9 +22,14 @@ class SolarEventSubpageScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
+    final chromeColor = solarChromeAccentColor(
+      controller.chromeAccentPreference,
+      customAccentValue: controller.customChromeAccentValue,
+    );
+    final topInset = MediaQuery.paddingOf(context).top;
     final account = controller.currentAccount;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
+      value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBody: true,
@@ -47,66 +53,64 @@ class SolarEventSubpageScaffold extends StatelessWidget {
                 },
               ),
         body: SolarScreenBackground(
+          padding: EdgeInsets.zero,
+          respectSafeArea: false,
           child: Column(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  InkWell(
-                    onTap: () => Navigator.of(context).maybePop(),
-                    borderRadius: BorderRadius.circular(18),
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: const <BoxShadow>[
-                          BoxShadow(
-                            color: Color(0x10000000),
-                            blurRadius: 18,
-                            offset: Offset(0, 10),
+              Container(
+                padding: EdgeInsets.fromLTRB(20, topInset + 8, 20, 12),
+                color: chromeColor,
+                child: Row(
+                  children: <Widget>[
+                    InkWell(
+                      onTap: () => Navigator.of(context).maybePop(),
+                      borderRadius: BorderRadius.circular(18),
+                      child: const Padding(
+                        padding: EdgeInsets.all(7),
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFD9DDF5),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Color(0xFF16182C),
-                        size: 22,
-                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Color(0xFF24243A),
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF8E92A7),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 22),
-              Expanded(child: body),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  child: body,
+                ),
+              ),
             ],
           ),
         ),

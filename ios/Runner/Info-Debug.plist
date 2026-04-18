@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Solar V6</string>
+	<string>SolarScout</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>solar_v6</string>
+	<string>SolarScout</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -44,7 +44,7 @@
 		<string>_dartVmService._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Allow Solar V6 to connect to Flutter tools on your Mac for debugging.</string>
+	<string>Allow SolarScout to connect to Flutter tools on your Mac for debugging.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

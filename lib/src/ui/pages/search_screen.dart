@@ -91,6 +91,9 @@ class _SearchScreenState extends State<SearchScreen> {
           final query = _searchController.text.trim();
           final teamResults = controller.searchCachedTeams(query);
           final eventResults = controller.searchCachedEvents(query);
+          final upcomingEvents = _upcomingSearchEvents(
+            controller.preloadedSearchEvents,
+          );
 
           return FutureBuilder<SolarQuickviewSnapshot?>(
             future: _quickviewFuture,
@@ -118,7 +121,12 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                   const SizedBox(height: 18),
                   if (query.length < 2)
-                    const _SearchHintCard()
+                    _SearchUpcomingEventsSection(
+                      events: upcomingEvents,
+                      isLoading:
+                          controller.isPreloadingSearchEvents &&
+                          upcomingEvents.isEmpty,
+                    )
                   else ...<Widget>[
                     _SearchSummaryCard(
                       query: query,
@@ -171,97 +179,90 @@ class _SearchInputCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.96),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const <BoxShadow>[
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 28,
-                offset: Offset(0, 16),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E5F0)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Column(
+          children: <Widget>[
+            TextField(
+              controller: controller,
+              onChanged: onChanged,
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(
+                color: Color(0xFF181A33),
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
-          child: TextField(
-            controller: controller,
-            onChanged: onChanged,
-            textInputAction: TextInputAction.search,
-            style: const TextStyle(
-              color: Color(0xFF181A33),
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              hintText: 'Search teams, events, or team matches',
-              hintStyle: const TextStyle(
-                color: Color(0xFF8E92A7),
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                hintText: 'Search teams, events, or team matches',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF8E92A7),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: controller.text.trim().isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          controller.clear();
+                          onChanged('');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
               ),
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: controller.text.trim().isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () {
-                        controller.clear();
-                        onChanged('');
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    ),
             ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: SearchResultScope.values
-                .map((option) {
-                  final selected = option == scope;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
+            const SizedBox(height: 6),
+            Row(
+              children: SearchResultScope.values.map((option) {
+                final selected = option == scope;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
                     child: InkWell(
                       onTap: () => onScopeSelected(option),
-                      borderRadius: BorderRadius.circular(999),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
+                      borderRadius: BorderRadius.circular(11),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
                           color: selected
                               ? const Color(0xFF16182C)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(999),
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(11),
                           border: Border.all(
                             color: selected
                                 ? const Color(0xFF16182C)
-                                : const Color(0xFFE1E4EF),
+                                : const Color(0xFFE2E5F0),
                           ),
                         ),
+                        alignment: Alignment.center,
                         child: Text(
                           _searchScopeLabel(option),
                           style: TextStyle(
                             color: selected
                                 ? Colors.white
-                                : const Color(0xFF24243A),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
+                                : const Color(0xFF5F6478),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ),
-                  );
-                })
-                .toList(growable: false),
-          ),
+                  ),
+                );
+              }).toList(growable: false),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -284,8 +285,9 @@ class _SearchSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E5F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,10 +333,11 @@ class _SearchMetricPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F7FB),
-        borderRadius: BorderRadius.circular(999),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE1E5F1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -453,7 +456,10 @@ class _SearchTeamMatchesSection extends StatelessWidget {
                       child: SizedBox(
                         width: 24,
                         height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   );
@@ -583,8 +589,9 @@ class _SearchSectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E5F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,7 +639,7 @@ class _SearchTeamTile extends StatelessWidget {
             context,
           ).pushNamed(TeamProfileScreen.routeName, arguments: team);
         },
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 13),
           decoration: const BoxDecoration(
@@ -727,7 +734,7 @@ class _SearchEventTile extends StatelessWidget {
             context,
           ).pushNamed(EventDetailsScreen.routeName, arguments: event);
         },
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 13),
           decoration: const BoxDecoration(
@@ -841,26 +848,42 @@ class _SectionEmptyLabel extends StatelessWidget {
   }
 }
 
-class _SearchHintCard extends StatelessWidget {
-  const _SearchHintCard();
+class _SearchUpcomingEventsSection extends StatelessWidget {
+  const _SearchUpcomingEventsSection({
+    required this.events,
+    required this.isLoading,
+  });
+
+  final List<EventSummary> events;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: const Text(
-        'Type at least two characters to search teams, events, and the currently tracked Quickview event schedule for matching teams.',
-        style: TextStyle(
-          color: Color(0xFF6F748B),
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          height: 1.45,
-        ),
-      ),
+    return _SearchSectionCard(
+      title: 'Upcoming Events',
+      body: isLoading
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 22),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            )
+          : events.isEmpty
+          ? const _SectionEmptyLabel(
+              'No upcoming events yet.',
+            )
+          : Column(
+              children: events
+                  .map((event) => _SearchEventTile(event: event))
+                  .toList(growable: false),
+            ),
     );
   }
 }
@@ -918,12 +941,12 @@ String _eventDateLabel(EventSummary event) {
     if (start.year == end.year &&
         start.month == end.month &&
         start.day == end.day) {
-      return '${start.month}/${start.day}/${start.year}';
+      return _fullDateLabel(start);
     }
-    return '${start.month}/${start.day} - ${end.month}/${end.day}/${end.year}';
+    return '${_fullDateLabel(start)} - ${_fullDateLabel(end)}';
   }
   final date = start ?? end!;
-  return '${date.month}/${date.day}/${date.year}';
+  return _fullDateLabel(date);
 }
 
 String _eventLocationLabel(LocationSummary location) {
@@ -933,4 +956,71 @@ String _eventLocationLabel(LocationSummary location) {
     if (location.country.trim().isNotEmpty) location.country.trim(),
   ];
   return parts.isEmpty ? 'Location pending' : parts.join(', ');
+}
+
+List<EventSummary> _upcomingSearchEvents(List<EventSummary> events) {
+  final now = DateTime.now();
+  final upcoming = events.where((event) {
+    final anchor = event.end?.toLocal() ?? event.start?.toLocal();
+    if (anchor == null) {
+      return true;
+    }
+    return !anchor.isBefore(now.subtract(const Duration(days: 1)));
+  }).toList(growable: false);
+
+  upcoming.sort((a, b) {
+    final aAnchor = _eventSortAnchor(a);
+    final bAnchor = _eventSortAnchor(b);
+    return aAnchor.compareTo(bAnchor);
+  });
+
+  return upcoming.take(10).toList(growable: false);
+}
+
+DateTime _eventSortAnchor(EventSummary event) {
+  return (event.start ?? event.end)?.toLocal() ?? DateTime(2100);
+}
+
+String _fullDateLabel(DateTime value) {
+  final local = value.toLocal();
+  final weekday = _weekdayLabel(local.weekday);
+  final month = _monthLabel(local.month);
+  return '$weekday, $month ${local.day}, ${local.year}';
+}
+
+String _monthLabel(int month) {
+  const names = <String>[
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  if (month < 1 || month > 12) {
+    return 'Month';
+  }
+  return names[month - 1];
+}
+
+String _weekdayLabel(int weekday) {
+  const names = <String>[
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  if (weekday < 1 || weekday > 7) {
+    return 'Day';
+  }
+  return names[weekday - 1];
 }

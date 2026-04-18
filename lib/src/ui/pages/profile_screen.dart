@@ -39,7 +39,8 @@ class ProfileScreen extends StatelessWidget {
 
           final teamStats =
               controller.teamStats ?? TeamStatsSnapshot(team: account.team);
-          final favoriteTeams = controller.favoriteTeams
+            final followedTeams = controller.followedTeams;
+            final favoriteTeams = followedTeams
               .where(
                 (team) =>
                     team.number.trim().toUpperCase() !=
@@ -70,7 +71,7 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 22),
               _ProfileTeamGraphDeck(
                 controller: controller,
-                fallbackTeam: account.team,
+                teams: followedTeams,
               ),
             ],
           );
@@ -195,11 +196,11 @@ class _FavoriteTeamRow extends StatelessWidget {
 class _ProfileTeamGraphDeck extends StatefulWidget {
   const _ProfileTeamGraphDeck({
     required this.controller,
-    required this.fallbackTeam,
+    required this.teams,
   });
 
   final AppSessionController controller;
-  final TeamSummary fallbackTeam;
+  final List<TeamSummary> teams;
 
   @override
   State<_ProfileTeamGraphDeck> createState() => _ProfileTeamGraphDeckState();
@@ -207,23 +208,50 @@ class _ProfileTeamGraphDeck extends StatefulWidget {
 
 class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
   Future<_ProfileGraphDeckData>? _graphFuture;
+  int _selectedIndex = 0;
+  String? _activeTeamKey;
+  double _dragDeltaX = 0;
+
+  String _teamSignature(List<TeamSummary> teams) {
+    return teams
+        .map((team) => team.number.trim().toUpperCase())
+        .join('|');
+  }
 
   @override
   void didUpdateWidget(covariant _ProfileTeamGraphDeck oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.controller, widget.controller) ||
-        oldWidget.fallbackTeam.number != widget.fallbackTeam.number) {
+        _teamSignature(oldWidget.teams) != _teamSignature(widget.teams)) {
       _graphFuture = null;
+      _activeTeamKey = null;
+      _selectedIndex = 0;
     }
   }
 
-  Future<_ProfileGraphDeckData> _loadGraphDeckData() async {
+  void _shiftTeam(int delta) {
+    final teams = widget.teams;
+    if (teams.length <= 1) {
+      return;
+    }
+
+    var nextIndex = (_selectedIndex + delta) % teams.length;
+    if (nextIndex < 0) {
+      nextIndex += teams.length;
+    }
+
+    setState(() {
+      _selectedIndex = nextIndex;
+      _graphFuture = null;
+      _activeTeamKey = null;
+    });
+  }
+
+  Future<_ProfileGraphDeckData> _loadGraphDeckData(TeamSummary team) async {
     await widget.controller.ensureSolarizeCoverageForTeams(
-      teams: <TeamSummary>[widget.fallbackTeam],
+      teams: <TeamSummary>[team],
     );
-    final teamStats = await widget.controller.fetchTeamStatsSnapshot(
-      widget.fallbackTeam,
-    );
+    final teamStats = await widget.controller.fetchTeamStatsSnapshot(team);
     return _hydrateGraphDeckData(
       headline: 'Team ${teamStats.team.number}',
       teamStats: teamStats,
@@ -253,284 +281,339 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_ProfileGraphDeckData>(
-      future: _graphFuture ??= _loadGraphDeckData(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+    final teams = widget.teams;
+    if (teams.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (_selectedIndex >= teams.length) {
+      _selectedIndex = teams.length - 1;
+    }
+    final activeTeam = teams[_selectedIndex];
+    final activeKey = activeTeam.number.trim().toUpperCase();
+    if (_activeTeamKey != activeKey) {
+      _activeTeamKey = activeKey;
+      _graphFuture = null;
+    }
+
+    final hasMultipleTeams = teams.length > 1;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (_) {
+        _dragDeltaX = 0;
+      },
+      onHorizontalDragUpdate: (details) {
+        _dragDeltaX += details.primaryDelta ?? 0;
+      },
+      onHorizontalDragEnd: (_) {
+        if (_dragDeltaX.abs() < 20) {
+          _dragDeltaX = 0;
+          return;
+        }
+        _shiftTeam(_dragDeltaX < 0 ? 1 : -1);
+        _dragDeltaX = 0;
+      },
+      child: FutureBuilder<_ProfileGraphDeckData>(
+        future: _graphFuture ??= _loadGraphDeckData(activeTeam),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: const Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.2),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Loading team history lists...',
+                      style: TextStyle(
+                        color: Color(0xFF6F748B),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final data = snapshot.data!;
+          final teamStats = data.teamStats;
+
           return Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.96),
               borderRadius: BorderRadius.circular(28),
             ),
-            child: const Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                const Text(
+                  'Team History Lists',
+                  style: TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Loading team history lists...',
-                    style: TextStyle(
-                      color: Color(0xFF6F748B),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                const SizedBox(height: 6),
+                Text(
+                  '${data.headline} skills and awards in a clean list view',
+                  style: const TextStyle(
+                    color: Color(0xFF8E92A7),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (hasMultipleTeams) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      const Icon(
+                        Icons.swipe_rounded,
+                        size: 16,
+                        color: Color(0xFF8E92A7),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_selectedIndex + 1}/${teams.length} • Swipe to switch teams',
+                        style: const TextStyle(
+                          color: Color(0xFF8E92A7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if ((teamStats.errorMessage ?? '').isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 10),
+                  Text(
+                    teamStats.errorMessage!,
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                ],
+                const SizedBox(height: 18),
+                _ProfileGraphSection(
+                  title: 'Skills History',
+                  child: data.skillsHistory.isEmpty
+                      ? const Text(
+                          'Past event skills history will appear here once published attempts are available.',
+                          style: TextStyle(
+                            color: Color(0xFF8E92A7),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8F8FC),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFE7E8F2)),
+                          ),
+                          child: Column(
+                            children: <Widget>[
+                              for (var i = 0; i < data.skillsHistory.length; i++)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  decoration: i == data.skillsHistory.length - 1
+                                      ? null
+                                      : const BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Color(0xFFE3E5F0),
+                                            ),
+                                          ),
+                                        ),
+                                  child: Row(
+                                    children: <Widget>[
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: <Widget>[
+                                            Text(
+                                              data.skillsHistory[i].eventName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Color(0xFF24243A),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '${data.skillsHistory[i].label} • Driver ${data.skillsHistory[i].driver} • Auton ${data.skillsHistory[i].programming}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Color(0xFF7B8198),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEEF2FF),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${data.skillsHistory[i].combined}',
+                                          style: const TextStyle(
+                                            color: Color(0xFF1E2A4E),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 18),
+                _ProfileGraphSection(
+                  title: 'Awards',
+                  child: data.awardsHistory.isEmpty
+                      ? const Text(
+                          'Team awards will appear here when recipients are published for your past events.',
+                          style: TextStyle(
+                            color: Color(0xFF8E92A7),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8F8FC),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFE7E8F2)),
+                          ),
+                          child: Column(
+                            children: <Widget>[
+                              for (var i = 0; i < data.awardsHistory.length; i++)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  decoration: i == data.awardsHistory.length - 1
+                                      ? null
+                                      : const BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Color(0xFFE3E5F0),
+                                            ),
+                                          ),
+                                        ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(
+                                          Icons.emoji_events_rounded,
+                                          size: 16,
+                                          color: Color(0xFF8B6B00),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: <Widget>[
+                                            Text(
+                                              data.awardsHistory[i].awardTitle,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Color(0xFF24243A),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w700,
+                                                height: 1.25,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '${data.awardsHistory[i].eventName} • ${data.awardsHistory[i].eventLabel}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Color(0xFF7B8198),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            if (data
+                                                .awardsHistory[i]
+                                                .recipientLabel
+                                                .trim()
+                                                .isNotEmpty) ...<Widget>[
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                data.awardsHistory[i]
+                                                    .recipientLabel,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Color(0xFF9A9FB3),
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                 ),
               ],
             ),
           );
-        }
-
-        final data = snapshot.data!;
-        final teamStats = data.teamStats;
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.96),
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text(
-                'Team History Lists',
-                style: TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${data.headline} skills and awards in a clean list view',
-                style: const TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if ((teamStats.errorMessage ?? '').isNotEmpty) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(
-                  teamStats.errorMessage!,
-                  style: const TextStyle(
-                    color: Color(0xFF8E92A7),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 18),
-              _ProfileGraphSection(
-                title: 'Skills History',
-                child: data.skillsHistory.isEmpty
-                    ? const Text(
-                        'Past event skills history will appear here once published attempts are available.',
-                        style: TextStyle(
-                          color: Color(0xFF8E92A7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.4,
-                        ),
-                      )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8F8FC),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFE7E8F2)),
-                        ),
-                        child: Column(
-                          children: <Widget>[
-                            for (var i = 0; i < data.skillsHistory.length; i++)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                decoration: i == data.skillsHistory.length - 1
-                                    ? null
-                                    : const BoxDecoration(
-                                        border: Border(
-                                          bottom: BorderSide(
-                                            color: Color(0xFFE3E5F0),
-                                          ),
-                                        ),
-                                      ),
-                                child: Row(
-                                  children: <Widget>[
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Text(
-                                            data.skillsHistory[i].eventName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFF24243A),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '${data.skillsHistory[i].label} • Driver ${data.skillsHistory[i].driver} • Auton ${data.skillsHistory[i].programming}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFF7B8198),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEEF2FF),
-                                        borderRadius: BorderRadius.circular(
-                                          999,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '${data.skillsHistory[i].combined}',
-                                        style: const TextStyle(
-                                          color: Color(0xFF1E2A4E),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 18),
-              _ProfileGraphSection(
-                title: 'Awards',
-                child: data.awardsHistory.isEmpty
-                    ? const Text(
-                        'Team awards will appear here when recipients are published for your past events.',
-                        style: TextStyle(
-                          color: Color(0xFF8E92A7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.4,
-                        ),
-                      )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8F8FC),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFE7E8F2)),
-                        ),
-                        child: Column(
-                          children: <Widget>[
-                            for (var i = 0; i < data.awardsHistory.length; i++)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                decoration: i == data.awardsHistory.length - 1
-                                    ? null
-                                    : const BoxDecoration(
-                                        border: Border(
-                                          bottom: BorderSide(
-                                            color: Color(0xFFE3E5F0),
-                                          ),
-                                        ),
-                                      ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    const Padding(
-                                      padding: EdgeInsets.only(top: 2),
-                                      child: Icon(
-                                        Icons.emoji_events_rounded,
-                                        size: 16,
-                                        color: Color(0xFF8B6B00),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Text(
-                                            data.awardsHistory[i].awardTitle,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFF24243A),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                              height: 1.25,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '${data.awardsHistory[i].eventName} • ${data.awardsHistory[i].eventLabel}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFF7B8198),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          if (data
-                                              .awardsHistory[i]
-                                              .recipientLabel
-                                              .trim()
-                                              .isNotEmpty) ...<Widget>[
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              data
-                                                  .awardsHistory[i]
-                                                  .recipientLabel,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Color(0xFF9A9FB3),
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/solar_app_scope.dart';
+import '../theme/solar_chrome_palette.dart';
 import '../pages/onboarding_screen.dart';
 import 'solar_navigation.dart';
 import 'solar_screen_background.dart';
@@ -27,9 +28,14 @@ class SolarPageScaffold extends StatelessWidget {
     if (account == null) {
       return const Scaffold(body: SizedBox.shrink());
     }
+    final chromeColor = solarChromeAccentColor(
+      controller.chromeAccentPreference,
+      customAccentValue: controller.customChromeAccentValue,
+    );
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
+      value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBody: true,
@@ -51,58 +57,50 @@ class SolarPageScaffold extends StatelessWidget {
           },
         ),
         body: SolarScreenBackground(
+          padding: EdgeInsets.zero,
+          respectSafeArea: false,
           child: Column(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Builder(
-                    builder: (context) {
-                      return InkWell(
-                        key: const ValueKey<String>('page-menu-button'),
-                        onTap: () => Scaffold.of(context).openDrawer(),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.92),
-                            borderRadius: BorderRadius.circular(18),
-                            boxShadow: const <BoxShadow>[
-                              BoxShadow(
-                                color: Color(0x12000000),
-                                blurRadius: 18,
-                                offset: Offset(0, 10),
-                              ),
-                            ],
+              Container(
+                padding: EdgeInsets.fromLTRB(20, topInset + 8, 20, 12),
+                color: chromeColor,
+                child: Row(
+                  children: <Widget>[
+                    Builder(
+                      builder: (context) {
+                        return InkWell(
+                          key: const ValueKey<String>('page-menu-button'),
+                          onTap: () => Scaffold.of(context).openDrawer(),
+                          borderRadius: BorderRadius.circular(18),
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: SolarMenuGlyph(color: Colors.white),
                           ),
-                          alignment: Alignment.center,
-                          child: const SolarMenuGlyph(color: Color(0xFF16182C)),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Color(0xFF24243A),
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.8,
                       ),
                     ),
-                  ),
-                  if (trailing != null)
-                    trailing!
-                  else
-                    const SizedBox(width: 52),
-                ],
+                    if (trailing != null)
+                      trailing!
+                    else
+                      const SizedBox(width: 42),
+                  ],
+                ),
               ),
-              const SizedBox(height: 22),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 18),
                   child: body,
                 ),
               ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../app/solar_app_scope.dart';
 import '../models/app_account.dart';
+import '../theme/solar_chrome_palette.dart';
 import 'solar_team_link.dart';
 
 enum SolarNavDestination { home, rankings, search, calendar, profile }
@@ -179,6 +181,12 @@ class SolarBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = SolarAppScope.of(context);
+    final chromeColor = solarChromeAccentColor(
+      controller.chromeAccentPreference,
+      customAccentValue: controller.customChromeAccentValue,
+    );
+
     return SafeArea(
       minimum: const EdgeInsets.only(bottom: 18),
       child: Padding(
@@ -186,15 +194,9 @@ class SolarBottomNavBar extends StatelessWidget {
         child: Container(
           height: 74,
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: chromeColor,
             borderRadius: BorderRadius.circular(999),
-            boxShadow: const <BoxShadow>[
-              BoxShadow(
-                color: Color(0x26000000),
-                blurRadius: 30,
-                offset: Offset(0, 16),
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -315,23 +317,34 @@ class _BottomBarIconButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(30),
       child: SizedBox(
-        width: 46,
+        width: 52,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected
                     ? Colors.white.withValues(alpha: 0.08)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: color, size: 30),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutBack,
+                scale: selected ? 1.0 : 0.92,
+                child: Icon(icon, color: color, size: 28),
+              ),
             ),
-            const SizedBox(height: 6),
-            Container(
-              width: 20,
+            const SizedBox(height: 7),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              width: selected ? 22 : 12,
               height: 3,
               decoration: BoxDecoration(
                 color: selected ? const Color(0xFF6B73FF) : Colors.transparent,

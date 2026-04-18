@@ -522,15 +522,39 @@ class RankingRecord {
   final int totalPoints;
 
   factory RankingRecord.fromJson(JsonMap json) {
+    final record = asJsonMap(json['record']);
     return RankingRecord(
       id: readInt(json['id']),
       team: TeamReference.fromJson(asJsonMap(json['team'])),
       event: EventReference.fromJson(asJsonMap(json['event'])),
       division: DivisionSummary.fromJson(asJsonMap(json['division'])),
       rank: readInt(json['rank'], -1),
-      wins: readInt(json['wins'], -1),
-      losses: readInt(json['losses'], -1),
-      ties: readInt(json['ties'], -1),
+      wins: readInt(
+        json['wins'] ??
+            json['win'] ??
+            json['wins_count'] ??
+            record['wins'] ??
+            record['win'],
+        -1,
+      ),
+      losses: readInt(
+        json['losses'] ??
+            json['loss'] ??
+            json['losses_count'] ??
+            record['losses'] ??
+            record['loss'],
+        -1,
+      ),
+      ties: readInt(
+        json['ties'] ??
+            json['tie'] ??
+            json['draws'] ??
+            json['ties_count'] ??
+            record['ties'] ??
+            record['tie'] ??
+            record['draws'],
+        -1,
+      ),
       wp: readInt(json['wp'], -1),
       ap: readInt(json['ap'], -1),
       sp: readInt(json['sp'], -1),

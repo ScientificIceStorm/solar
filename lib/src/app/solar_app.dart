@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/robot_events_models.dart';
+import '../ui/models/app_account.dart';
 import '../ui/pages/event_awards_screen.dart';
 import '../ui/pages/event_division_screen.dart';
 import '../ui/pages/calendar_screen.dart';
@@ -158,10 +159,10 @@ class _SolarAppState extends State<SolarApp> {
         animation: controller,
         builder: (context, _) {
           return MaterialApp(
-            title: 'Solar v6',
+            title: 'SolarScout',
             debugShowCheckedModeBanner: false,
             navigatorKey: _navigatorKey,
-            themeMode: ThemeMode.light,
+            themeMode: _themeModeForPreference(controller.themeModePreference),
             theme: _buildTheme(
               colorScheme: colorScheme,
               surface: surface,
@@ -389,6 +390,17 @@ class _SolarAppState extends State<SolarApp> {
     } finally {
       _isHandlingCompanionRoute = false;
     }
+  }
+}
+
+ThemeMode _themeModeForPreference(AppThemeModePreference preference) {
+  switch (preference) {
+    case AppThemeModePreference.system:
+      return ThemeMode.system;
+    case AppThemeModePreference.light:
+      return ThemeMode.light;
+    case AppThemeModePreference.dark:
+      return ThemeMode.dark;
   }
 }
 

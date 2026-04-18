@@ -119,9 +119,9 @@ private extension View {
     ZStack {
       LinearGradient(
         colors: [
-          Color(red: 0.04, green: 0.06, blue: 0.14),
-          Color(red: 0.09, green: 0.14, blue: 0.32),
-          Color(red: 0.15, green: 0.22, blue: 0.42)
+          Color(red: 0.18, green: 0.25, blue: 0.45),
+          Color(red: 0.26, green: 0.35, blue: 0.58),
+          Color(red: 0.38, green: 0.50, blue: 0.72)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing

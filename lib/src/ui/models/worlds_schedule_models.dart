@@ -51,9 +51,6 @@ class WorldsScheduleSession {
 }
 
 const worldsScheduleAnnouncementId = 'worlds-2026-official-agenda-v1';
-const worldsScheduleOfficialSourceLabel = 'REC Foundation calendar view';
-const worldsScheduleOfficialSourceUrl =
-    'https://recf.org/vex-robotics-world-championship/vex-robotics-world-championship-detailed-agenda/';
 
 final worldsScheduleTracks = <WorldsScheduleTrackData>[
   WorldsScheduleTrackData(
@@ -145,8 +142,8 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 23),
-        headline: 'Last full HS qualifier block',
-        note: 'Practice fields and skills stay open around each quals block.',
+        headline: 'Final qualification day',
+        note: 'Qualification blocks continue with skills sessions throughout the day.',
         sessions: <WorldsScheduleSession>[
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
@@ -273,8 +270,8 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 26),
-        headline: 'Deep qualifier grind',
-        note: 'Sunday is the longest published V5RC MS/VURC competition day.',
+        headline: 'Qualification and skills day',
+        note: 'This is the longest published V5RC MS/VURC competition day.',
         sessions: <WorldsScheduleSession>[
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
@@ -310,7 +307,7 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 27),
-        headline: 'Playoffs and Dome finals',
+        headline: 'Playoffs and finals',
         note:
             'Alliance selection follows the last morning qualification match.',
         sessions: <WorldsScheduleSession>[

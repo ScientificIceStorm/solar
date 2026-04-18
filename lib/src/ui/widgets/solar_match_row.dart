@@ -7,6 +7,8 @@ class SolarMatchRow extends StatelessWidget {
   const SolarMatchRow({
     required this.match,
     this.highlightTeamNumber,
+    this.stripeColorOverride,
+    this.scoreTextOverride,
     this.onTap,
     this.onTeamTap,
     super.key,
@@ -14,6 +16,8 @@ class SolarMatchRow extends StatelessWidget {
 
   final MatchSummary match;
   final String? highlightTeamNumber;
+  final Color? stripeColorOverride;
+  final TextSpan? scoreTextOverride;
   final VoidCallback? onTap;
   final void Function(TeamReference team)? onTeamTap;
 
@@ -21,10 +25,12 @@ class SolarMatchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final redAlliance = _allianceForColor(match, 'red');
     final blueAlliance = _allianceForColor(match, 'blue');
-    final teamResultColor = _highlightResultColor(
-      match: match,
-      highlightTeamNumber: highlightTeamNumber,
-    );
+    final teamResultColor =
+        stripeColorOverride ??
+        _highlightResultColor(
+          match: match,
+          highlightTeamNumber: highlightTeamNumber,
+        );
 
     final content = Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -97,7 +103,9 @@ class SolarMatchRow extends StatelessWidget {
               fit: BoxFit.scaleDown,
               child: RichText(
                 textAlign: TextAlign.center,
-                text: solarMatchScoreText(redAlliance, blueAlliance),
+                text:
+                    scoreTextOverride ??
+                    solarMatchScoreText(redAlliance, blueAlliance),
               ),
             ),
           ),
@@ -131,7 +139,20 @@ Color _highlightResultColor({
   required String? highlightTeamNumber,
 }) {
   if (highlightTeamNumber == null || highlightTeamNumber.trim().isEmpty) {
-    return const Color(0xFFDADAE3);
+    final redAlliance = _allianceForColor(match, 'red');
+    final blueAlliance = _allianceForColor(match, 'blue');
+    final redScore = redAlliance?.score ?? -1;
+    final blueScore = blueAlliance?.score ?? -1;
+    if (redScore < 0 || blueScore < 0) {
+      return const Color(0xFFDADAE3);
+    }
+    if (redScore > blueScore) {
+      return const Color(0xFF3FCB73);
+    }
+    if (blueScore > redScore) {
+      return const Color(0xFFFF6B64);
+    }
+    return const Color(0xFFD6AF52);
   }
 
   final alliance = _allianceContainingTeam(match, highlightTeamNumber);

@@ -65,8 +65,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   final PageController _pageController = PageController();
   final TextEditingController _teamController = TextEditingController();
+  final TextEditingController _followedTeamsController =
+      TextEditingController();
   int _currentIndex = 0;
   AppCompetitionPreference _competition = AppCompetitionPreference.vexV5;
+  AppFollowMode _followMode = AppFollowMode.single;
   bool _isFinishing = false;
 
   @override
@@ -80,7 +83,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void dispose() {
     _pageController.dispose();
     _teamController.dispose();
+    _followedTeamsController.dispose();
     super.dispose();
+  }
+
+  List<String> _parseTeamNumbers(String raw) {
+    return raw
+        .split(RegExp(r'[,\s]+'))
+        .map((value) => value.trim().toUpperCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false)
+      ..sort();
   }
 
   Future<void> _finishFlow() async {
@@ -95,10 +109,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     try {
       final controller = SolarAppScope.of(context);
+      final primaryTeam = _teamController.text.trim().toUpperCase();
       await controller.createLocalAccount(
-        teamNumber: _teamController.text,
+        teamNumber: primaryTeam,
         competitionPreference: _competition,
       );
+      await controller.setFollowMode(_followMode);
+      if (_followMode == AppFollowMode.multi) {
+        final followedTeams = _parseTeamNumbers(_followedTeamsController.text)
+          ..remove(primaryTeam);
+        await controller.setFavoriteTeamNumbers(followedTeams);
+      }
       await controller.completeOnboarding(competitionPreference: _competition);
       if (!mounted) {
         return;
@@ -221,31 +242,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   if (slide.highlights.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 18),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 8,
-                      runSpacing: 8,
+                    Column(
                       children: slide.highlights
+                          .take(6)
                           .map(
-                            (highlight) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                ),
-                              ),
-                              child: Text(
-                                highlight,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            (highlight) => Padding(
+                              padding: const EdgeInsets.only(bottom: 7),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    color: Colors.white.withValues(alpha: 0.74),
+                                    size: 15,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    highlight,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           )
@@ -271,15 +291,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       },
                     ),
                     const SizedBox(height: 14),
+                    _OnboardingPickerSection<AppFollowMode>(
+                      title: 'Follow Mode',
+                      value: _followMode,
+                      options: AppFollowMode.values,
+                      labelBuilder: (value) => switch (value) {
+                        AppFollowMode.single => 'Single team focus',
+                        AppFollowMode.multi => 'Multi-team follow',
+                      },
+                      onSelected: (value) {
+                        setState(() {
+                          _followMode = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
                     SolarTextField(
                       controller: _teamController,
-                      hintText: 'Team number',
+                      hintText: 'Primary team number',
                       icon: Icons.tag_rounded,
                       textInputAction: TextInputAction.done,
                     ),
+                    if (_followMode == AppFollowMode.multi) ...<Widget>[
+                      const SizedBox(height: 12),
+                      SolarTextField(
+                        controller: _followedTeamsController,
+                        hintText: 'Follow team numbers (comma separated)',
+                        icon: Icons.group_outlined,
+                        textInputAction: TextInputAction.done,
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Text(
-                      'Team number is optional. You can skip this and favorite teams later.',
+                      _followMode == AppFollowMode.multi
+                          ? 'Primary team is optional. Add any extra teams you want to follow now.'
+                          : 'Team number is optional. You can add more teams later in Settings.',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.68),
                         fontSize: 12,
@@ -376,40 +422,43 @@ class _OnboardingPickerSection<T> extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: options
-              .map((option) {
-                final selected = option == value;
-                return InkWell(
-                  onTap: () => onSelected(option),
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    child: Text(
-                      labelBuilder(option),
-                      style: TextStyle(
-                        color: selected ? Colors.black : Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+          runSpacing: 8,
+          children: options.map((option) {
+            final selected = option == value;
+            return InkWell(
+              onTap: () => onSelected(option),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selected
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.22),
                   ),
-                );
-              })
-              .toList(growable: false),
+                ),
+                child: Text(
+                  labelBuilder(option),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected ? Colors.black : Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            );
+          }).toList(growable: false),
         ),
       ],
     );

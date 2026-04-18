@@ -90,7 +90,7 @@ void main() {
     expect(find.text('Skip'), findsOneWidget);
     expect(find.text('Everything Solar has right now'), findsOneWidget);
 
-    await tester.tap(find.text('Skip'));
+    await _tapVisible(tester, find.text('Skip'));
     await tester.pumpAndSettle();
 
     expect(find.text('Competition'), findsOneWidget);
@@ -103,14 +103,18 @@ void main() {
     await tester.pumpWidget(SolarApp(controller: await _buildTestController()));
 
     await tester.pump(const Duration(milliseconds: 1400));
-    await tester.pumpAndSettle();
+    await _pumpUntilVisible(tester, find.text('Skip'));
 
-    await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
+    await _tapVisible(tester, find.text('Skip'));
+    await _pumpUntilVisible(tester, find.text('Competition'));
 
     await tester.enterText(find.byType(TextField).first, '98601Y');
-    await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
+    await _tapVisible(tester, find.text('Skip'));
+    await _pumpUntilVisible(
+      tester,
+      find.byKey(const ValueKey<String>('home-menu-button')),
+      timeout: const Duration(seconds: 15),
+    );
 
     expect(find.text('Quickview'), findsOneWidget);
     expect(
@@ -119,7 +123,8 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('home-menu-button')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await _pumpUntilVisible(tester, find.text('My Profile'));
 
     expect(find.text('Team '), findsOneWidget);
     expect(find.text('98601Y'), findsWidgets);
@@ -175,30 +180,64 @@ void main() {
         SolarApp(controller: await _buildSignedInController()),
       );
       await tester.pump(const Duration(milliseconds: 1400));
-      await tester.pumpAndSettle();
+      await _pumpUntilVisible(
+        tester,
+        find.byKey(const ValueKey<String>('home-menu-button')),
+      );
 
       await tester.tap(find.byKey(const ValueKey<String>('home-menu-button')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await _pumpUntilVisible(
+        tester,
+        find.byKey(const ValueKey<String>('drawer-settings')),
+      );
 
       await tester.tap(find.byKey(const ValueKey<String>('drawer-settings')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await _pumpUntilVisible(tester, find.byType(SettingsScreen));
 
       expect(find.byType(SettingsScreen), findsOneWidget);
       expect(find.text('Settings'), findsWidgets);
 
       await tester.tap(find.byKey(const ValueKey<String>('nav-rankings')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await _pumpUntilVisible(tester, find.byType(RankingsScreen));
 
       expect(find.byType(RankingsScreen), findsOneWidget);
       expect(find.text('SKILL'), findsWidgets);
 
       await tester.tap(find.byKey(const ValueKey<String>('nav-calendar')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await _pumpUntilVisible(tester, find.byType(CalendarScreen));
 
       expect(find.byType(CalendarScreen), findsOneWidget);
       expect(find.text('Team Calendar'), findsOneWidget);
     },
   );
+}
+
+Future<void> _pumpUntilVisible(
+  WidgetTester tester,
+  Finder finder, {
+  Duration timeout = const Duration(seconds: 8),
+  Duration step = const Duration(milliseconds: 100),
+}) async {
+  final maxPumps = timeout.inMilliseconds ~/ step.inMilliseconds;
+  for (var i = 0; i < maxPumps; i++) {
+    await tester.pump(step);
+    if (finder.evaluate().isNotEmpty) {
+      return;
+    }
+  }
+  fail('Timed out waiting for ${finder.description} to appear.');
+}
+
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await _pumpUntilVisible(tester, finder);
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
+  await tester.pump();
 }
 
 Future<AppSessionController> _buildTestController() async {
@@ -272,6 +311,7 @@ Future<AppSessionController> _buildTestController() async {
   );
 
   await controller.initialize();
+  await controller.updatePreferredSeason(seasonId: 190, refresh: false);
   return controller;
 }
 

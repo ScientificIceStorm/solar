@@ -4,6 +4,7 @@ import '../../app/solar_app_scope.dart';
 import '../../core/solar_competition_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../models/app_account.dart';
+import '../theme/solar_chrome_palette.dart';
 import '../widgets/solar_page_scaffold.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_primary_button.dart';
@@ -24,12 +25,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _teamController = TextEditingController();
+  final TextEditingController _followedTeamsController =
+      TextEditingController();
   Future<List<SeasonSummary>>? _seasonsFuture;
   bool _didSeedProfile = false;
   bool _isSavingProfile = false;
   int? _selectedSeasonId;
   bool _showDeveloperTools = false;
+  AppThemeModePreference _themeMode = AppThemeModePreference.system;
   AppCompetitionPreference? _seasonCompetitionPreference;
+  AppFollowMode _followMode = AppFollowMode.single;
 
   @override
   void didChangeDependencies() {
@@ -44,6 +49,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _nameController.text = account.fullName;
       _teamController.text = account.team.number;
       _selectedSeasonId = controller.preferredSeasonId;
+      _themeMode = controller.themeModePreference;
+      _followMode = controller.followMode;
+      _followedTeamsController.text = controller.favoriteTeamNumbers.join(', ');
       _didSeedProfile = true;
     }
 
@@ -62,6 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _nameController.dispose();
     _teamController.dispose();
+    _followedTeamsController.dispose();
     super.dispose();
   }
 
@@ -99,8 +108,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await controller.updateTeam(teamNumber: normalizedTeam);
       }
 
+      await controller.setThemeModePreference(_themeMode);
+      await controller.setFollowMode(_followMode);
+      await controller.setFavoriteTeamNumbers(
+        _parseTeamNumbers(_followedTeamsController.text),
+      );
+
       _teamController.text =
           controller.currentAccount?.team.number ?? _teamController.text;
+      _followedTeamsController.text =
+          controller.favoriteTeamNumbers.join(', ');
       if (!mounted) {
         return;
       }
@@ -304,6 +321,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  List<String> _parseTeamNumbers(String raw) {
+    return raw
+        .split(RegExp(r'[,\s]+'))
+        .map((value) => value.trim().toUpperCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false)
+      ..sort();
+  }
+
+  Future<void> _pickCustomAccentColor() async {
+    final controller = SolarAppScope.of(context);
+    final initial = Color(
+      controller.customChromeAccentValue ??
+          const Color(0xFF2C4C86).toARGB32(),
+    );
+    var red = (initial.r * 255).roundToDouble();
+    var green = (initial.g * 255).roundToDouble();
+    var blue = (initial.b * 255).roundToDouble();
+
+    final selected = await showModalBottomSheet<Color>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFF8F8FD),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final preview = Color.fromARGB(
+              255,
+              red.round(),
+              green.round(),
+              blue.round(),
+            );
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                      'Custom accent',
+                      style: TextStyle(
+                        color: Color(0xFF24243A),
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: preview,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFD9DCE9)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _ColorSliderRow(
+                      label: 'R',
+                      value: red,
+                      activeColor: const Color(0xFFC53D3D),
+                      onChanged: (value) {
+                        setModalState(() {
+                          red = value;
+                        });
+                      },
+                    ),
+                    _ColorSliderRow(
+                      label: 'G',
+                      value: green,
+                      activeColor: const Color(0xFF2F8C53),
+                      onChanged: (value) {
+                        setModalState(() {
+                          green = value;
+                        });
+                      },
+                    ),
+                    _ColorSliderRow(
+                      label: 'B',
+                      value: blue,
+                      activeColor: const Color(0xFF3A63C9),
+                      onChanged: (value) {
+                        setModalState(() {
+                          blue = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(context).pop(preview),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF16182C),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                        child: const Text('Use this color'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    await controller.setCustomChromeAccentValue(selected.toARGB32());
+    await controller.setChromeAccentPreference(AppChromeAccentPreference.custom);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = SolarAppScope.of(context);
@@ -416,6 +553,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                         });
                       },
+                    ),
+                    const SizedBox(height: 12),
+                    _SettingsChoiceRow<AppThemeModePreference>(
+                      label: 'Theme',
+                      value: _themeMode,
+                      options: AppThemeModePreference.values,
+                      labelBuilder: (value) => switch (value) {
+                        AppThemeModePreference.system => 'System',
+                        AppThemeModePreference.light => 'Light',
+                        AppThemeModePreference.dark => 'Dark',
+                      },
+                      onSelected: (value) async {
+                        setState(() {
+                          _themeMode = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _SettingsChoiceRow<AppFollowMode>(
+                      label: 'Follow mode',
+                      value: _followMode,
+                      options: AppFollowMode.values,
+                      labelBuilder: (value) => switch (value) {
+                        AppFollowMode.single => 'Single team',
+                        AppFollowMode.multi => 'Multi-team',
+                      },
+                      onSelected: (value) async {
+                        setState(() {
+                          _followMode = value;
+                        });
+                      },
+                    ),
+                    if (_followMode == AppFollowMode.multi) ...<Widget>[
+                      const SizedBox(height: 12),
+                      SolarTextField(
+                        controller: _followedTeamsController,
+                        hintText: 'Follow team numbers (comma separated)',
+                        icon: Icons.group_outlined,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    _TopBarAccentSelector(
+                      value: controller.chromeAccentPreference,
+                      customAccentValue: controller.customChromeAccentValue,
+                      onSelected: (value) async {
+                        await controller.setChromeAccentPreference(value);
+                      },
+                      onPickCustomColor: _pickCustomAccentColor,
                     ),
                     const SizedBox(height: 12),
                     Align(
@@ -614,8 +799,8 @@ class _SwitchRow extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F8FD),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E5F0)),
       ),
       child: Row(
         children: <Widget>[
@@ -672,8 +857,8 @@ class _SettingsChoiceRow<T> extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F8FD),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E5F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -687,43 +872,243 @@ class _SettingsChoiceRow<T> extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
+          for (var index = 0; index < options.length; index++) ...<Widget>[
+            _SettingsChoiceOptionTile<T>(
+              label: labelBuilder(options[index]),
+              selected: options[index] == value,
+              onTap: () => onSelected(options[index]),
+            ),
+            if (index != options.length - 1) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsChoiceOptionTile<T> extends StatelessWidget {
+  const _SettingsChoiceOptionTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFEEF1FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF5B61F6)
+                : const Color(0xFFE3E6F0),
+          ),
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (selected)
+              const Icon(
+                Icons.check_rounded,
+                size: 16,
+                color: Color(0xFF5B61F6),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TopBarAccentSelector extends StatelessWidget {
+  const _TopBarAccentSelector({
+    required this.value,
+    required this.customAccentValue,
+    required this.onSelected,
+    required this.onPickCustomColor,
+  });
+
+  final AppChromeAccentPreference value;
+  final int? customAccentValue;
+  final Future<void> Function(AppChromeAccentPreference value) onSelected;
+  final Future<void> Function() onPickCustomColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E5F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            'Top bar accent',
+            style: TextStyle(
+              color: Color(0xFF8E92A7),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: options
-                .map((option) {
-                  final selected = option == value;
-                  return InkWell(
-                    onTap: () {
-                      onSelected(option);
-                    },
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+            children: AppChromeAccentPreference.values.map((option) {
+              final selected = option == value;
+              final swatchColor = solarChromeAccentColor(
+                option,
+                customAccentValue: customAccentValue,
+              );
+              return InkWell(
+                onTap: () async {
+                  if (option == AppChromeAccentPreference.custom) {
+                    await onPickCustomColor();
+                  } else {
+                    await onSelected(option);
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? swatchColor.withValues(alpha: 0.14)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: selected
+                          ? swatchColor.withValues(alpha: 0.58)
+                          : const Color(0xFFE3E6F0),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: swatchColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: 0.18),
+                          ),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: selected ? Colors.black : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        labelBuilder(option),
-                        style: TextStyle(
-                          color: selected
-                              ? Colors.white
-                              : const Color(0xFF24243A),
+                      const SizedBox(width: 8),
+                      Text(
+                        solarChromeAccentLabel(option),
+                        style: const TextStyle(
+                          color: Color(0xFF24243A),
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
-                  );
-                })
-                .toList(growable: false),
+                      if (selected) ...<Widget>[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: Color(0xFF24243A),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }).toList(growable: false),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ColorSliderRow extends StatelessWidget {
+  const _ColorSliderRow({
+    required this.label,
+    required this.value,
+    required this.activeColor,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final Color activeColor;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: 24,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF24243A),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              activeTrackColor: activeColor,
+              thumbColor: activeColor,
+            ),
+            child: Slider(
+              value: value,
+              min: 0,
+              max: 255,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 34,
+          child: Text(
+            '${value.round()}',
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: Color(0xFF6F748B),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -752,8 +1137,8 @@ class _SelectionField extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F8FD),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E5F0)),
         ),
         child: Row(
           children: <Widget>[

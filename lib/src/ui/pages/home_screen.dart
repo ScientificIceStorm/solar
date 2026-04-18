@@ -11,13 +11,13 @@ import '../pages/event_details_screen.dart';
 import '../models/solar_match_prediction.dart';
 import '../models/solar_notification_center_snapshot.dart';
 import '../models/team_stats_snapshot.dart';
+import '../theme/solar_chrome_palette.dart';
 import '../widgets/solar_event_photo.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
 import '../widgets/solar_team_overview_card.dart';
-import '../widgets/worlds_schedule_banner.dart';
 import 'event_division_screen.dart';
 import 'event_team_screen.dart';
 import 'match_details_screen.dart';
@@ -184,12 +184,20 @@ class _HomeScreenState extends State<HomeScreen> {
             controller.teamStats ?? TeamStatsSnapshot(team: account.team);
         final notificationFuture = controller.fetchNotificationCenterSnapshot();
         final topInset = MediaQuery.paddingOf(context).top;
+        final chromeColor = solarChromeAccentColor(
+          controller.chromeAccentPreference,
+          customAccentValue: controller.customChromeAccentValue,
+        );
+        final headerHeight = _homeHeaderHeight(
+          topInset: topInset,
+          isRefreshing: controller.isRefreshingTeamStats,
+        );
 
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
           child: Scaffold(
             extendBody: true,
-            backgroundColor: Colors.black,
+            backgroundColor: chromeColor,
             drawerEnableOpenDragGesture: true,
             drawerEdgeDragWidth: 36,
             drawer: SolarAppDrawer(
@@ -212,142 +220,152 @@ class _HomeScreenState extends State<HomeScreen> {
             body: SolarScreenBackground(
               padding: EdgeInsets.zero,
               respectSafeArea: false,
-              child: RefreshIndicator(
-                color: Colors.black,
-                onRefresh: () async {
-                  await controller.refreshTeamStats();
-                  await controller.preloadSearchEvents(force: true);
-                },
-                child: StretchingOverscrollIndicator(
-                  axisDirection: AxisDirection.down,
-                  child: ListView(
-                    controller: _homeScrollController,
-                    physics: const BouncingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    padding: const EdgeInsets.only(bottom: 148),
-                    children: <Widget>[
-                      _HomeHeader(
-                        topInset: topInset,
-                        isRefreshing: controller.isRefreshingTeamStats,
-                        searchController: _searchController,
-                        onSearchChanged: _handleSearchChanged,
-                        onClearSearch: _clearSearch,
-                        notificationFuture: notificationFuture,
-                        onNotificationsTap: () {
-                          _openNotificationHub(controller);
-                        },
-                        onFilterTap: _openSearchFilterSheet,
-                        filterLabel: _homeSearchScopeLabel(_searchScope),
+              child: Stack(
+                children: <Widget>[
+                  RefreshIndicator(
+                    color: Colors.white,
+                    onRefresh: () async {
+                      await controller.refreshTeamStats();
+                      await controller.preloadSearchEvents(force: true);
+                      await controller.preloadSearchTeams(force: true);
+                    },
+                    child: StretchingOverscrollIndicator(
+                      axisDirection: AxisDirection.down,
+                      child: ListView(
+                        controller: _homeScrollController,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        padding: EdgeInsets.fromLTRB(0, headerHeight + 24, 0, 148),
+                        children: <Widget>[
+                          if (showSearchResults) ...<Widget>[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                              ),
+                              child: _SearchResultsPanel(
+                                query: query,
+                                teamResults: visibleTeamResults,
+                                eventResults: visibleEventResults,
+                                isLoadingTeams:
+                                    controller.isPreloadingSearchTeams &&
+                                    controller.preloadedSearchTeams.isEmpty,
+                                isLoadingEvents:
+                                    controller.isPreloadingSearchEvents &&
+                                    controller.preloadedSearchEvents.isEmpty,
+                              ),
+                            ),
+                          ] else ...<Widget>[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                              ),
+                              child: _SectionHeader(
+                                title: 'Quickview',
+                                trailingLabel: 'Calendar',
+                                onTap: () {
+                                  navigateToSolarDestination(
+                                    context,
+                                    SolarNavDestination.calendar,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                              ),
+                              child: _QuickviewTeamCarousel(
+                                controller: controller,
+                                accountTeam: account.team,
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                              ),
+                              child: _SectionHeader(
+                                title: 'Upcoming Events',
+                                trailingLabel: 'See All',
+                                onTap: () {
+                                  navigateToSolarDestination(
+                                    context,
+                                    SolarNavDestination.calendar,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            _UpcomingEventsSection(
+                              events: teamStats.upcomingEvents,
+                            ),
+                            const SizedBox(height: 28),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                              ),
+                              child: _SectionHeader(
+                                title: 'Team Stats',
+                                trailingLabel: 'See All',
+                                onTap: () {
+                                  openSolarTeamProfileForSummary(
+                                    context,
+                                    account.team,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                              ),
+                              child: FutureBuilder<int>(
+                                future: controller.fetchTeamAwardsCount(
+                                  account.team,
+                                ),
+                                builder: (context, awardsSnapshot) {
+                                  return SolarTeamOverviewCard(
+                                    team: account.team,
+                                    teamStats: teamStats,
+                                    awardsCount: awardsSnapshot.data,
+                                    onTap: () {
+                                      openSolarTeamProfileForSummary(
+                                        context,
+                                        account.team,
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 24),
-                      if (controller
-                          .showWorldsScheduleReleaseBanner) ...<Widget>[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: WorldsScheduleBanner(
-                            onOpen: () {
-                              navigateToSolarDestination(
-                                context,
-                                SolarNavDestination.calendar,
-                              );
-                            },
-                            onDismiss: () {
-                              unawaited(
-                                controller.dismissWorldsScheduleReleaseBanner(),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                      if (showSearchResults) ...<Widget>[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: _SearchResultsPanel(
-                            query: query,
-                            teamResults: visibleTeamResults,
-                            eventResults: visibleEventResults,
-                            isLoadingTeams:
-                                controller.isPreloadingSearchTeams &&
-                                controller.preloadedSearchTeams.isEmpty,
-                            isLoadingEvents:
-                                controller.isPreloadingSearchEvents &&
-                                controller.preloadedSearchEvents.isEmpty,
-                          ),
-                        ),
-                      ] else ...<Widget>[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: _SectionHeader(
-                            title: 'Quickview',
-                            trailingLabel: 'Calendar',
-                            onTap: () {
-                              navigateToSolarDestination(
-                                context,
-                                SolarNavDestination.calendar,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: _QuickviewTeamCarousel(
-                            controller: controller,
-                            accountTeam: account.team,
-                          ),
-                        ),
-                        const SizedBox(height: 28),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: _SectionHeader(
-                            title: 'Upcoming Events',
-                            trailingLabel: 'See All',
-                            onTap: () {
-                              navigateToSolarDestination(
-                                context,
-                                SolarNavDestination.calendar,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _UpcomingEventsSection(
-                          events: teamStats.upcomingEvents,
-                        ),
-                        const SizedBox(height: 28),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: _SectionHeader(
-                            title: 'Team Stats',
-                            trailingLabel: 'See All',
-                            onTap: () {
-                              openSolarTeamProfileForSummary(
-                                context,
-                                account.team,
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: SolarTeamOverviewCard(
-                            team: account.team,
-                            teamStats: teamStats,
-                            onTap: () {
-                              openSolarTeamProfileForSummary(
-                                context,
-                                account.team,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: _HomeHeader(
+                      topInset: topInset,
+                      isRefreshing: controller.isRefreshingTeamStats,
+                      searchController: _searchController,
+                      onSearchChanged: _handleSearchChanged,
+                      onClearSearch: _clearSearch,
+                      notificationFuture: notificationFuture,
+                      onNotificationsTap: () {
+                        _openNotificationHub(controller);
+                      },
+                      onFilterTap: _openSearchFilterSheet,
+                      filterLabel: _homeSearchScopeLabel(_searchScope),
+                      chromeColor: chromeColor,
+                    ),
+                  ),
+                ],
               ),
             ),
             bottomNavigationBar: SolarBottomNavBar(
@@ -363,6 +381,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+double _homeHeaderHeight({
+  required double topInset,
+  required bool isRefreshing,
+}) {
+  final baseHeight = topInset + 210;
+  return isRefreshing ? baseHeight + 34 : baseHeight;
+}
+
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({
     required this.topInset,
@@ -374,6 +400,7 @@ class _HomeHeader extends StatelessWidget {
     required this.onNotificationsTap,
     required this.onFilterTap,
     required this.filterLabel,
+    required this.chromeColor,
   });
 
   final double topInset;
@@ -385,18 +412,13 @@ class _HomeHeader extends StatelessWidget {
   final VoidCallback onNotificationsTap;
   final VoidCallback onFilterTap;
   final String filterLabel;
+  final Color chromeColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(28, topInset + 22, 28, 34),
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(58),
-          bottomRight: Radius.circular(58),
-        ),
-      ),
+      color: chromeColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -845,36 +867,23 @@ class _FilterButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
-        height: 54,
-        padding: const EdgeInsets.symmetric(horizontal: 17),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(28),
-        ),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Row(
           children: <Widget>[
-            Container(
-              width: 34,
-              height: 34,
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.tune_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
+            const Icon(
+              Icons.tune_rounded,
+              color: Colors.white,
+              size: 20,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF22212E),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -1272,7 +1281,7 @@ class _SearchLoadingLabel extends StatelessWidget {
         const SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
         ),
         const SizedBox(width: 10),
         Text(
@@ -1416,7 +1425,7 @@ class _EventSearchTile extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Text(
-                _DateBadgeData.fromDate(event.start).day,
+                _eventDayToken(event),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -1494,15 +1503,17 @@ class _QuickviewTeamCarouselState extends State<_QuickviewTeamCarousel> {
   double _dragDeltaX = 0;
 
   List<TeamSummary> _availableTeams() {
-    final byTeamNumber = <String, TeamSummary>{
-      widget.accountTeam.number.trim().toUpperCase(): widget.accountTeam,
-    };
-    for (final team in widget.controller.favoriteTeams) {
+    final byTeamNumber = <String, TeamSummary>{};
+    for (final team in widget.controller.followedTeams) {
       final normalized = team.number.trim().toUpperCase();
       if (normalized.isEmpty) {
         continue;
       }
       byTeamNumber[normalized] = team;
+    }
+    if (byTeamNumber.isEmpty) {
+      byTeamNumber[widget.accountTeam.number.trim().toUpperCase()] =
+          widget.accountTeam;
     }
     return byTeamNumber.values.toList(growable: false);
   }
@@ -2226,7 +2237,7 @@ class _QuickviewLoadingState extends StatelessWidget {
         child: SizedBox(
           width: 28,
           height: 28,
-          child: CircularProgressIndicator(strokeWidth: 2.4),
+          child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
         ),
       ),
     );
@@ -2621,32 +2632,18 @@ class _UpcomingEventsSection extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 28),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.96),
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E5F0)),
           ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'No upcoming events yet',
-                style: TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Once your team has another published event, it will show up here without any mock placeholders.',
-                style: TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 14,
-                  height: 1.45,
-                ),
-              ),
-            ],
+          child: const Text(
+            'No upcoming events yet',
+            style: TextStyle(
+              color: Color(0xFF24243A),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       );
@@ -2654,17 +2651,15 @@ class _UpcomingEventsSection extends StatelessWidget {
 
     final visibleEvents = events.take(6).toList(growable: false);
 
-    return SizedBox(
-      height: 340,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        scrollDirection: Axis.horizontal,
-        itemCount: visibleEvents.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 20),
-        itemBuilder: (context, index) {
-          return _EventCard(event: visibleEvents[index]);
-        },
-      ),
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      itemCount: visibleEvents.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        return _EventCard(event: visibleEvents[index]);
+      },
     );
   }
 }
@@ -2676,274 +2671,80 @@ class _EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge = _DateBadgeData.fromDate(event.start);
-
     return InkWell(
       onTap: () {
         Navigator.of(
           context,
         ).pushNamed(EventDetailsScreen.routeName, arguments: event);
       },
-      borderRadius: BorderRadius.circular(32),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        width: 360,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.97),
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: const Color(0xFFEAE7F6)),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x13000000),
-              blurRadius: 26,
-              offset: Offset(0, 16),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E5F0)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: <Widget>[
-            Stack(
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(26),
-                  child: SizedBox(
-                    height: 186,
-                    width: double.infinity,
-                    child: SolarEventPhoto(
-                      location: event.location,
-                      overlay: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: <Color>[
-                              Colors.black.withValues(alpha: 0.06),
-                              Colors.black.withValues(alpha: 0.04),
-                              Colors.black.withValues(alpha: 0.22),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(top: 14, left: 14, child: _DateBadge(badge: badge)),
-                const Positioned(top: 14, right: 14, child: _BookmarkBadge()),
-                Positioned(
-                  left: 18,
-                  right: 18,
-                  bottom: -20,
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _CardMetaChip(
-                          icon: Icons.location_on_rounded,
-                          label: _locationLabel(event.location),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      _CardMetaChip(
-                        icon: Icons.splitscreen_rounded,
-                        label: '${event.divisions.length} divs',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 34),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text(
-                _displayEventTitle(event.name),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 21,
-                  fontWeight: FontWeight.w500,
-                  height: 1.05,
-                  letterSpacing: -0.5,
-                ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 112,
+                height: 82,
+                child: SolarEventPhoto(location: event.location),
               ),
             ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Row(
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      _eventRangeLabel(event),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF9191A8),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  Text(
+                    _displayEventTitle(event.name),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
                     ),
                   ),
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEEF0FF),
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 6),
+                  Text(
+                    _eventRangeLabel(event),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF5F6478),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                     ),
-                    child: const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Color(0xFF5A67F3),
-                      size: 22,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _locationLabel(event.location),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Color(0xFF8E92A7),
+              size: 16,
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DateBadge extends StatelessWidget {
-  const _DateBadge({required this.badge});
-
-  final _DateBadgeData badge;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 74,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: <Widget>[
-          Text(
-            badge.day,
-            style: const TextStyle(
-              color: Color(0xFFFF655A),
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              height: 1,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            badge.month,
-            style: const TextStyle(
-              color: Color(0xFFFF655A),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.9,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BookmarkBadge extends StatelessWidget {
-  const _BookmarkBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: const Icon(
-        Icons.bookmark_rounded,
-        color: Color(0xFFFF655A),
-        size: 24,
-      ),
-    );
-  }
-}
-
-class _CardMetaChip extends StatelessWidget {
-  const _CardMetaChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, color: const Color(0xFF6C72F4), size: 16),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF4A4C69),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DateBadgeData {
-  const _DateBadgeData({required this.day, required this.month});
-
-  final String day;
-  final String month;
-
-  factory _DateBadgeData.fromDate(DateTime? value) {
-    if (value == null) {
-      return const _DateBadgeData(day: '--', month: 'TBD');
-    }
-
-    const months = <String>[
-      'JANUARY',
-      'FEBRUARY',
-      'MARCH',
-      'APRIL',
-      'MAY',
-      'JUNE',
-      'JULY',
-      'AUGUST',
-      'SEPTEMBER',
-      'OCTOBER',
-      'NOVEMBER',
-      'DECEMBER',
-    ];
-
-    return _DateBadgeData(
-      day: value.day.toString(),
-      month: months[value.month - 1],
     );
   }
 }
@@ -2987,28 +2788,61 @@ String _eventRangeLabel(EventSummary event) {
     return 'Date pending';
   }
 
-  const months = <String>[
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  String format(DateTime value) => '${months[value.month - 1]} ${value.day}';
-
   if (start != null && end != null && start != end) {
-    return '${format(start)} - ${format(end)}';
+    return '${_fullDateLabel(start)} - ${_fullDateLabel(end)}';
   }
 
-  return format(start ?? end!);
+  return _fullDateLabel(start ?? end!);
+}
+
+String _eventDayToken(EventSummary event) {
+  final value = event.start ?? event.end;
+  if (value == null) {
+    return '--';
+  }
+  return value.toLocal().day.toString();
+}
+
+String _fullDateLabel(DateTime value) {
+  final local = value.toLocal();
+  return '${_weekdayLabel(local.weekday)}, ${_monthLabel(local.month)} ${local.day}, ${local.year}';
+}
+
+String _monthLabel(int month) {
+  const names = <String>[
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  if (month < 1 || month > 12) {
+    return 'Month';
+  }
+  return names[month - 1];
+}
+
+String _weekdayLabel(int weekday) {
+  const names = <String>[
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  if (weekday < 1 || weekday > 7) {
+    return 'Day';
+  }
+  return names[weekday - 1];
 }
 
 const Map<String, String> _stateAbbreviations = <String, String>{

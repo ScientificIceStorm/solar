@@ -11,6 +11,7 @@ import '../../models/world_skills_models.dart';
 import '../models/solar_ml_ranking.dart';
 import '../services/solar_ml_ranking_service.dart';
 import '../services/solar_disk_cache_store.dart';
+import '../theme/solar_chrome_palette.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
@@ -37,7 +38,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
   static final _diskCacheStore = SolarDiskCacheStore.instance;
 
   AppSessionController? _sessionController;
-  bool _searchVisible = false;
   bool _isBootstrapping = true;
   bool _isLoadingRankings = false;
   bool _isLoadingSolarize = false;
@@ -390,27 +390,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
-  void _toggleSearch() {
-    final revealSearch = !_searchVisible;
-    if (revealSearch &&
-        _scrollController.hasClients &&
-        _scrollController.offset > 0) {
-      unawaited(
-        _scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        ),
-      );
-    }
-    setState(() {
-      _searchVisible = revealSearch;
-      if (!_searchVisible) {
-        _searchController.clear();
-      }
-    });
-  }
-
   Future<void> _warmSolarizeRankings(
     AppSessionController controller, {
     required int generation,
@@ -564,6 +543,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
             (_mode == _RankingsMode.solarMl && _isLoadingSolarize) ||
             activeRowCount == 0;
         final listItemCount = showStatusCard ? 3 : activeRowCount + 2;
+        final chromeColor = solarChromeAccentColor(
+          controller.chromeAccentPreference,
+          customAccentValue: controller.customChromeAccentValue,
+        );
 
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
@@ -595,7 +578,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               child: Stack(
                 children: <Widget>[
                   RefreshIndicator(
-                    color: Colors.black,
+                    color: Colors.white,
                     onRefresh: () async {
                       await controller.refreshTeamStats();
                       await _bootstrapFilters(controller, forceSeasons: true);
@@ -615,6 +598,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           if (index == 0) {
                             return _RankingsHeader(
                               topInset: topInset,
+                              chromeColor: chromeColor,
                               filterLabel: _filterLabel(
                                 entries: _activeRankings,
                                 fallbackGrade:
@@ -628,10 +612,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
                                       _availableSeasons,
                                       _selectedSeasonId!,
                                     ),
-                              searchVisible: _searchVisible,
                               searchController: _searchController,
                               onSearchChanged: (_) => setState(() {}),
-                              onSearchTap: _toggleSearch,
                               onInfoTap: _showRankingSystemDialog,
                               onFilterTap: () => _showFilterSheet(controller),
                               onMoreTap: () => _showFilterSheet(controller),
@@ -743,12 +725,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
 class _RankingsHeader extends StatelessWidget {
   const _RankingsHeader({
     required this.topInset,
+    required this.chromeColor,
     required this.filterLabel,
     required this.seasonLabel,
-    required this.searchVisible,
     required this.searchController,
     required this.onSearchChanged,
-    required this.onSearchTap,
     required this.onInfoTap,
     required this.onFilterTap,
     required this.onMoreTap,
@@ -758,12 +739,11 @@ class _RankingsHeader extends StatelessWidget {
   });
 
   final double topInset;
+  final Color chromeColor;
   final String filterLabel;
   final String seasonLabel;
-  final bool searchVisible;
   final TextEditingController searchController;
   final ValueChanged<String> onSearchChanged;
-  final VoidCallback onSearchTap;
   final VoidCallback onInfoTap;
   final VoidCallback onFilterTap;
   final VoidCallback onMoreTap;
@@ -775,8 +755,8 @@ class _RankingsHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(24, topInset + 16, 24, 26),
-      decoration: const BoxDecoration(
-        color: Colors.black,
+      decoration: BoxDecoration(
+        color: chromeColor,
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(52),
           bottomRight: Radius.circular(52),
@@ -812,8 +792,6 @@ class _RankingsHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              _HeaderIconButton(icon: Icons.search_rounded, onTap: onSearchTap),
-              const SizedBox(width: 8),
               _HeaderIconButton(
                 icon: Icons.help_outline_rounded,
                 onTap: onInfoTap,
@@ -825,57 +803,56 @@ class _RankingsHeader extends StatelessWidget {
               ),
             ],
           ),
-          if (searchVisible)
-            Padding(
-              padding: const EdgeInsets.only(top: 18),
-              child: Container(
-                decoration: BoxDecoration(
+          Padding(
+            padding: const EdgeInsets.only(top: 18),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
                   color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.08),
-                  ),
                 ),
-                child: TextField(
-                  key: const ValueKey<String>('rankings-search-field'),
-                  controller: searchController,
-                  onChanged: onSearchChanged,
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: 'Search teams',
-                    hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.42),
-                      fontSize: 15,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: Colors.white.withValues(alpha: 0.72),
-                    ),
-                    suffixIcon: searchController.text.trim().isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              searchController.clear();
-                              onSearchChanged('');
-                            },
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              color: Colors.white70,
-                            ),
+              ),
+              child: TextField(
+                key: const ValueKey<String>('rankings-search-field'),
+                controller: searchController,
+                onChanged: onSearchChanged,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'Search teams',
+                  hintStyle: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.42),
+                    fontSize: 15,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.white.withValues(alpha: 0.72),
+                  ),
+                  suffixIcon: searchController.text.trim().isEmpty
+                      ? null
+                      : IconButton(
+                          onPressed: () {
+                            searchController.clear();
+                            onSearchChanged('');
+                          },
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white70,
                           ),
-                    filled: true,
-                    fillColor: Colors.transparent,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                        ),
+                  filled: true,
+                  fillColor: Colors.transparent,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
                   ),
                 ),
               ),
             ),
+          ),
           const SizedBox(height: 18),
           InkWell(
             onTap: onFilterTap,
@@ -892,8 +869,8 @@ class _RankingsHeader extends StatelessWidget {
                   Container(
                     width: 28,
                     height: 28,
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
+                    decoration: BoxDecoration(
+                      color: chromeColor,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(

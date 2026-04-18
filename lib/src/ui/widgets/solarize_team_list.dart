@@ -229,17 +229,6 @@ class _SolarizeTeamRow extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      _metaLabel(row),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF707487),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -267,20 +256,4 @@ class _SolarizeTeamRowModel {
   final WorldSkillsEntry? worldSkillsEntry;
   final double sortScore;
   final EventSummary? event;
-}
-
-String _metaLabel(_SolarizeTeamRowModel row) {
-  final parts = <String>[
-    if (row.mlEntry != null) 'Solarize #${row.mlEntry!.rank}',
-    if (row.openSkillEntry != null &&
-        (row.openSkillEntry!.totalWins > 0 ||
-            row.openSkillEntry!.totalLosses > 0 ||
-            row.openSkillEntry!.totalTies > 0))
-      '${row.openSkillEntry!.totalWins}-${row.openSkillEntry!.totalLosses}-${row.openSkillEntry!.totalTies}',
-    if (row.worldSkillsEntry != null) 'Skills ${row.worldSkillsEntry!.rank}',
-  ];
-  if (parts.isEmpty) {
-    return 'Season data pending';
-  }
-  return parts.join(' | ');
 }
