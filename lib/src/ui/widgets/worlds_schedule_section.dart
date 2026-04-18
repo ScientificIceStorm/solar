@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/worlds_schedule_models.dart';
+import 'solar_segmented_control.dart';
 
 class WorldsScheduleSection extends StatefulWidget {
   const WorldsScheduleSection({required this.defaultTrack, super.key});
@@ -53,7 +54,7 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Official published agenda blocks for St. Louis.',
+          'Verified against the official REC Foundation detailed agenda for St. Louis.',
           style: TextStyle(
             color: Color(0xFF8E92A7),
             fontSize: 14,
@@ -61,47 +62,22 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
           ),
         ),
         const SizedBox(height: 16),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: worldsScheduleTracks.map((entry) {
-              final selected = entry.track == _selectedTrack;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-                  onTap: () => _selectTrack(entry.track),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 11,
-                    ),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? const Color(0xFF16182C)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: selected
-                            ? const Color(0xFF16182C)
-                            : const Color(0xFFE3E5EF),
-                      ),
-                    ),
-                    child: Text(
-                      entry.shortLabel,
-                      style: TextStyle(
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFF4F546A),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+        SolarSegmentedControl<WorldsScheduleTrack>(
+          options: worldsScheduleTracks
+              .map(
+                (entry) => SolarSegmentedControlOption<WorldsScheduleTrack>(
+                  value: entry.track,
+                  label: entry.shortLabel,
                 ),
-              );
-            }).toList(growable: false),
-          ),
+              )
+              .toList(growable: false),
+          selectedValue: _selectedTrack,
+          onSelected: _selectTrack,
+          compact: true,
+          backgroundColor: const Color(0xFFF2F3F8),
+          selectedColor: const Color(0xFF16182C),
+          selectedTextColor: Colors.white,
+          unselectedTextColor: const Color(0xFF5F657C),
         ),
         const SizedBox(height: 16),
         SizedBox(
@@ -125,7 +101,9 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
                   width: 114,
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
+                    color: selected
+                        ? const Color(0xFFF5F6FB)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: selected
@@ -173,62 +151,47 @@ class _WorldsScheduleSectionState extends State<WorldsScheduleSection> {
             },
           ),
         ),
-        const SizedBox(height: 18),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE7E8F1)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                selectedDay.headline,
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                selectedDay.note,
-                style: const TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 16),
-              for (var i = 0; i < selectedDay.sessions.length; i++)
-                _ScheduleSessionRow(
-                  session: selectedDay.sessions[i],
-                  showDivider: i != selectedDay.sessions.length - 1,
-                ),
-            ],
+        const SizedBox(height: 20),
+        Text(
+          selectedDay.headline,
+          style: const TextStyle(
+            color: Color(0xFF24243A),
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
         ),
+        const SizedBox(height: 8),
+        Text(
+          selectedDay.note,
+          style: const TextStyle(
+            color: Color(0xFF8E92A7),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 16),
+        for (var i = 0; i < selectedDay.sessions.length; i++)
+          _ScheduleSessionRow(
+            session: selectedDay.sessions[i],
+            showDivider: i != selectedDay.sessions.length - 1,
+          ),
       ],
     );
   }
 }
 
 class _ScheduleSessionRow extends StatelessWidget {
-  const _ScheduleSessionRow({
-    required this.session,
-    required this.showDivider,
-  });
+  const _ScheduleSessionRow({required this.session, required this.showDivider});
 
   final WorldsScheduleSession session;
   final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = _toneAccentColor(session.tone);
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: showDivider
@@ -239,8 +202,17 @@ class _ScheduleSessionRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          Container(
+            width: 4,
+            height: 54,
+            decoration: BoxDecoration(
+              color: accentColor,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(width: 12),
           SizedBox(
-            width: 108,
+            width: 100,
             child: Text(
               session.timeLabel,
               style: const TextStyle(
@@ -315,4 +287,12 @@ String _monthLabel(DateTime date) {
     'Dec',
   ];
   return months[date.month - 1];
+}
+
+Color _toneAccentColor(WorldsScheduleSessionTone tone) {
+  return switch (tone) {
+    WorldsScheduleSessionTone.logistics => const Color(0xFFB6BCCF),
+    WorldsScheduleSessionTone.competition => const Color(0xFF1D4ED8),
+    WorldsScheduleSessionTone.milestone => const Color(0xFF16182C),
+  };
 }

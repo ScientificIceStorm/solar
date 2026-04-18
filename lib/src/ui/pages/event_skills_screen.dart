@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/solar_app_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
+import '../widgets/solar_search_field.dart';
 import 'event_team_screen.dart';
 
 class EventSkillsScreen extends StatefulWidget {
@@ -18,6 +19,15 @@ class EventSkillsScreen extends StatefulWidget {
 
 class _EventSkillsScreenState extends State<EventSkillsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  Future<List<SkillAttempt>>? _skillsFuture;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _skillsFuture ??= SolarAppScope.of(
+      context,
+    ).fetchEventSkills(widget.event.id);
+  }
 
   @override
   void dispose() {
@@ -34,7 +44,7 @@ class _EventSkillsScreenState extends State<EventSkillsScreen> {
       title: 'Skills Rankings',
       subtitle: widget.event.name,
       body: FutureBuilder<List<SkillAttempt>>(
-        future: controller.fetchEventSkills(widget.event.id),
+        future: _skillsFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const _CenteredLoader();
@@ -76,6 +86,8 @@ class _EventSkillsScreenState extends State<EventSkillsScreen> {
                             'Try another team number or team name to search the skills table.',
                       )
                     : ListView.builder(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.only(bottom: 8),
                         itemCount: combinedEntries.length,
                         itemBuilder: (context, index) {
@@ -118,30 +130,14 @@ class _EventSkillsSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          hintText: 'Search skills rankings',
-          prefixIcon: const Icon(Icons.search_rounded),
-          suffixIcon: controller.text.trim().isEmpty
-              ? null
-              : IconButton(
-                  onPressed: () {
-                    controller.clear();
-                    onChanged('');
-                  },
-                  icon: const Icon(Icons.close_rounded),
-                ),
-        ),
-      ),
+    return SolarSearchField(
+      controller: controller,
+      hintText: 'Search skills rankings',
+      onChanged: onChanged,
+      tone: SolarSearchFieldTone.embedded,
+      horizontalPadding: 12,
+      verticalPadding: 6,
+      borderRadius: 18,
     );
   }
 }
@@ -223,9 +219,9 @@ class _CombinedSkillRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      entry.team.name.trim().isEmpty
+                      team.teamName.trim().isEmpty
                           ? 'Event team profile'
-                          : entry.team.name.trim(),
+                          : team.teamName.trim(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -234,37 +230,51 @@ class _CombinedSkillRow extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        _SkillMetricChip(
-                          icon: Icons.sports_esports_rounded,
-                          score: entry.driverScore,
-                          attempts: entry.driverAttempts,
-                          color: const Color(0xFF2A7FFF),
-                        ),
-                        _SkillMetricChip(
-                          icon: Icons.memory_rounded,
-                          score: entry.programmingScore,
-                          attempts: entry.programmingAttempts,
-                          color: const Color(0xFF7F61FF),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                '${entry.combinedScore}',
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 26,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: -0.8,
-                ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  _SkillBreakdownLine(
+                    icon: Icons.sports_esports_rounded,
+                    score: entry.driverScore,
+                    attempts: entry.driverAttempts,
+                    color: const Color(0xFF2A7FFF),
+                  ),
+                  const SizedBox(height: 7),
+                  _SkillBreakdownLine(
+                    icon: Icons.bolt_rounded,
+                    score: entry.programmingScore,
+                    attempts: entry.programmingAttempts,
+                    color: const Color(0xFF7F61FF),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    '${entry.combinedScore}',
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 30,
+                      fontWeight: FontWeight.w300,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Total',
+                    style: TextStyle(
+                      color: Color(0xFF8E92A7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -274,8 +284,8 @@ class _CombinedSkillRow extends StatelessWidget {
   }
 }
 
-class _SkillMetricChip extends StatelessWidget {
-  const _SkillMetricChip({
+class _SkillBreakdownLine extends StatelessWidget {
+  const _SkillBreakdownLine({
     required this.icon,
     required this.score,
     required this.attempts,
@@ -289,36 +299,35 @@ class _SkillMetricChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
-          Text(
-            '$score',
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
+        Icon(icon, size: 14, color: color),
+        const SizedBox(height: 3),
+        RichText(
+          textAlign: TextAlign.right,
+          text: TextSpan(
+            children: <InlineSpan>[
+              TextSpan(
+                text: '$score',
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              TextSpan(
+                text: '  $attempts',
+                style: const TextStyle(
+                  color: Color(0xFF6F748B),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            '$attempts att',
-            style: const TextStyle(
-              color: Color(0xFF6F748B),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -39,8 +39,8 @@ class ProfileScreen extends StatelessWidget {
 
           final teamStats =
               controller.teamStats ?? TeamStatsSnapshot(team: account.team);
-            final followedTeams = controller.followedTeams;
-            final favoriteTeams = followedTeams
+          final followedTeams = controller.followedTeams;
+          final favoriteTeams = followedTeams
               .where(
                 (team) =>
                     team.number.trim().toUpperCase() !=
@@ -194,10 +194,7 @@ class _FavoriteTeamRow extends StatelessWidget {
 }
 
 class _ProfileTeamGraphDeck extends StatefulWidget {
-  const _ProfileTeamGraphDeck({
-    required this.controller,
-    required this.teams,
-  });
+  const _ProfileTeamGraphDeck({required this.controller, required this.teams});
 
   final AppSessionController controller;
   final List<TeamSummary> teams;
@@ -213,9 +210,7 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
   double _dragDeltaX = 0;
 
   String _teamSignature(List<TeamSummary> teams) {
-    return teams
-        .map((team) => team.number.trim().toUpperCase())
-        .join('|');
+    return teams.map((team) => team.number.trim().toUpperCase()).join('|');
   }
 
   @override
@@ -423,86 +418,14 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
                             height: 1.4,
                           ),
                         )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8F8FC),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFE7E8F2)),
-                          ),
-                          child: Column(
-                            children: <Widget>[
-                              for (var i = 0; i < data.skillsHistory.length; i++)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                  decoration: i == data.skillsHistory.length - 1
-                                      ? null
-                                      : const BoxDecoration(
-                                          border: Border(
-                                            bottom: BorderSide(
-                                              color: Color(0xFFE3E5F0),
-                                            ),
-                                          ),
-                                        ),
-                                  child: Row(
-                                    children: <Widget>[
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: <Widget>[
-                                            Text(
-                                              data.skillsHistory[i].eventName,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Color(0xFF24243A),
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              '${data.skillsHistory[i].label} • Driver ${data.skillsHistory[i].driver} • Auton ${data.skillsHistory[i].programming}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Color(0xFF7B8198),
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFEEF2FF),
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '${data.skillsHistory[i].combined}',
-                                          style: const TextStyle(
-                                            color: Color(0xFF1E2A4E),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
+                      : Column(
+                          children: <Widget>[
+                            for (var i = 0; i < data.skillsHistory.length; i++)
+                              _ProfileSkillsHistoryRow(
+                                entry: data.skillsHistory[i],
+                                showDivider: i != data.skillsHistory.length - 1,
+                              ),
+                          ],
                         ),
                 ),
                 const SizedBox(height: 18),
@@ -518,95 +441,14 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
                             height: 1.4,
                           ),
                         )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8F8FC),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFE7E8F2)),
-                          ),
-                          child: Column(
-                            children: <Widget>[
-                              for (var i = 0; i < data.awardsHistory.length; i++)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                  decoration: i == data.awardsHistory.length - 1
-                                      ? null
-                                      : const BoxDecoration(
-                                          border: Border(
-                                            bottom: BorderSide(
-                                              color: Color(0xFFE3E5F0),
-                                            ),
-                                          ),
-                                        ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      const Padding(
-                                        padding: EdgeInsets.only(top: 2),
-                                        child: Icon(
-                                          Icons.emoji_events_rounded,
-                                          size: 16,
-                                          color: Color(0xFF8B6B00),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: <Widget>[
-                                            Text(
-                                              data.awardsHistory[i].awardTitle,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Color(0xFF24243A),
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w700,
-                                                height: 1.25,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              '${data.awardsHistory[i].eventName} • ${data.awardsHistory[i].eventLabel}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Color(0xFF7B8198),
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            if (data
-                                                .awardsHistory[i]
-                                                .recipientLabel
-                                                .trim()
-                                                .isNotEmpty) ...<Widget>[
-                                              const SizedBox(height: 3),
-                                              Text(
-                                                data.awardsHistory[i]
-                                                    .recipientLabel,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Color(0xFF9A9FB3),
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
+                      : Column(
+                          children: <Widget>[
+                            for (var i = 0; i < data.awardsHistory.length; i++)
+                              _ProfileAwardsHistoryRow(
+                                entry: data.awardsHistory[i],
+                                showDivider: i != data.awardsHistory.length - 1,
+                              ),
+                          ],
                         ),
                 ),
               ],
@@ -684,6 +526,166 @@ class _ProfileGraphSection extends StatelessWidget {
         const SizedBox(height: 10),
         child,
       ],
+    );
+  }
+}
+
+class _ProfileSkillsHistoryRow extends StatelessWidget {
+  const _ProfileSkillsHistoryRow({
+    required this.entry,
+    required this.showDivider,
+  });
+
+  final _ProfileSkillsHistoryEntry entry;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
+            )
+          : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  entry.eventName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${entry.label} • Driver ${entry.driver} • Auton ${entry.programming}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF7B8198),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Text(
+                '${entry.combined}',
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'TOTAL',
+                style: TextStyle(
+                  color: Color(0xFF9A9FB3),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileAwardsHistoryRow extends StatelessWidget {
+  const _ProfileAwardsHistoryRow({
+    required this.entry,
+    required this.showDivider,
+  });
+
+  final _ProfileAwardsHistoryEntry entry;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
+            )
+          : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.emoji_events_rounded,
+              size: 16,
+              color: Color(0xFF8B6B00),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  entry.awardTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${entry.eventName} • ${entry.eventLabel}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF7B8198),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+                if (entry.recipientLabel.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 3),
+                  Text(
+                    entry.recipientLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF9A9FB3),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

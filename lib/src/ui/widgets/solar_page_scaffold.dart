@@ -5,6 +5,7 @@ import '../../app/solar_app_scope.dart';
 import '../theme/solar_chrome_palette.dart';
 import '../pages/onboarding_screen.dart';
 import 'solar_navigation.dart';
+import 'solar_scaffold_metrics.dart';
 import 'solar_screen_background.dart';
 
 class SolarPageScaffold extends StatelessWidget {
@@ -14,12 +15,14 @@ class SolarPageScaffold extends StatelessWidget {
     required this.body,
     super.key,
     this.trailing,
+    this.bodyPadding = solarPageBodyPadding,
   });
 
   final String title;
   final SolarNavDestination currentDestination;
   final Widget body;
   final Widget? trailing;
+  final EdgeInsetsGeometry bodyPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +66,13 @@ class SolarPageScaffold extends StatelessWidget {
             children: <Widget>[
               Container(
                 padding: EdgeInsets.fromLTRB(20, topInset + 8, 20, 12),
-                color: chromeColor,
+                decoration: BoxDecoration(
+                  color: chromeColor,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(solarHeaderCornerRadius),
+                    bottomRight: Radius.circular(solarHeaderCornerRadius),
+                  ),
+                ),
                 child: Row(
                   children: <Widget>[
                     Builder(
@@ -99,10 +108,7 @@ class SolarPageScaffold extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 18),
-                  child: body,
-                ),
+                child: Padding(padding: bodyPadding, child: body),
               ),
             ],
           ),

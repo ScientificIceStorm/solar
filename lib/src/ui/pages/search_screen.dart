@@ -7,6 +7,8 @@ import '../../app/solar_app_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../models/solar_match_prediction.dart';
 import '../widgets/solar_match_row.dart';
+import '../widgets/solar_search_field.dart';
+import '../widgets/solar_segmented_control.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_page_scaffold.dart';
 import 'event_details_screen.dart';
@@ -179,90 +181,35 @@ class _SearchInputCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E5F0)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-        child: Column(
-          children: <Widget>[
-            TextField(
-              controller: controller,
-              onChanged: onChanged,
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(
-                color: Color(0xFF181A33),
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                hintText: 'Search teams, events, or team matches',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: controller.text.trim().isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          controller.clear();
-                          onChanged('');
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: SearchResultScope.values.map((option) {
-                final selected = option == scope;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: InkWell(
-                      onTap: () => onScopeSelected(option),
-                      borderRadius: BorderRadius.circular(11),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? const Color(0xFF16182C)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: selected
-                                ? const Color(0xFF16182C)
-                                : const Color(0xFFE2E5F0),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          _searchScopeLabel(option),
-                          style: TextStyle(
-                            color: selected
-                                ? Colors.white
-                                : const Color(0xFF5F6478),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(growable: false),
-            ),
-          ],
+    return Column(
+      children: <Widget>[
+        SolarSearchField(
+          controller: controller,
+          hintText: 'Search teams, events, or team matches',
+          onChanged: onChanged,
+          horizontalPadding: 18,
+          verticalPadding: 10,
+          borderRadius: 24,
         ),
-      ),
+        const SizedBox(height: 10),
+        SolarSegmentedControl<SearchResultScope>(
+          options: SearchResultScope.values
+              .map(
+                (option) => SolarSegmentedControlOption<SearchResultScope>(
+                  value: option,
+                  label: _searchScopeLabel(option),
+                ),
+              )
+              .toList(growable: false),
+          selectedValue: scope,
+          onSelected: onScopeSelected,
+          compact: true,
+          backgroundColor: const Color(0xFFF1EFF5),
+          selectedColor: const Color(0xFF16182C),
+          selectedTextColor: Colors.white,
+          unselectedTextColor: const Color(0xFF5F6478),
+        ),
+      ],
     );
   }
 }
@@ -876,9 +823,7 @@ class _SearchUpcomingEventsSection extends StatelessWidget {
               ),
             )
           : events.isEmpty
-          ? const _SectionEmptyLabel(
-              'No upcoming events yet.',
-            )
+          ? const _SectionEmptyLabel('No upcoming events yet.')
           : Column(
               children: events
                   .map((event) => _SearchEventTile(event: event))
@@ -960,13 +905,15 @@ String _eventLocationLabel(LocationSummary location) {
 
 List<EventSummary> _upcomingSearchEvents(List<EventSummary> events) {
   final now = DateTime.now();
-  final upcoming = events.where((event) {
-    final anchor = event.end?.toLocal() ?? event.start?.toLocal();
-    if (anchor == null) {
-      return true;
-    }
-    return !anchor.isBefore(now.subtract(const Duration(days: 1)));
-  }).toList(growable: false);
+  final upcoming = events
+      .where((event) {
+        final anchor = event.end?.toLocal() ?? event.start?.toLocal();
+        if (anchor == null) {
+          return true;
+        }
+        return !anchor.isBefore(now.subtract(const Duration(days: 1)));
+      })
+      .toList(growable: false);
 
   upcoming.sort((a, b) {
     final aAnchor = _eventSortAnchor(a);

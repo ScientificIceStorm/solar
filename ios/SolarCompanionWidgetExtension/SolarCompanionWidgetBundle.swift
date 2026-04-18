@@ -106,12 +106,18 @@ private struct SolarWidgetShell<Content: View>: View {
 private extension View {
   @ViewBuilder
   func solarWidgetBackground() -> some View {
+    let styled = self.overlay {
+      RoundedRectangle(cornerRadius: 28, style: .continuous)
+        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        .padding(1)
+    }
+
     if #available(iOSApplicationExtension 17.0, *) {
-      containerBackground(for: .widget) {
+      styled.containerBackground(for: .widget) {
         solarWidgetGradient
       }
     } else {
-      background(solarWidgetGradient)
+      styled.background(solarWidgetGradient)
     }
   }
 
@@ -119,18 +125,37 @@ private extension View {
     ZStack {
       LinearGradient(
         colors: [
-          Color(red: 0.18, green: 0.25, blue: 0.45),
-          Color(red: 0.26, green: 0.35, blue: 0.58),
-          Color(red: 0.38, green: 0.50, blue: 0.72)
+          Color(red: 0.03, green: 0.07, blue: 0.16),
+          Color(red: 0.08, green: 0.16, blue: 0.30),
+          Color(red: 0.16, green: 0.30, blue: 0.52)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
       )
       RadialGradient(
-        colors: [Color.white.opacity(0.20), Color.white.opacity(0.0)],
+        colors: [Color.white.opacity(0.18), Color.white.opacity(0.0)],
         center: .topLeading,
         startRadius: 0,
         endRadius: 220
+      )
+      Circle()
+        .fill(Color(red: 0.42, green: 0.78, blue: 1.0).opacity(0.16))
+        .frame(width: 180, height: 180)
+        .blur(radius: 18)
+        .offset(x: 74, y: -68)
+      Circle()
+        .fill(Color(red: 0.10, green: 0.18, blue: 0.38).opacity(0.55))
+        .frame(width: 210, height: 210)
+        .blur(radius: 24)
+        .offset(x: -86, y: 118)
+      LinearGradient(
+        colors: [
+          Color.white.opacity(0.08),
+          Color.white.opacity(0.0),
+          Color.black.opacity(0.14)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
       )
     }
   }
@@ -180,8 +205,12 @@ private struct SolarQuickviewWidgetView: View {
   @ViewBuilder
   private func headerLine(_ payload: SolarCompanionPayload) -> some View {
     VStack(alignment: .leading, spacing: 2) {
+      Text("SOLAR")
+        .font(solarRounded(9, weight: .heavy))
+        .foregroundStyle(.white.opacity(0.56))
+        .tracking(1.2)
       Text(payload.teamNumber)
-        .font(solarRounded(24, weight: .bold))
+        .font(solarDisplay(28))
         .foregroundStyle(.white)
       if let name = payload.teamName, !name.isEmpty {
         Text(name)
@@ -202,7 +231,7 @@ private struct SolarQuickviewWidgetView: View {
         .font(solarRounded(12, weight: .semibold))
         .foregroundStyle(.white.opacity(0.72))
       Text(upcoming.matchLabel ?? upcoming.matchName)
-        .font(solarRounded(24, weight: .bold))
+        .font(solarDisplay(25))
         .foregroundStyle(.white)
       Text(upcoming.eventName)
         .font(solarRounded(14, weight: .semibold))
@@ -236,7 +265,7 @@ private struct SolarQuickviewWidgetView: View {
         .font(solarRounded(12, weight: .semibold))
         .foregroundStyle(.white.opacity(0.72))
       Text("\(resultTitle(result)) \(resultScoreLine(result))")
-        .font(solarRounded(24, weight: .bold))
+        .font(solarDisplay(24))
         .foregroundStyle(.white)
       Text(result.matchLabel ?? result.matchName)
         .font(solarRounded(14, weight: .semibold))
@@ -252,7 +281,7 @@ private struct SolarQuickviewWidgetView: View {
   private func emptyBlock(title: String, body: String) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title)
-        .font(solarRounded(22, weight: .bold))
+        .font(solarDisplay(24))
         .foregroundStyle(.white)
       Text(body)
         .font(solarRounded(14, weight: .semibold))
@@ -274,7 +303,14 @@ private struct SolarQuickviewWidgetView: View {
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 7)
-    .background(Color.white.opacity(0.10), in: Capsule())
+    .background(
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(Color.white.opacity(0.10))
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+    }
   }
 }
 
@@ -305,7 +341,7 @@ private struct SolarNextMatchWidgetView: View {
         .foregroundStyle(.white.opacity(0.72))
 
       Text(upcoming.matchLabel ?? upcoming.matchName)
-        .font(.title3.weight(.bold))
+        .font(solarDisplay(21))
         .foregroundStyle(.white)
         .lineLimit(1)
         .minimumScaleFactor(0.72)
@@ -347,7 +383,7 @@ private struct SolarNextMatchWidgetView: View {
         .font(.caption.weight(.semibold))
         .foregroundStyle(.white.opacity(0.72))
       Text(upcoming.matchLabel ?? upcoming.matchName)
-        .font(.title2.weight(.bold))
+        .font(solarDisplay(25))
         .foregroundStyle(.white)
         .lineLimit(1)
         .minimumScaleFactor(0.72)
@@ -402,7 +438,7 @@ private struct SolarLatestResultWidgetView: View {
         .foregroundStyle(.white.opacity(0.72))
 
       Text(resultScoreLine(result))
-        .font(.title2.weight(.heavy))
+        .font(solarDisplay(24))
         .foregroundStyle(.white)
         .minimumScaleFactor(0.7)
         .lineLimit(1)
@@ -442,7 +478,7 @@ private struct SolarLatestResultWidgetView: View {
         .foregroundStyle(.white.opacity(0.72))
 
       Text("\(resultTitle(result)) \(resultScoreLine(result))")
-        .font(.title3.weight(.bold))
+        .font(solarDisplay(22))
         .foregroundStyle(.white)
         .lineLimit(1)
         .minimumScaleFactor(0.72)
@@ -711,6 +747,10 @@ struct SolarCompanionWidgetBundle: WidgetBundle {
 
 private func solarRounded(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
   .system(size: size, weight: weight, design: .rounded)
+}
+
+private func solarDisplay(_ size: CGFloat) -> Font {
+  .custom("AvenirNextCondensed-Heavy", size: size)
 }
 
 private func metaLine(for upcoming: SolarUpcomingPayload) -> String {

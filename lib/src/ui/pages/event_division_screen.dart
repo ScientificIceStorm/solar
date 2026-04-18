@@ -7,6 +7,7 @@ import '../../models/robot_events_models.dart';
 import '../models/solar_match_prediction.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
+import '../widgets/solar_search_field.dart';
 import 'event_team_screen.dart';
 import 'match_details_screen.dart';
 
@@ -22,7 +23,7 @@ class EventDivisionScreenArgs {
   final String? highlightTeamNumber;
 }
 
-class EventDivisionScreen extends StatelessWidget {
+class EventDivisionScreen extends StatefulWidget {
   const EventDivisionScreen({required this.args, super.key});
 
   static const routeName = '/event-division';
@@ -30,125 +31,207 @@ class EventDivisionScreen extends StatelessWidget {
   final EventDivisionScreenArgs args;
 
   @override
-  Widget build(BuildContext context) {
+  State<EventDivisionScreen> createState() => _EventDivisionScreenState();
+}
+
+class _EventDivisionScreenState extends State<EventDivisionScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final TextEditingController _rankingsSearchController =
+      TextEditingController();
+  AppSessionController? _sessionController;
+  Future<List<RankingRecord>>? _rankingsFuture;
+  Future<List<MatchSummary>>? _matchesFuture;
+  Future<List<TeamSummary>>? _eventTeamsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this)
+      ..addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final controller = SolarAppScope.of(context);
-    final rankingsFuture = controller.fetchDivisionRankings(
-      eventId: args.event.id,
-      divisionId: args.division.id,
+    if (!identical(_sessionController, controller) ||
+        _rankingsFuture == null ||
+        _matchesFuture == null ||
+        _eventTeamsFuture == null) {
+      _sessionController = controller;
+      _rankingsFuture = controller.fetchDivisionRankings(
+        eventId: widget.args.event.id,
+        divisionId: widget.args.division.id,
+      );
+      _matchesFuture = controller.fetchDivisionMatches(
+        eventId: widget.args.event.id,
+        divisionId: widget.args.division.id,
+      );
+      _eventTeamsFuture = controller.fetchEventTeams(widget.args.event.id);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _rankingsSearchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _sessionController ?? SolarAppScope.of(context);
+    final rankingsFuture = _rankingsFuture!;
+    final matchesFuture = _matchesFuture!;
+    final eventTeamsFuture = _eventTeamsFuture!;
+
+    return SolarEventSubpageScaffold(
+      title: widget.args.division.name,
+      subtitle: widget.args.event.name,
+      headerBottom: Column(
+        children: <Widget>[
+          _DivisionHeaderTabBar(controller: _tabController),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: _tabController.index == 0
+                ? Padding(
+                    key: const ValueKey<String>('division-rankings-search'),
+                    padding: const EdgeInsets.only(top: 10),
+                    child: _DivisionRankingSearchBar(
+                      controller: _rankingsSearchController,
+                      onChanged: (_) => setState(() {}),
+                      tone: SolarSearchFieldTone.chrome,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: <Widget>[
+          _DivisionRankingsTab(
+            controller: controller,
+            event: widget.args.event,
+            highlightTeamNumber: widget.args.highlightTeamNumber,
+            rankingsFuture: rankingsFuture,
+            matchesFuture: matchesFuture,
+            eventTeamsFuture: eventTeamsFuture,
+            searchController: _rankingsSearchController,
+          ),
+          _DivisionMatchesTab(
+            controller: controller,
+            event: widget.args.event,
+            highlightTeamNumber: widget.args.highlightTeamNumber,
+            matchesFuture: matchesFuture,
+            eventTeamsFuture: eventTeamsFuture,
+          ),
+          _DivisionTeamsTab(
+            controller: controller,
+            event: widget.args.event,
+            highlightTeamNumber: widget.args.highlightTeamNumber,
+            rankingsFuture: rankingsFuture,
+            eventTeamsFuture: eventTeamsFuture,
+          ),
+          FutureBuilder<List<Object>>(
+            future: Future.wait<Object>(<Future<Object>>[
+              rankingsFuture.then<Object>((value) => value),
+              matchesFuture.then<Object>((value) => value),
+              eventTeamsFuture.then<Object>((value) => value),
+            ]),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const _CenteredLoader();
+              }
+
+              final values = snapshot.data!;
+              final rankings = values[0] as List<RankingRecord>;
+              final matches = values[1] as List<MatchSummary>;
+              final eventTeams = values[2] as List<TeamSummary>;
+              if (rankings.isEmpty) {
+                return const _EmptyEventState(
+                  title: 'No ranking data yet',
+                  body:
+                      'Alliance forecasts open up once the division publishes rankings.',
+                );
+              }
+
+              final teamsByKey = _eventTeamsByKey(
+                controller: controller,
+                rankings: rankings,
+                eventTeams: eventTeams,
+              );
+              final performanceTable = _DivisionPerformanceTable.fromMatches(
+                matches,
+              );
+              final predictions = _PredictedAllianceSelection.build(
+                rankings: rankings,
+                teamsByKey: teamsByKey,
+                performanceTable: performanceTable,
+                openSkillByTeam: <String, OpenSkillCacheEntry>{
+                  for (final team in teamsByKey.values)
+                    if (controller.openSkillEntryForTeam(team.number) != null)
+                      team.number.trim().toUpperCase(): controller
+                          .openSkillEntryForTeam(team.number)!,
+                },
+              );
+
+              return _PredictionsTab(
+                predictions: predictions,
+                onOpenTeam: (team) {
+                  openSolarEventTeamScreen(
+                    context,
+                    event: widget.args.event,
+                    team: team,
+                    highlightTeamNumber: widget.args.highlightTeamNumber,
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
     );
-    final matchesFuture = controller.fetchDivisionMatches(
-      eventId: args.event.id,
-      divisionId: args.division.id,
-    );
-    final eventTeamsFuture = controller.fetchEventTeams(args.event.id);
+  }
+}
 
-    return DefaultTabController(
-      length: 4,
-      child: SolarEventSubpageScaffold(
-        title: args.division.name,
-        subtitle: args.event.name,
-        body: Column(
-          children: <Widget>[
-            const TabBar(
-              isScrollable: true,
-              dividerColor: Color(0xFFDADAE3),
-              indicatorColor: Color(0xFF5A67F3),
-              labelColor: Color(0xFF24243A),
-              unselectedLabelColor: Color(0xFF8E92A7),
-              tabs: <Widget>[
-                Tab(text: 'Rankings'),
-                Tab(text: 'Matches'),
-                Tab(text: 'Teams'),
-                Tab(text: 'Predictions'),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Expanded(
-              child: TabBarView(
-                children: <Widget>[
-                  _DivisionRankingsTab(
-                    controller: controller,
-                    event: args.event,
-                    highlightTeamNumber: args.highlightTeamNumber,
-                    rankingsFuture: rankingsFuture,
-                    matchesFuture: matchesFuture,
-                    eventTeamsFuture: eventTeamsFuture,
-                  ),
-                  _DivisionMatchesTab(
-                    controller: controller,
-                    event: args.event,
-                    highlightTeamNumber: args.highlightTeamNumber,
-                    matchesFuture: matchesFuture,
-                    eventTeamsFuture: eventTeamsFuture,
-                  ),
-                  _DivisionTeamsTab(
-                    controller: controller,
-                    event: args.event,
-                    highlightTeamNumber: args.highlightTeamNumber,
-                    rankingsFuture: rankingsFuture,
-                    eventTeamsFuture: eventTeamsFuture,
-                  ),
-                  FutureBuilder<List<Object>>(
-                    future: Future.wait<Object>(<Future<Object>>[
-                      rankingsFuture.then<Object>((value) => value),
-                      matchesFuture.then<Object>((value) => value),
-                      eventTeamsFuture.then<Object>((value) => value),
-                    ]),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const _CenteredLoader();
-                      }
+class _DivisionHeaderTabBar extends StatelessWidget {
+  const _DivisionHeaderTabBar({required this.controller});
 
-                      final values = snapshot.data!;
-                      final rankings = values[0] as List<RankingRecord>;
-                      final matches = values[1] as List<MatchSummary>;
-                      final eventTeams = values[2] as List<TeamSummary>;
-                      if (rankings.isEmpty) {
-                        return const _EmptyEventState(
-                          title: 'No ranking data yet',
-                          body:
-                              'Alliance forecasts open up once the division publishes rankings.',
-                        );
-                      }
+  final TabController controller;
 
-                      final teamsByKey = _eventTeamsByKey(
-                        controller: controller,
-                        rankings: rankings,
-                        eventTeams: eventTeams,
-                      );
-                      final performanceTable =
-                          _DivisionPerformanceTable.fromMatches(matches);
-                      final predictions = _PredictedAllianceSelection.build(
-                        rankings: rankings,
-                        teamsByKey: teamsByKey,
-                        performanceTable: performanceTable,
-                        openSkillByTeam: <String, OpenSkillCacheEntry>{
-                          for (final team in teamsByKey.values)
-                            if (controller.openSkillEntryForTeam(team.number) !=
-                                null)
-                              team.number.trim().toUpperCase(): controller
-                                  .openSkillEntryForTeam(team.number)!,
-                        },
-                      );
-
-                      return _PredictionsTab(
-                        predictions: predictions,
-                        onOpenTeam: (team) {
-                          openSolarEventTeamScreen(
-                            context,
-                            event: args.event,
-                            team: team,
-                            highlightTeamNumber: args.highlightTeamNumber,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: TabBar(
+        controller: controller,
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
         ),
+        labelColor: const Color(0xFF16182C),
+        unselectedLabelColor: const Color(0xFFD9DDF5),
+        labelPadding: EdgeInsets.zero,
+        tabs: const <Widget>[
+          Tab(text: 'Rankings'),
+          Tab(text: 'Matches'),
+          Tab(text: 'Teams'),
+          Tab(text: 'Predictions'),
+        ],
       ),
     );
   }
@@ -191,6 +274,7 @@ class _DivisionRankingsTab extends StatefulWidget {
     required this.rankingsFuture,
     required this.matchesFuture,
     required this.eventTeamsFuture,
+    required this.searchController,
   });
 
   final AppSessionController controller;
@@ -199,20 +283,14 @@ class _DivisionRankingsTab extends StatefulWidget {
   final Future<List<RankingRecord>> rankingsFuture;
   final Future<List<MatchSummary>> matchesFuture;
   final Future<List<TeamSummary>> eventTeamsFuture;
+  final TextEditingController searchController;
 
   @override
   State<_DivisionRankingsTab> createState() => _DivisionRankingsTabState();
 }
 
 class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
-  final TextEditingController _searchController = TextEditingController();
   _DivisionRankingSortMode _sortMode = _DivisionRankingSortMode.rank;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -249,7 +327,7 @@ class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
           performanceTable: performanceTable,
           sortMode: _sortMode,
         );
-        final query = _searchController.text.trim().toLowerCase();
+        final query = widget.searchController.text.trim().toLowerCase();
         final visibleRankings = query.isEmpty
             ? sortedRankings
             : sortedRankings
@@ -258,56 +336,53 @@ class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
                         teamsByKey[ranking.team.number.trim().toUpperCase()] ??
                         _teamFromRanking(widget.controller, ranking);
                     final haystack =
-                        '${team.number} ${team.teamName} ${team.organization}'
+                        '${team.number} ${_teamNameLabel(team, fallbackName: ranking.team.name)}'
                             .toLowerCase();
                     return haystack.contains(query);
                   })
                   .toList(growable: false);
 
-        return Stack(
-          children: <Widget>[
-            StretchingOverscrollIndicator(
-              axisDirection: AxisDirection.down,
-              child: ListView.builder(
-                padding: const EdgeInsets.only(bottom: 94),
-                itemCount: visibleRankings.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _DivisionRankingSortStrip(
-                      selectedMode: _sortMode,
-                      onModeSelected: (value) {
-                        setState(() {
-                          _sortMode = value;
-                        });
-                      },
-                    );
-                  }
+        return StretchingOverscrollIndicator(
+          axisDirection: AxisDirection.down,
+          child: ListView.builder(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.only(bottom: 12),
+            itemCount: visibleRankings.isEmpty ? 2 : visibleRankings.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _DivisionRankingSortStrip(
+                  selectedMode: _sortMode,
+                  onModeSelected: (value) {
+                    setState(() {
+                      _sortMode = value;
+                    });
+                  },
+                );
+              }
 
-                  final ranking = visibleRankings[index - 1];
-                  final team =
-                      teamsByKey[ranking.team.number.trim().toUpperCase()] ??
-                      _teamFromRanking(widget.controller, ranking);
-                  return _RankingCard(
-                    event: widget.event,
-                    ranking: ranking,
-                    team: team,
-                    highlightTeamNumber: widget.highlightTeamNumber,
-                    metrics: performanceTable.forTeam(team.number),
-                  );
-                },
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _DivisionRankingSearchBar(
-                controller: _searchController,
-                resultCount: visibleRankings.length,
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-          ],
+              if (visibleRankings.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child: _EmptyEventState(
+                    title: 'No teams found',
+                    body: 'Try another team number or team name.',
+                  ),
+                );
+              }
+
+              final ranking = visibleRankings[index - 1];
+              final team =
+                  teamsByKey[ranking.team.number.trim().toUpperCase()] ??
+                  _teamFromRanking(widget.controller, ranking);
+              return _RankingCard(
+                event: widget.event,
+                ranking: ranking,
+                team: team,
+                highlightTeamNumber: widget.highlightTeamNumber,
+                metrics: performanceTable.forTeam(team.number),
+              );
+            },
+          ),
         );
       },
     );
@@ -392,7 +467,8 @@ class _DivisionMatchesTabState extends State<_DivisionMatchesTab> {
         if (matches.isEmpty) {
           return const _EmptyEventState(
             title: 'No matches yet',
-            body: 'When division match data is available, it will show up here.',
+            body:
+                'When division match data is available, it will show up here.',
           );
         }
 
@@ -402,27 +478,33 @@ class _DivisionMatchesTabState extends State<_DivisionMatchesTab> {
         final query = _searchController.text.trim().toLowerCase();
         final visibleMatches = query.isEmpty
             ? matches
-            : matches.where((match) {
-                final matchLabel = solarMatchScreenLabel(match).toLowerCase();
-                if (matchLabel.contains(query)) {
-                  return true;
-                }
-                for (final alliance in match.alliances) {
-                  for (final team in alliance.teams) {
-                    final teamLabel =
-                        '${team.number} ${team.name}'.trim().toLowerCase();
-                    if (teamLabel.contains(query)) {
+            : matches
+                  .where((match) {
+                    final matchLabel = solarMatchScreenLabel(
+                      match,
+                    ).toLowerCase();
+                    if (matchLabel.contains(query)) {
                       return true;
                     }
-                  }
-                }
-                return false;
-              }).toList(growable: false);
+                    for (final alliance in match.alliances) {
+                      for (final team in alliance.teams) {
+                        final teamLabel = '${team.number} ${team.name}'
+                            .trim()
+                            .toLowerCase();
+                        if (teamLabel.contains(query)) {
+                          return true;
+                        }
+                      }
+                    }
+                    return false;
+                  })
+                  .toList(growable: false);
 
         Widget matchesList(Map<int, SolarMatchPrediction?> predictionsByMatch) {
           return StretchingOverscrollIndicator(
             axisDirection: AxisDirection.down,
             child: ListView.builder(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.only(bottom: 8),
               itemCount: visibleMatches.length + 1,
               itemBuilder: (context, index) {
@@ -430,7 +512,6 @@ class _DivisionMatchesTabState extends State<_DivisionMatchesTab> {
                   return _DivisionMatchesToolbar(
                     controller: _searchController,
                     predictionModeEnabled: _predictionModeEnabled,
-                    matchCount: visibleMatches.length,
                     onChanged: (_) => setState(() {}),
                     onPredictionModeChanged: (value) {
                       setState(() {
@@ -514,14 +595,12 @@ class _DivisionMatchesToolbar extends StatelessWidget {
   const _DivisionMatchesToolbar({
     required this.controller,
     required this.predictionModeEnabled,
-    required this.matchCount,
     required this.onChanged,
     required this.onPredictionModeChanged,
   });
 
   final TextEditingController controller;
   final bool predictionModeEnabled;
-  final int matchCount;
   final ValueChanged<String> onChanged;
   final ValueChanged<bool> onPredictionModeChanged;
 
@@ -531,53 +610,14 @@ class _DivisionMatchesToolbar extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD7DBEA)),
-            ),
-            child: Row(
-              children: <Widget>[
-                const Icon(
-                  Icons.search_rounded,
-                  color: Color(0xFF6F748B),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    onChanged: onChanged,
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isCollapsed: true,
-                      hintText: 'Search matches or teams',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    style: const TextStyle(
-                      color: Color(0xFF24243A),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$matchCount',
-                  style: const TextStyle(
-                    color: Color(0xFF6F748B),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
+          SolarSearchField(
+            controller: controller,
+            hintText: 'Search matches or teams',
+            onChanged: onChanged,
+            tone: SolarSearchFieldTone.embedded,
+            horizontalPadding: 12,
+            verticalPadding: 6,
+            borderRadius: 18,
           ),
           const SizedBox(height: 8),
           Row(
@@ -609,7 +649,7 @@ class _DivisionMatchesToolbar extends StatelessWidget {
               Switch.adaptive(
                 value: predictionModeEnabled,
                 onChanged: onPredictionModeChanged,
-                activeColor: Colors.white,
+                activeThumbColor: Colors.white,
                 activeTrackColor: const Color(0xFF5F66FF),
               ),
             ],
@@ -680,29 +720,37 @@ class _DivisionTeamsTabState extends State<_DivisionTeamsTab> {
         }
 
         final query = _searchController.text.trim().toLowerCase();
-        final teams = teamsByKey.values.where((team) {
-          if (query.isEmpty) {
-            return true;
-          }
-          final haystack =
-              '${team.number} ${team.teamName} ${team.organization}'.toLowerCase();
-          return haystack.contains(query);
-        }).toList(growable: false)
-          ..sort((a, b) {
-            if (_sortMode == _DivisionTeamSortMode.alphabetical) {
-              return a.number.compareTo(b.number);
-            }
+        final teams =
+            teamsByKey.values
+                .where((team) {
+                  if (query.isEmpty) {
+                    return true;
+                  }
+                  final haystack =
+                      '${team.number} ${team.teamName} ${team.organization}'
+                          .toLowerCase();
+                  return haystack.contains(query);
+                })
+                .toList(growable: false)
+              ..sort((a, b) {
+                if (_sortMode == _DivisionTeamSortMode.alphabetical) {
+                  return a.number.compareTo(b.number);
+                }
 
-            final aRank = widget.controller.openSkillEntryForTeam(a.number)?.ranking;
-            final bRank = widget.controller.openSkillEntryForTeam(b.number)?.ranking;
-            final aValue = (aRank == null || aRank <= 0) ? 999999 : aRank;
-            final bValue = (bRank == null || bRank <= 0) ? 999999 : bRank;
-            final rankCompare = aValue.compareTo(bValue);
-            if (rankCompare != 0) {
-              return rankCompare;
-            }
-            return a.number.compareTo(b.number);
-          });
+                final aRank = widget.controller
+                    .openSkillEntryForTeam(a.number)
+                    ?.ranking;
+                final bRank = widget.controller
+                    .openSkillEntryForTeam(b.number)
+                    ?.ranking;
+                final aValue = (aRank == null || aRank <= 0) ? 999999 : aRank;
+                final bValue = (bRank == null || bRank <= 0) ? 999999 : bRank;
+                final rankCompare = aValue.compareTo(bValue);
+                if (rankCompare != 0) {
+                  return rankCompare;
+                }
+                return a.number.compareTo(b.number);
+              });
 
         if (teams.isEmpty) {
           return const _EmptyEventState(
@@ -714,6 +762,7 @@ class _DivisionTeamsTabState extends State<_DivisionTeamsTab> {
         return StretchingOverscrollIndicator(
           axisDirection: AxisDirection.down,
           child: ListView.builder(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.only(bottom: 8),
             itemCount: teams.length + 1,
             itemBuilder: (context, index) {
@@ -721,7 +770,6 @@ class _DivisionTeamsTabState extends State<_DivisionTeamsTab> {
                 return _DivisionTeamsToolbar(
                   controller: _searchController,
                   sortMode: _sortMode,
-                  teamCount: teams.length,
                   onChanged: (_) => setState(() {}),
                   onSortModeChanged: (value) {
                     setState(() {
@@ -806,14 +854,12 @@ class _DivisionTeamsToolbar extends StatelessWidget {
   const _DivisionTeamsToolbar({
     required this.controller,
     required this.sortMode,
-    required this.teamCount,
     required this.onChanged,
     required this.onSortModeChanged,
   });
 
   final TextEditingController controller;
   final _DivisionTeamSortMode sortMode;
-  final int teamCount;
   final ValueChanged<String> onChanged;
   final ValueChanged<_DivisionTeamSortMode> onSortModeChanged;
 
@@ -823,91 +869,56 @@ class _DivisionTeamsToolbar extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD7DBEA)),
-            ),
-            child: Row(
-              children: <Widget>[
-                const Icon(
-                  Icons.search_rounded,
-                  color: Color(0xFF6F748B),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    onChanged: onChanged,
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isCollapsed: true,
-                      hintText: 'Search division teams',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    style: const TextStyle(
-                      color: Color(0xFF24243A),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$teamCount',
-                  style: const TextStyle(
-                    color: Color(0xFF6F748B),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
+          SolarSearchField(
+            controller: controller,
+            hintText: 'Search division teams',
+            onChanged: onChanged,
+            tone: SolarSearchFieldTone.embedded,
+            horizontalPadding: 12,
+            verticalPadding: 6,
+            borderRadius: 18,
           ),
           const SizedBox(height: 8),
           Row(
-            children: _DivisionTeamSortMode.values.map((mode) {
-              final selected = mode == sortMode;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: InkWell(
-                  onTap: () => onSortModeChanged(mode),
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: selected ? const Color(0xFF16182C) : Colors.white,
+            children: _DivisionTeamSortMode.values
+                .map((mode) {
+                  final selected = mode == sortMode;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: InkWell(
+                      onTap: () => onSortModeChanged(mode),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: selected
-                            ? const Color(0xFF16182C)
-                            : const Color(0xFFE2E4F0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? const Color(0xFF16182C)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: selected
+                                ? const Color(0xFF16182C)
+                                : const Color(0xFFE2E4F0),
+                          ),
+                        ),
+                        child: Text(
+                          _divisionTeamSortModeLabel(mode),
+                          style: TextStyle(
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFF24243A),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
-                    child: Text(
-                      _divisionTeamSortModeLabel(mode),
-                      style: TextStyle(
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFF24243A),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(growable: false),
+                  );
+                })
+                .toList(growable: false),
           ),
         ],
       ),
@@ -976,27 +987,6 @@ Color _predictionStripeColor(SolarMatchPrediction? prediction) {
   return prediction.predictedRedScore > prediction.predictedBlueScore
       ? const Color(0xFF3FCB73)
       : const Color(0xFFFF6B64);
-}
-
-bool _matchHasOfficialScore(MatchSummary match) {
-  if (match.alliances.length < 2) {
-    return false;
-  }
-
-  MatchAlliance? red;
-  MatchAlliance? blue;
-  for (final alliance in match.alliances) {
-    final color = alliance.color.toLowerCase();
-    if (color == 'red') {
-      red = alliance;
-    } else if (color == 'blue') {
-      blue = alliance;
-    }
-  }
-
-  red ??= match.alliances.first;
-  blue ??= match.alliances.length > 1 ? match.alliances[1] : match.alliances.first;
-  return red.score >= 0 && blue.score >= 0;
 }
 
 String _divisionTeamSortModeLabel(_DivisionTeamSortMode mode) {
@@ -1255,7 +1245,7 @@ class _RankingCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _teamSubtitle(team),
+                      _teamNameLabel(team, fallbackName: ranking.team.name),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1317,93 +1307,38 @@ class _RankingCard extends StatelessWidget {
 class _DivisionRankingSearchBar extends StatelessWidget {
   const _DivisionRankingSearchBar({
     required this.controller,
-    required this.resultCount,
     required this.onChanged,
+    this.tone = SolarSearchFieldTone.embedded,
   });
 
   final TextEditingController controller;
-  final int resultCount;
   final ValueChanged<String> onChanged;
+  final SolarSearchFieldTone tone;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(0, 18, 0, 0),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            const Color(0xFFF7F5F8).withValues(alpha: 0),
-            const Color(0xFFF7F5F8),
-            const Color(0xFFF7F5F8),
-          ],
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.98),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x12000000),
-              blurRadius: 18,
-              offset: Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.search_rounded, color: Color(0xFF6F748B)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  hintText: 'Search rankings',
-                  hintStyle: TextStyle(
-                    color: Color(0xFF8E92A7),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '$resultCount',
-              style: const TextStyle(
-                color: Color(0xFF6F748B),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return SolarSearchField(
+      controller: controller,
+      hintText: 'Search rankings',
+      onChanged: onChanged,
+      tone: tone,
+      horizontalPadding: tone == SolarSearchFieldTone.chrome ? 14 : 12,
+      verticalPadding: tone == SolarSearchFieldTone.chrome ? 7 : 6,
+      borderRadius: tone == SolarSearchFieldTone.chrome ? 20 : 18,
     );
   }
 }
 
-String _teamSubtitle(TeamSummary team) {
-  final parts = <String>[
-    if (team.teamName.trim().isNotEmpty) team.teamName.trim(),
-    if (team.organization.trim().isNotEmpty) team.organization.trim(),
-  ];
-  if (parts.isNotEmpty) {
-    return parts.join('  •  ');
+String _teamNameLabel(TeamSummary team, {String fallbackName = ''}) {
+  final teamName = team.teamName.trim();
+  if (teamName.isNotEmpty) {
+    return teamName;
   }
-  return 'Team profile pending';
+  final normalizedFallback = fallbackName.trim();
+  if (normalizedFallback.isNotEmpty) {
+    return normalizedFallback;
+  }
+  return 'Team name pending';
 }
 
 class _DivisionPerformanceTable {
@@ -1926,16 +1861,15 @@ class _PredictedAllianceSelection {
         break;
       }
 
-      if (acceptedCandidate == null) {
-        acceptedCandidate = fallbackNonFamily ?? fallbackCandidate;
-      }
+      acceptedCandidate ??= fallbackNonFamily ?? fallbackCandidate;
 
       if (acceptedCandidate == null) {
         continue;
       }
 
-      final acceptedCandidateKey =
-          acceptedCandidate.team.number.trim().toUpperCase();
+      final acceptedCandidateKey = acceptedCandidate.team.number
+          .trim()
+          .toUpperCase();
       unavailable.add(acceptedCandidateKey);
       final acceptedIsCaptain = captains.any(
         (captain) => captain.trim().toUpperCase() == acceptedCandidateKey,
