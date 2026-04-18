@@ -384,16 +384,12 @@ String _eliminationLabel({
   required int instance,
   required int matchNumber,
 }) {
-  final series = instance > 0 ? '$instance' : '';
   final game = matchNumber > 0 ? '$matchNumber' : '';
-  if (series.isNotEmpty && game.isNotEmpty) {
-    return '$prefix$series-$game';
-  }
-  if (series.isNotEmpty) {
-    return '$prefix$series';
-  }
   if (game.isNotEmpty) {
-    return '$prefix$game';
+    return '$prefix-$game';
+  }
+  if (instance > 0) {
+    return '$prefix-$instance';
   }
   return prefix;
 }

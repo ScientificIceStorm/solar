@@ -7,7 +7,6 @@ import 'event_division_screen.dart';
 import 'event_schedule_screen.dart';
 import 'event_skills_screen.dart';
 import '../widgets/solar_event_photo.dart';
-import '../widgets/solar_swipe_back.dart';
 import '../widgets/solarize_team_list.dart';
 
 class EventDetailsScreen extends StatefulWidget {
@@ -49,12 +48,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F5F8),
-      body: SolarSwipeBack(
-        child: StretchingOverscrollIndicator(
-          axisDirection: AxisDirection.down,
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
+      body: StretchingOverscrollIndicator(
+        axisDirection: AxisDirection.down,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: <Widget>[
               Stack(
                 clipBehavior: Clip.none,
                 children: <Widget>[
@@ -250,7 +248,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 ),
               ),
             ],
-          ),
         ),
       ),
     );

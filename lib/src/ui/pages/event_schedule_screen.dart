@@ -1,20 +1,63 @@
 import 'package:flutter/material.dart';
 
-import '../../app/app_session_controller.dart';
 import '../../app/solar_app_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../models/solar_match_prediction.dart';
-import 'match_details_screen.dart';
-import 'event_team_screen.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
+import 'event_team_screen.dart';
+import 'match_details_screen.dart';
 
-class EventScheduleScreen extends StatelessWidget {
+class EventScheduleScreen extends StatefulWidget {
   const EventScheduleScreen({required this.event, super.key});
 
   static const routeName = '/event-schedule';
 
   final EventSummary event;
+
+  @override
+  State<EventScheduleScreen> createState() => _EventScheduleScreenState();
+}
+
+class _EventScheduleScreenState extends State<EventScheduleScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  bool _predictionModeEnabled = false;
+  Future<Map<int, SolarMatchPrediction?>>? _predictionFuture;
+  String? _predictionCacheKey;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _predictionKey(List<MatchSummary> matches) {
+    final ids = matches.map((match) => '${match.id}').join(',');
+    return '${widget.event.id}|$ids';
+  }
+
+  Future<Map<int, SolarMatchPrediction?>> _loadPredictions(
+    List<MatchSummary> matches,
+  ) async {
+    final controller = SolarAppScope.of(context);
+    final predictions = <int, SolarMatchPrediction?>{};
+    for (final match in matches) {
+      if (match.alliances.length < 2) {
+        predictions[match.id] = null;
+        continue;
+      }
+
+      try {
+        predictions[match.id] = await controller.predictMatch(
+          match: match,
+          event: widget.event,
+        );
+      } catch (_) {
+        predictions[match.id] = null;
+      }
+    }
+    return predictions;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +66,9 @@ class EventScheduleScreen extends StatelessWidget {
 
     return SolarEventSubpageScaffold(
       title: '$teamNumber Schedule',
-      subtitle: event.name,
+      subtitle: widget.event.name,
       body: FutureBuilder<List<MatchSummary>>(
-        future: controller.fetchTeamScheduleForEvent(event.id),
+        future: controller.fetchTeamScheduleForEvent(widget.event.id),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const _CenteredLoader();
@@ -35,274 +78,293 @@ class EventScheduleScreen extends StatelessWidget {
           if (matches.isEmpty) {
             return const _EmptyEventState(
               title: 'No scheduled matches yet',
-              body:
-                  'When RobotEvents publishes this team schedule, it will show up here.',
+              body: 'When this event publishes match pairings, they will show up here.',
             );
           }
 
-          return StretchingOverscrollIndicator(
-            axisDirection: AxisDirection.down,
-            child: Column(
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        _openPredictionsSheet(
-                          context: context,
-                          controller: controller,
-                          matches: matches,
-                          event: event,
-                        );
+          final query = _searchController.text.trim().toLowerCase();
+          final visibleMatches = query.isEmpty
+              ? matches
+              : matches.where((match) {
+                  if (solarMatchScreenLabel(match).toLowerCase().contains(query)) {
+                    return true;
+                  }
+                  for (final alliance in match.alliances) {
+                    for (final team in alliance.teams) {
+                      final label =
+                          '${team.number} ${team.name}'.trim().toLowerCase();
+                      if (label.contains(query)) {
+                        return true;
+                      }
+                    }
+                  }
+                  return false;
+                }).toList(growable: false);
+
+          if (visibleMatches.isEmpty) {
+            return const _EmptyEventState(
+              title: 'No matches found',
+              body: 'Try a different team number or match label.',
+            );
+          }
+
+          Widget matchesList(Map<int, SolarMatchPrediction?> predictionsByMatch) {
+            return StretchingOverscrollIndicator(
+              axisDirection: AxisDirection.down,
+              child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 8),
+                itemCount: visibleMatches.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _ScheduleToolbar(
+                      controller: _searchController,
+                      predictionModeEnabled: _predictionModeEnabled,
+                      matchCount: visibleMatches.length,
+                      onChanged: (_) => setState(() {}),
+                      onPredictionModeChanged: (value) {
+                        setState(() {
+                          _predictionModeEnabled = value;
+                        });
                       },
-                      icon: const Icon(Icons.analytics_outlined, size: 18),
-                      label: const Text('All match predictions'),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFCBD2E7)),
-                        foregroundColor: const Color(0xFF16182C),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    );
+                  }
+
+                  final match = visibleMatches[index - 1];
+                  final prediction = predictionsByMatch[match.id];
+                  return SolarMatchRow(
+                    match: match,
+                    highlightTeamNumber: teamNumber,
+                    stripeColorOverride: _predictionModeEnabled
+                        ? _predictionStripeColor(prediction)
+                        : null,
+                    scoreTextOverride: _predictionModeEnabled
+                        ? _predictedScoreText(prediction)
+                        : null,
+                    onTap: () {
+                      Navigator.of(context).pushNamed(
+                        MatchDetailsScreen.routeName,
+                        arguments: MatchDetailsScreenArgs(
+                          match: match,
+                          event: widget.event,
+                          highlightTeamNumber: teamNumber,
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    itemCount: matches.length,
-                    itemBuilder: (context, index) => SolarMatchRow(
-                      match: matches[index],
-                      highlightTeamNumber: teamNumber,
-                      onTap: () {
-                        Navigator.of(context).pushNamed(
-                          MatchDetailsScreen.routeName,
-                          arguments: MatchDetailsScreenArgs(
-                            match: matches[index],
-                            event: event,
-                            highlightTeamNumber: teamNumber,
-                          ),
-                        );
-                      },
-                      onTeamTap: (team) {
-                        final resolvedTeam = controller.resolveKnownTeamSummary(
-                          teamNumber: team.number,
-                          teamId: team.id,
-                          teamName: team.name,
-                        );
-                        openSolarEventTeamScreen(
-                          context,
-                          event: event,
-                          team: resolvedTeam,
-                          highlightTeamNumber: team.number,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                      );
+                    },
+                    onTeamTap: (team) {
+                      final resolvedTeam = controller.resolveKnownTeamSummary(
+                        teamNumber: team.number,
+                        teamId: team.id,
+                        teamName: team.name,
+                      );
+                      openSolarEventTeamScreen(
+                        context,
+                        event: widget.event,
+                        team: resolvedTeam,
+                        highlightTeamNumber: team.number,
+                      );
+                    },
+                  );
+                },
+              ),
+            );
+          }
+
+          if (!_predictionModeEnabled) {
+            return matchesList(const <int, SolarMatchPrediction?>{});
+          }
+
+          final predictionKey = _predictionKey(visibleMatches);
+          if (_predictionFuture == null || _predictionCacheKey != predictionKey) {
+            _predictionCacheKey = predictionKey;
+            _predictionFuture = _loadPredictions(visibleMatches);
+          }
+
+          return FutureBuilder<Map<int, SolarMatchPrediction?>>(
+            future: _predictionFuture,
+            builder: (context, predictionSnapshot) {
+              if (!predictionSnapshot.hasData) {
+                return const _CenteredLoader();
+              }
+              return matchesList(predictionSnapshot.data!);
+            },
           );
         },
       ),
     );
   }
+}
 
-  Future<void> _openPredictionsSheet({
-    required BuildContext context,
-    required AppSessionController controller,
-    required List<MatchSummary> matches,
-    required EventSummary event,
-  }) async {
-    final scopedMatches = matches
-        .where((match) => match.alliances.length >= 2)
-        .toList(growable: false);
+class _ScheduleToolbar extends StatelessWidget {
+  const _ScheduleToolbar({
+    required this.controller,
+    required this.predictionModeEnabled,
+    required this.matchCount,
+    required this.onChanged,
+    required this.onPredictionModeChanged,
+  });
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: const Color(0xFFF7F5F8),
-      builder: (context) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
-            child: FutureBuilder<List<_SchedulePredictionItem>>(
-              future: _loadMatchPredictions(
-                controller: controller,
-                event: event,
-                matches: scopedMatches,
-              ),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: Colors.white,
-                      ),
-                    ),
-                  );
-                }
+  final TextEditingController controller;
+  final bool predictionModeEnabled;
+  final int matchCount;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<bool> onPredictionModeChanged;
 
-                final predictions = snapshot.data!;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      'All Match Predictions',
-                      style: TextStyle(
-                        color: Color(0xFF24243A),
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        children: <Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD7DBEA)),
+            ),
+            child: Row(
+              children: <Widget>[
+                const Icon(
+                  Icons.search_rounded,
+                  color: Color(0xFF6F748B),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    onChanged: onChanged,
+                    textInputAction: TextInputAction.search,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isCollapsed: true,
+                      hintText: 'Search matches or teams',
+                      hintStyle: TextStyle(
+                        color: Color(0xFF8E92A7),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Red and blue highlights show the projected winner for each published match.',
-                      style: TextStyle(
-                        color: Color(0xFF6F748B),
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
+                    style: const TextStyle(
+                      color: Color(0xFF24243A),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                    const SizedBox(height: 14),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: predictions.length,
-                        itemBuilder: (context, index) {
-                          final item = predictions[index];
-                          final prediction = item.prediction;
-                          final winnerColor = _predictionWinnerColor(prediction);
-                          return Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(color: Color(0xFFDCE0EC)),
-                              ),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Container(
-                                  width: 8,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: winnerColor,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      Text(
-                                        _schedulePredictionLabel(item.match),
-                                        style: const TextStyle(
-                                          color: Color(0xFF24243A),
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        prediction == null
-                                            ? 'Prediction unavailable'
-                                            : 'Projected ${prediction.predictedRedScore}-${prediction.predictedBlueScore}',
-                                        style: const TextStyle(
-                                          color: Color(0xFF6F748B),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$matchCount',
+                  style: const TextStyle(
+                    color: Color(0xFF6F748B),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      },
-    );
-  }
-
-  Future<List<_SchedulePredictionItem>> _loadMatchPredictions({
-    required AppSessionController controller,
-    required EventSummary event,
-    required List<MatchSummary> matches,
-  }) async {
-    return Future.wait<_SchedulePredictionItem>(
-      matches.map((match) async {
-        SolarMatchPrediction? prediction;
-        try {
-          prediction = await controller.predictMatch(match: match, event: event);
-        } catch (_) {
-          prediction = null;
-        }
-        return _SchedulePredictionItem(match: match, prediction: prediction);
-      }),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              TextButton.icon(
+                onPressed: () =>
+                    onPredictionModeChanged(!predictionModeEnabled),
+                icon: Icon(
+                  Icons.analytics_outlined,
+                  size: 18,
+                  color: predictionModeEnabled
+                      ? const Color(0xFF16182C)
+                      : const Color(0xFF5F6478),
+                ),
+                label: Text(
+                  predictionModeEnabled
+                      ? 'Show actual scores again'
+                      : 'Show predicted scores',
+                  style: TextStyle(
+                    color: predictionModeEnabled
+                        ? const Color(0xFF16182C)
+                        : const Color(0xFF5F6478),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Switch.adaptive(
+                value: predictionModeEnabled,
+                onChanged: onPredictionModeChanged,
+                activeColor: Colors.white,
+                activeTrackColor: const Color(0xFF5F66FF),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _SchedulePredictionItem {
-  const _SchedulePredictionItem({required this.match, required this.prediction});
-
-  final MatchSummary match;
-  final SolarMatchPrediction? prediction;
-}
-
-Color _predictionWinnerColor(SolarMatchPrediction? prediction) {
+TextSpan _predictedScoreText(SolarMatchPrediction? prediction) {
+  const baseColor = Color(0xFF8E92A7);
   if (prediction == null) {
-    return const Color(0xFFB8BECE);
+    return const TextSpan(
+      text: '-- - --',
+      style: TextStyle(
+        color: baseColor,
+        fontSize: 20,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.5,
+      ),
+    );
   }
-  if (prediction.predictedRedScore > prediction.predictedBlueScore) {
-    return const Color(0xFFD24E4E);
+
+  final redScore = prediction.predictedRedScore;
+  final blueScore = prediction.predictedBlueScore;
+  final redWins = redScore > blueScore;
+  final blueWins = blueScore > redScore;
+
+  TextStyle scoreStyle(bool emphasized) {
+    return const TextStyle(
+      color: baseColor,
+      fontSize: 20,
+      fontWeight: FontWeight.w500,
+      letterSpacing: -0.5,
+    ).copyWith(fontWeight: emphasized ? FontWeight.w800 : FontWeight.w500);
   }
-  if (prediction.predictedBlueScore > prediction.predictedRedScore) {
-    return const Color(0xFF2E6BF2);
-  }
-  return const Color(0xFF8D92A8);
+
+  return TextSpan(
+    children: <InlineSpan>[
+      TextSpan(
+        text: '$redScore',
+        style: scoreStyle(redWins || (!redWins && !blueWins)),
+      ),
+      const TextSpan(
+        text: ' - ',
+        style: TextStyle(
+          color: baseColor,
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+          letterSpacing: -0.5,
+        ),
+      ),
+      TextSpan(
+        text: '$blueScore',
+        style: scoreStyle(blueWins || (!redWins && !blueWins)),
+      ),
+    ],
+  );
 }
 
-String _schedulePredictionLabel(MatchSummary match) {
-  String prefix;
-  switch (match.round) {
-    case MatchRound.qualification:
-      prefix = 'Q';
-    case MatchRound.practice:
-      prefix = 'P';
-    case MatchRound.quarterfinals:
-      prefix = 'QF';
-    case MatchRound.semifinals:
-      prefix = 'SF';
-    case MatchRound.finals:
-      prefix = 'F';
-    default:
-      prefix = match.name.trim().isEmpty ? 'Match' : match.name.trim();
+Color _predictionStripeColor(SolarMatchPrediction? prediction) {
+  if (prediction == null) {
+    return const Color(0xFFDADAE3);
   }
-
-  if (prefix == 'Match' || prefix == match.name.trim()) {
-    return prefix;
+  if (prediction.predictedRedScore == prediction.predictedBlueScore) {
+    return const Color(0xFFD6AF52);
   }
-
-  final number = match.matchNumber > 0 ? match.matchNumber : match.instance;
-  return number > 0 ? '$prefix$number' : prefix;
+  return prediction.predictedRedScore > prediction.predictedBlueScore
+      ? const Color(0xFF3FCB73)
+      : const Color(0xFFFF6B64);
 }
 
 class _CenteredLoader extends StatelessWidget {
@@ -331,37 +393,29 @@ class _EmptyEventState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: const Color(0xFFE3E6F0)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF24243A),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 10),
-              Text(
-                body,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 14,
-                  height: 1.45,
-                ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 14,
+                height: 1.45,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

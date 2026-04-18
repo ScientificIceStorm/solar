@@ -216,7 +216,7 @@ class _PhotoCreditLabel extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.92),
-            fontSize: 8,
+            fontSize: 7,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.35,
             shadows: const <Shadow>[

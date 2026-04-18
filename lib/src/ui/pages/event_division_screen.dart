@@ -49,23 +49,18 @@ class EventDivisionScreen extends StatelessWidget {
         subtitle: args.event.name,
         body: Column(
           children: <Widget>[
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const TabBar(
-                isScrollable: true,
-                indicatorColor: Color(0xFF5A67F3),
-                labelColor: Color(0xFF24243A),
-                unselectedLabelColor: Color(0xFF8E92A7),
-                tabs: <Widget>[
-                  Tab(text: 'Rankings'),
-                  Tab(text: 'Matches'),
-                  Tab(text: 'Teams'),
-                  Tab(text: 'Predictions'),
-                ],
-              ),
+            const TabBar(
+              isScrollable: true,
+              dividerColor: Color(0xFFDADAE3),
+              indicatorColor: Color(0xFF5A67F3),
+              labelColor: Color(0xFF24243A),
+              unselectedLabelColor: Color(0xFF8E92A7),
+              tabs: <Widget>[
+                Tab(text: 'Rankings'),
+                Tab(text: 'Matches'),
+                Tab(text: 'Teams'),
+                Tab(text: 'Predictions'),
+              ],
             ),
             const SizedBox(height: 18),
             Expanded(
@@ -447,20 +442,16 @@ class _DivisionMatchesTabState extends State<_DivisionMatchesTab> {
 
                 final match = visibleMatches[index - 1];
                 final prediction = predictionsByMatch[match.id];
-                final hasOfficialScore = _matchHasOfficialScore(match);
-
-                final scoreOverride =
-                    _predictionModeEnabled && !hasOfficialScore
+                final scoreOverride = _predictionModeEnabled
                     ? _predictedScoreText(prediction)
                     : null;
-                final stripeColor =
-                    _predictionModeEnabled && !hasOfficialScore
+                final stripeColor = _predictionModeEnabled
                     ? _predictionStripeColor(prediction)
                     : null;
 
                 return SolarMatchRow(
                   match: match,
-                  highlightTeamNumber: widget.highlightTeamNumber,
+                  highlightTeamNumber: null,
                   stripeColorOverride: stripeColor,
                   scoreTextOverride: scoreOverride,
                   onTap: () {
@@ -589,55 +580,39 @@ class _DivisionMatchesToolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          InkWell(
-            onTap: () => onPredictionModeChanged(!predictionModeEnabled),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
+          Row(
+            children: <Widget>[
+              TextButton.icon(
+                onPressed: () =>
+                    onPredictionModeChanged(!predictionModeEnabled),
+                icon: Icon(
+                  Icons.analytics_outlined,
+                  size: 18,
                   color: predictionModeEnabled
                       ? const Color(0xFF16182C)
-                      : const Color(0xFFE2E4F0),
+                      : const Color(0xFF5F6478),
                 ),
-                color: predictionModeEnabled
-                    ? const Color(0xFF16182C)
-                    : Colors.transparent,
-              ),
-              child: Row(
-                children: <Widget>[
-                  Icon(
-                    Icons.analytics_outlined,
-                    size: 16,
+                label: Text(
+                  predictionModeEnabled
+                      ? 'Show actual scores again'
+                      : 'Show predicted scores',
+                  style: TextStyle(
                     color: predictionModeEnabled
-                        ? Colors.white
-                        : const Color(0xFF24243A),
+                        ? const Color(0xFF16182C)
+                        : const Color(0xFF5F6478),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    predictionModeEnabled
-                        ? 'Prediction mode on'
-                        : 'Prediction mode off',
-                    style: TextStyle(
-                      color: predictionModeEnabled
-                          ? Colors.white
-                          : const Color(0xFF24243A),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  Switch.adaptive(
-                    value: predictionModeEnabled,
-                    onChanged: onPredictionModeChanged,
-                    activeColor: Colors.white,
-                    activeTrackColor: const Color(0xFF5F66FF),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const Spacer(),
+              Switch.adaptive(
+                value: predictionModeEnabled,
+                onChanged: onPredictionModeChanged,
+                activeColor: Colors.white,
+                activeTrackColor: const Color(0xFF5F66FF),
+              ),
+            ],
           ),
         ],
       ),
@@ -941,13 +916,14 @@ class _DivisionTeamsToolbar extends StatelessWidget {
 }
 
 TextSpan _predictedScoreText(SolarMatchPrediction? prediction) {
+  const scoreColor = Color(0xFF8E92A7);
   if (prediction == null) {
     return const TextSpan(
       text: '-- - --',
       style: TextStyle(
-        color: Colors.black,
+        color: scoreColor,
         fontSize: 20,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         letterSpacing: -0.5,
       ),
     );
@@ -960,9 +936,9 @@ TextSpan _predictedScoreText(SolarMatchPrediction? prediction) {
 
   TextStyle scoreStyle(bool emphasized) {
     return TextStyle(
-      color: Colors.black,
+      color: scoreColor,
       fontSize: 20,
-      fontWeight: emphasized ? FontWeight.w800 : FontWeight.w400,
+      fontWeight: emphasized ? FontWeight.w800 : FontWeight.w500,
       letterSpacing: -0.5,
     );
   }
@@ -976,9 +952,9 @@ TextSpan _predictedScoreText(SolarMatchPrediction? prediction) {
       const TextSpan(
         text: ' - ',
         style: TextStyle(
-          color: Colors.black,
+          color: scoreColor,
           fontSize: 20,
-          fontWeight: FontWeight.w400,
+          fontWeight: FontWeight.w500,
           letterSpacing: -0.5,
         ),
       ),
@@ -1026,9 +1002,9 @@ bool _matchHasOfficialScore(MatchSummary match) {
 String _divisionTeamSortModeLabel(_DivisionTeamSortMode mode) {
   switch (mode) {
     case _DivisionTeamSortMode.solarize:
-      return 'Sort: Solarize';
+      return 'Solarize';
     case _DivisionTeamSortMode.alphabetical:
-      return 'Sort: A-Z';
+      return 'A-Z';
   }
 }
 
@@ -1641,8 +1617,8 @@ class _PredictionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = prediction.wasDeclined
-      ? const Color(0xFFB26828)
-      : const Color(0xFF1F8A52);
+        ? const Color(0xFFB26828)
+        : const Color(0xFF1F8A52);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1700,7 +1676,7 @@ class _PredictionRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  prediction.wasDeclined ? 'Reroute' : 'Locked',
+                  prediction.wasDeclined ? 'Decline expected' : 'Best fit',
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 12,
@@ -1886,7 +1862,11 @@ class _PredictedAllianceSelection {
       return candidateScore >= captainSeedScore + 3.4;
     }
 
-    for (var seedIndex = 0; seedIndex < allianceCount; seedIndex++) {
+    for (
+      var seedIndex = 0;
+      seedIndex < captains.length && predicted.length < allianceCount;
+      seedIndex++
+    ) {
       final captainNumber = captains[seedIndex].trim().toUpperCase();
       if (unavailable.contains(captainNumber)) {
         continue;
@@ -1979,11 +1959,11 @@ class _PredictedAllianceSelection {
       final pickTeam = teamForNumber(acceptedCandidate.team.number);
       final pickMetrics = performanceTable.forTeam(pickTeam.number);
       final summary =
-          '${captainTeam.number} leans toward ${pickTeam.number} for ${(pickMetrics?.ccwm ?? 0).toStringAsFixed(1)} CCWM and ${(pickMetrics?.opr ?? acceptedCandidate.averagePoints).toStringAsFixed(1)} projected offense.';
+          '${pickTeam.number} gives ${captainTeam.number} a cleaner fit with ${(pickMetrics?.opr ?? acceptedCandidate.averagePoints).toStringAsFixed(1)} projected offense and ${(pickMetrics?.ccwm ?? 0).toStringAsFixed(1)} recent margin support.';
 
       predicted.add(
         _PredictedAllianceSelection(
-          seed: seedIndex + 1,
+          seed: predicted.length + 1,
           captain: captainTeam,
           pick: pickTeam,
           summary: summary,
@@ -2039,36 +2019,29 @@ class _EmptyEventState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFF24243A),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF24243A),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 10),
-              Text(
-                body,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFF8E92A7),
-                  fontSize: 14,
-                  height: 1.45,
-                ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF8E92A7),
+                fontSize: 14,
+                height: 1.45,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
