@@ -1,7 +1,7 @@
-import {detect, isYolo, suppress} from "./detector.js?v=load3";
-import {loadHead} from "./finetune.js?v=load3";
-import {buildScoring} from "./scoring.js?v=load3";
-import {scoringReferences} from "./scoring-model.js?v=load3";
+import {detect, isYolo, report, suppress} from "./detector.js?v=load4";
+import {loadHead} from "./finetune.js?v=load4";
+import {buildScoring} from "./scoring.js?v=load4";
+import {scoringReferences} from "./scoring-model.js?v=load4";
 
 const square = [[0,0], [144,0], [144,144], [0,144]];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -172,7 +172,9 @@ function bridgeBriefGaps(rows, fps) {
 }
 
 export async function analyze(video, meta, update, signal) {
+  report("Loading the scoring references…");
   const scoringModel = await scoringReferences();
+  report("Reading the first video frame…");
   const {project, image} = field(meta);
   const seeds = meta.robots.map(project);
   if (seeds.some(point => point.some(value => value < -8 || value > 152))) {
@@ -192,7 +194,11 @@ export async function analyze(video, meta, update, signal) {
   for (let indexFrame = 0; ; indexFrame = Math.min(last, indexFrame + step)) {
     if (signal.aborted) throw signal.reason;
     await seekFrame(video, meta.start + indexFrame / fps, frame, signal);
-    if (!observed) scoring = buildScoring(frame, image, meta.teams, fps, scoringModel);
+    if (!observed) {
+      report("Setting up goal and toggle reading…");
+      scoring = buildScoring(frame, image, meta.teams, fps, scoringModel);
+      report("Loading the robot detector…");
+    }
     const cameraClear = !observed || scoring.cameraMatches(frame);
     let boxes = [];
     if (cameraClear) {

@@ -1,9 +1,9 @@
-import {access} from "./storage.js?v=load3";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load3";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load3";
-import {analyze, seekFrame} from "./tracking.js?v=load3";
-import {originalScoringReplay} from "./scoring-model.js?v=load3";
-import {setupScoring} from "./scoring-studio.js?v=load3";
+import {access} from "./storage.js?v=load4";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load4";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load4";
+import {analyze, seekFrame} from "./tracking.js?v=load4";
+import {originalScoringReplay} from "./scoring-model.js?v=load4";
+import {setupScoring} from "./scoring-studio.js?v=load4";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -319,7 +319,13 @@ $("match-form").onsubmit=async event=>{
   $("progress").hidden=false;
   $("progress").value=0;
   status("run-status",`Loading ${detectorNames[meta.detector]}…`);
-  onLoadingStatus(text=>status("run-status",text));
+  // Until the first frame is analysed, show the current step and how long it has taken, so a
+  // stall says exactly where it is.
+  let step=$("run-status").textContent, stepStarted=Date.now();
+  const ticker=setInterval(()=>{
+    if (!/^Analyzing/.test($("run-status").textContent)) status("run-status",`${step} (${Math.round((Date.now()-stepStarted)/1000)} s)`);
+  },1000);
+  onLoadingStatus(text=>{ if (text.split(":")[0]!==step.split(":")[0]) stepStarted=Date.now(); step=text; status("run-status",text); });
   try {
     const data=await analyze(video,meta,(done,total,backend)=>{
       $("progress").value=Math.round(done/total*100);
@@ -337,6 +343,7 @@ $("match-form").onsubmit=async event=>{
     status("run-status",current.signal.aborted?"Analysis canceled.":error.name==="QuotaExceededError"?
       "The browser is out of storage. Remove an imported replay or choose a smaller video.":error.message);
   } finally {
+    clearInterval(ticker);
     onLoadingStatus(null);
     activeJob=undefined; busy=false;
     $("progress").hidden=true;

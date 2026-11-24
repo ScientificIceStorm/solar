@@ -23,7 +23,12 @@ function database() {
 }
 
 export async function access(name, method, value) {
-  const db = await database();
+  // Some browsers never answer an open request (e.g. while an old Match studio tab holds the
+  // database). Give up after 8 s instead of waiting forever.
+  let timer;
+  const db = await Promise.race([database(), new Promise((_, reject) => {
+    timer = setTimeout(() => { opening = undefined; reject(new Error("Browser storage did not respond. Close other Match studio tabs, then reload this page.")); }, 8000);
+  })]).finally(() => clearTimeout(timer));
   const transaction = db.transaction(name, method === "get" || method === "getAll" ? "readonly" : "readwrite");
   const store = transaction.objectStore(name);
   const request = value === undefined ? store[method]() : store[method](value);

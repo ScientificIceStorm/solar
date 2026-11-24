@@ -52,7 +52,7 @@ export function suppress(boxes, limit = 12) {
 // so a slow first visit never looks frozen.
 let reporter = () => {};
 export function onLoadingStatus(callback) { reporter = callback || (() => {}); }
-const report = text => { try { reporter(text); } catch { /* the page may have moved on */ } };
+export const report = text => { try { reporter(text); } catch { /* the page may have moved on */ } };
 
 // A GPU start-up that never settles (seen on some phones and Safari builds) must not hang the
 // page: each backend gets a time limit, then the next one is tried.
@@ -195,7 +195,7 @@ const context = inferenceCanvas.getContext("2d", {willReadFrequently: true});
  */
 export async function detect(frame, minimum = .20, choice = defaultDetector, options = {}) {
   if (choice === "speedway") {
-    const {detectSpeedway} = await import("./speedway.js?v=load3");
+    const {detectSpeedway} = await import("./speedway.js?v=load4");
     return detectSpeedway(frame, minimum);
   }
   const {ort, session, name, manifest} = await detector(choice);
