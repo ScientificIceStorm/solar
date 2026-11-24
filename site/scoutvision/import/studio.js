@@ -1,9 +1,9 @@
-import {access} from "./storage.js?v=load4";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load4";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load4";
-import {analyze, seekFrame} from "./tracking.js?v=load4";
-import {originalScoringReplay} from "./scoring-model.js?v=load4";
-import {setupScoring} from "./scoring-studio.js?v=load4";
+import {access} from "./storage.js?v=load5";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load5";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load5";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load5";
+import {originalScoringReplay} from "./scoring-model.js?v=load5";
+import {setupScoring} from "./scoring-studio.js?v=load5";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -219,8 +219,15 @@ function drawMarks() {
   });
   const i = marks.length;
   const name = i<4 ? cornerNames[i] : (names()[i-4] || (i<6?`red team ${i-3}`:`blue team ${i-5}`));
+  // Check robot marks against the outline as soon as they are clicked, not after Build.
+  let check = "";
+  if (i > 4) {
+    const placed = robotPlacement({corners:marks.slice(0,4), robots:marks.slice(4), wall:$("red-wall").value,
+      teams:names().map((team,k)=>({team:team || `Robot ${k+1}`}))});
+    check = placed.problem ? ` ⚠ ${placed.problem}` : placed.notes.length ? ` Note: ${placed.notes.join("; ")}.` : "";
+  }
   status("mark-status",calibratedAt!==seconds("start")?"Start time changed. Load the new frame.":i===8?
-    "Field and robots marked. Build the replay when ready.":`Mark ${i+1} of 8 · ${name}`);
+    `Field and robots marked. Build the replay when ready.${check}`:`Mark ${i+1} of 8 · ${name}.${check}`);
 }
 $("load-frame").onclick = async () => {
   if (!ready() || busy) return;

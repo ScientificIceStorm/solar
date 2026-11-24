@@ -7,10 +7,10 @@
 // This is the same method that reads the built-in Smoky / Mall of America / Highlander
 // cameras; training here builds the reference set for a camera ScoutVision has never seen.
 
-import {access} from "./storage.js?v=load4";
-import {field} from "./tracking.js?v=load4";
-import {goals, wallPoints} from "./scoring.js?v=load4";
-import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load4";
+import {access} from "./storage.js?v=load5";
+import {field} from "./tracking.js?v=load5";
+import {goals, wallPoints} from "./scoring.js?v=load5";
+import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load5";
 
 export const WALLS = ["far", "left", "right", "near"];
 export const OWNER_NAMES = ["Neutral", "Red", "Blue"];

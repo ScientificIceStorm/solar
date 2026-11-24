@@ -1,4 +1,4 @@
-import {downloadModel, loadScript, suppress, webgpuRuntime} from "./detector.js?v=load4";
+import {downloadModel, loadScript, suppress, webgpuRuntime} from "./detector.js?v=load5";
 
 const assets = "/scoutvision/assets/";
 const size = 512;

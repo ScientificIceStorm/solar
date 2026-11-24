@@ -1,7 +1,7 @@
-import {detect, isYolo, report, suppress} from "./detector.js?v=load4";
-import {loadHead} from "./finetune.js?v=load4";
-import {buildScoring} from "./scoring.js?v=load4";
-import {scoringReferences} from "./scoring-model.js?v=load4";
+import {detect, isYolo, report, suppress} from "./detector.js?v=load5";
+import {loadHead} from "./finetune.js?v=load5";
+import {buildScoring} from "./scoring.js?v=load5";
+import {scoringReferences} from "./scoring-model.js?v=load5";
 
 const square = [[0,0], [144,0], [144,144], [0,144]];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -171,15 +171,38 @@ function bridgeBriefGaps(rows, fps) {
   });
 }
 
+const MISCLICK_INCHES = 36;
+const outsideBy = ([x, y]) => Math.max(0, -x, x - 144, -y, y - 144);
+
+/**
+ * Where each robot mark lands on the field. Marks up to 3 ft outside the outline are moved
+ * to its edge; `problem` describes anything worse. Used while marking and before analysis.
+ */
+export function robotPlacement(meta) {
+  let project;
+  try { ({project} = field(meta)); }
+  catch (error) { return {problem:error.message, seeds:[], notes:[]}; }
+  const points = meta.robots.map(project);
+  const robots = points.map((point, i) => ({team:meta.teams[i]?.team || `Robot ${i + 1}`, off:outsideBy(point)}));
+  const far = robots.filter(robot => robot.off > MISCLICK_INCHES);
+  const problem = far.length ? `${far.map(robot => `${robot.team} is marked ${Math.round(robot.off)} in outside the field`).join("; ")}. ` +
+    "Mark the four inside floor corners clockwise from the top-left of the picture, then click each robot where its wheels touch the floor." : null;
+  const notes = robots.filter(robot => robot.off > 2 && robot.off <= MISCLICK_INCHES)
+    .map(robot => `${robot.team} is ${Math.round(robot.off)} in outside the outline and will start at its edge`);
+  return {problem, notes, seeds:points.map(([x, y]) => [clamp(x, 0, 144), clamp(y, 0, 144)])};
+}
+
 export async function analyze(video, meta, update, signal) {
   report("Loading the scoring references…");
   const scoringModel = await scoringReferences();
   report("Reading the first video frame…");
   const {project, image} = field(meta);
-  const seeds = meta.robots.map(project);
-  if (seeds.some(point => point.some(value => value < -8 || value > 152))) {
-    throw new Error("Mark each robot's base inside the calibrated field.");
-  }
+  // A robot marked a little outside the outline (common when the camera cuts off a field edge)
+  // starts at the nearest edge instead; the tracker picks it up from the detections. Only a
+  // clear mis-click is refused.
+  const placement = robotPlacement(meta);
+  if (placement.problem) throw new Error(placement.problem);
+  const seeds = placement.seeds;
   const duration = meta.end - meta.start, fps = 20;
   const last = Math.round(duration * fps);
   const tracks = Object.fromEntries(meta.teams.map(entry => [entry.team, []]));
