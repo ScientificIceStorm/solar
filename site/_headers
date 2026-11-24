@@ -1,0 +1,15 @@
+/*
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/scoutvision/assets/*
+  Cache-Control: public, max-age=86400
+
+/scoutvision/import/
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+
+/scoutvision/import/*
+  Cache-Control: no-cache
+
+/scoutvision/replay/*
+  Cache-Control: no-cache

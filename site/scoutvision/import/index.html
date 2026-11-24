@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match studio · ScoutVision</title>
+<link rel="stylesheet" href="/scoutvision/dashboard.css">
+<link rel="stylesheet" href="/scoutvision/import/studio.css?v=rebuild">
+<script type="module" src="/scoutvision/import/studio.js?v=rebuild"></script></head>
+<body class="sv-body"><div class="sv-shell">
+<aside class="sv-sidebar">
+<a class="sv-brand" href="/scoutvision/"><span>ScoutVision<small>by SolarScout</small></span></a>
+<nav class="sv-nav" aria-label="ScoutVision"><a href="/scoutvision/">Overview</a><a href="/scoutvision/#analytics">Analytics</a><a href="/scoutvision/import/" aria-current="page">Match studio</a></nav>
+<div class="sv-foot"><a href="/">← Solar</a></div>
+</aside>
+<main class="sv-main">
+<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Your footage stays in this browser.</p></div></header>
+<div class="studio-mode" role="group" aria-label="Studio mode"><button class="sv-secondary" id="mode-analyze" aria-pressed="true" type="button" disabled>Analyze a match</button><button class="sv-secondary" id="mode-review" aria-pressed="false" type="button" disabled>Review &amp; train</button></div>
+<noscript><p>The Match studio requires JavaScript for video analysis and training.</p></noscript>
+<div class="studio-grid">
+<div class="controls">
+<section class="sv-card">
+<label class="studio-field">Match video <input id="video-file" type="file" accept="video/*,.mp4,.webm,.mov" disabled></label>
+<p id="file-status" class="hint" role="status"></p>
+<video id="source-video" class="source-video" controls playsinline preload="metadata" hidden></video>
+<div class="tool-row" id="original-scoring" hidden><a class="sv-primary" id="open-original-replay">Open original scoring replay</a></div>
+<label class="studio-field">Robot detector <select id="detector-choice">
+  <option value="auto">Auto-select YOLO</option>
+  <option value="speedway-yolo">Speedway · YOLO</option>
+  <option value="highlander">Highlander · YOLO</option>
+  <option value="speedway">Speedway · RF-DETR Large</option>
+</select></label>
+<p id="detector-status" class="hint"></p>
+<label class="studio-check" id="adapted-option" hidden><input id="adapted" type="checkbox" disabled checked> Use my YOLO training</label>
+</section>
+<form id="match-form" class="sv-card controls">
+<h2>Match details</h2>
+<div class="studio-metadata schedule-fields"><label class="studio-field">Solar or RobotEvents link <input id="event-link" placeholder="RE-V5RC-…"></label><button type="button" id="find-schedule" class="sv-secondary" disabled>Find schedule</button></div>
+<p id="schedule-status" class="hint" role="status"></p>
+<div id="schedule" class="studio-metadata" hidden><label class="studio-field">Division <select id="division"></select></label><label class="studio-field">Match <select id="scheduled-match"></select></label></div>
+<div class="studio-metadata"><label class="studio-field">Event name <input id="event" required maxlength="180"></label><label class="studio-field">Match label <input id="round" required maxlength="100" placeholder="Qualifier 17"></label></div>
+<div class="studio-metadata"><label class="studio-field">Red team 1 <input id="team-0" required maxlength="9"></label><label class="studio-field">Red team 2 <input id="team-1" required maxlength="9"></label>
+<label class="studio-field">Blue team 1 <input id="team-2" required maxlength="9"></label><label class="studio-field">Blue team 2 <input id="team-3" required maxlength="9"></label></div>
+<div class="studio-metadata studio-times">
+<label class="studio-field">Auton start (sec) <input id="start" type="number" value="0" min="0" step="any" required></label>
+<label class="studio-field">Driver start (sec) <input id="driver" type="number" value="15" min="0" step="any" required></label>
+<label class="studio-field">Match end (sec) <input id="end" type="number" value="120" min="0" step="any" required></label>
+</div>
+<div id="set-times" class="tool-row" hidden><button type="button" class="sv-secondary" data-time="start">Use video time for auton</button><button type="button" class="sv-secondary" data-time="driver">Driver</button><button type="button" class="sv-secondary" data-time="end">End</button></div>
+<label class="studio-field">Red alliance wall in camera view <select id="red-wall"><option value="left">Left</option><option value="right">Right</option><option value="far">Far (top)</option><option value="near">Near (bottom)</option></select></label>
+<div class="tool-row"><button class="sv-primary" type="submit" id="analyze" disabled>Build 3D replay</button><button class="sv-secondary" type="button" id="stop" hidden>Cancel</button></div>
+<progress id="progress" max="100" hidden aria-label="Replay analysis progress"></progress>
+<p id="run-status" class="result-status" role="status"></p>
+</form>
+<section id="training-card" class="sv-card" hidden>
+<h2>Train YOLO with your corrections</h2>
+<p class="hint">Save at least eight reviewed frames, including six with visible robots. Use different parts of the match. ScoutVision learns from your changes using the trained YOLO model and checks the result on held-out frames.</p>
+<div class="tool-row"><button class="sv-primary" type="button" id="train" disabled>Train YOLO</button><span id="label-total" class="hint">0 reviewed frames</span></div>
+<progress id="training-progress" max="100" hidden aria-label="Training progress"></progress>
+<p id="training-status" class="result-status" role="status"></p>
+</section>
+</div>
+<section class="sv-card workspace-card" id="mark-card">
+<h2>Calibrate the starting frame</h2>
+<p class="hint">Pick a fixed wide camera view. Click the four inside floor corners clockwise from top-left, then the base of each robot.</p>
+<div class="tool-row"><button type="button" class="sv-secondary" id="load-frame" disabled>Load starting frame</button><button type="button" class="sv-secondary" id="undo" disabled>Undo</button><button type="button" class="sv-secondary" id="reset-marks" disabled>Clear marks</button></div>
+<p id="mark-status" class="status" role="status"></p>
+<div class="empty-frame" id="mark-placeholder">Choose a video to mark its starting frame.</div>
+<canvas id="mark-preview" class="field-mark" aria-label="Starting frame. Click the field corners and robot positions as prompted." hidden></canvas>
+</section>
+<section class="sv-card workspace-card" id="review-card" hidden>
+<div class="review-top"><h2>Review robot boxes</h2><button type="button" class="sv-secondary" id="review-next" disabled>Next frame +3s</button></div>
+<p class="hint">Select a video position and detect the visible robots. Drag a new box around a missed robot, or click a box to select and remove it.</p>
+<div class="tool-row"><button type="button" class="sv-primary" id="test-frame" disabled>Test model on this frame</button><button type="button" class="sv-secondary" id="review-frame" disabled>Review current frame</button><button type="button" class="sv-secondary" id="remove-box" disabled>Remove selected</button><button type="button" class="sv-secondary" id="clear-boxes" disabled>Clear boxes</button></div>
+<canvas id="review-preview" class="field-mark" aria-label="Review frame. Drag to draw a robot box. Click a box to select it." hidden></canvas>
+<div class="tool-row"><button type="button" class="sv-primary" id="save-label" disabled>Save reviewed frame</button></div>
+<p id="review-status" class="status" role="status"></p>
+</section>
+</div>
+<section id="imported-matches" class="sv-card studio-lower"><h2>Imported matches</h2><ul id="library" class="library"></ul><p id="library-status" class="hint"></p></section>
+</main></div></body></html>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMin slice">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#0c279c"/><stop offset=".56" stop-color="#1857d6"/><stop offset="1" stop-color="#5289ec"/>
+    </linearGradient>
+    <pattern id="dots" width="9" height="9" patternUnits="userSpaceOnUse"><circle cx="4.5" cy="4.5" r="1.25" fill="#d9e8ff" opacity=".5"/></pattern>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M0 64V0h64" fill="none" stroke="#e6efff" opacity=".07"/></pattern>
+    <radialGradient id="sun"><stop stop-color="#b5ceff" stop-opacity=".36"/><stop offset="1" stop-color="#86aaff" stop-opacity=".07"/></radialGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#sky)"/>
+  <rect width="1600" height="1000" fill="url(#grid)"/>
+  <g transform="translate(1260 270)">
+    <circle r="172" fill="url(#sun)"/>
+    <circle r="172" fill="none" stroke="#c5d8ff" opacity=".35"/>
+    <circle r="195" fill="none" stroke="#c5d8ff" opacity=".19"/>
+    <circle r="214" fill="none" stroke="#c5d8ff" opacity=".13"/>
+    <path d="M-236 0h472M0-236v472" stroke="#d4e2ff" opacity=".16"/>
+    <circle cx="-151" cy="-83" r="4" fill="#ffe693"/>
+    <circle cx="196" cy="87" r="3" fill="#b5ceff"/>
+  </g>
+  <path d="M0 690 Q205 530 420 725 T830 750 Q1000 675 1160 770 T1600 600V1000H0Z" fill="#9bc0ff" opacity=".14"/>
+  <path d="M0 760 Q210 630 460 800 T880 830 Q1090 630 1270 745 T1600 690V1000H0Z" fill="url(#dots)"/>
+</svg>
