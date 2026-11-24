@@ -1,7 +1,7 @@
 // "Teach scoring" card: label goal stacks and toggles on review frames, then train.
-import {access} from "./storage.js?v=train2";
-import {goals} from "./scoring.js?v=train2";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=train2";
+import {access} from "./storage.js?v=load3";
+import {goals} from "./scoring.js?v=load3";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load3";
 
 const COLOR_NAMES = ["Red", "Blue", "Yellow"];
 const startingCounts = id => id === "midfield" || id.endsWith("neutral") ? [0, 0, 1] : [0, 0, 0];

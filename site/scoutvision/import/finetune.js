@@ -10,8 +10,8 @@
 // base model already knows. Every fourth frame (or the last video) is held out; the head is
 // only saved if it beats the base model on those frames.
 
-import {detect, loadScript, modelManifest, overlap, suppress} from "./detector.js?v=train2";
-import {access} from "./storage.js?v=train2";
+import {detect, loadScript, modelManifest, overlap, suppress} from "./detector.js?v=load3";
+import {access} from "./storage.js?v=load3";
 
 // Tunable from the console for experiments; defaults chosen on held-out Mall of America frames.
 // Steps scale with the number of training frames (about `epochs` passes over them).

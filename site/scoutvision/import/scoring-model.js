@@ -1,4 +1,4 @@
-import {access} from "./storage.js?v=train2";
+import {access} from "./storage.js?v=load3";
 
 const COLORS = ["red", "blue", "yellow"];
 const OWNERS = {unknown:null, neutral:0, red:1, blue:2};

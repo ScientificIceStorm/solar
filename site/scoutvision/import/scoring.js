@@ -1,4 +1,4 @@
-import {referenceReader} from "./scoring-model.js?v=train2";
+import {referenceReader} from "./scoring-model.js?v=load3";
 
 export const wallPoints = {far:[72,0], left:[0,72], right:[144,72], near:[72,144]};
 const walls = Object.keys(wallPoints);

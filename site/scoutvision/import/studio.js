@@ -1,9 +1,9 @@
-import {access} from "./storage.js?v=train2";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=train2";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=train2";
-import {analyze, seekFrame} from "./tracking.js?v=train2";
-import {originalScoringReplay} from "./scoring-model.js?v=train2";
-import {setupScoring} from "./scoring-studio.js?v=train2";
+import {access} from "./storage.js?v=load3";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load3";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load3";
+import {analyze, seekFrame} from "./tracking.js?v=load3";
+import {originalScoringReplay} from "./scoring-model.js?v=load3";
+import {setupScoring} from "./scoring-studio.js?v=load3";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
