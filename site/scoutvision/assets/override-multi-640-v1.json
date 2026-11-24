@@ -1,0 +1,451 @@
+{
+  "name": "override-multi-640-v1",
+  "label": "Override robots \u00b7 3 events",
+  "size": 640,
+  "parts": 2,
+  "bytes": 37910752,
+  "outputs": [
+    "output0",
+    "feat_p3",
+    "feat_p4",
+    "feat_p5"
+  ],
+  "features": [
+    {
+      "name": "feat_p3",
+      "stride": 8,
+      "channels": 128,
+      "height": 80,
+      "width": 80
+    },
+    {
+      "name": "feat_p4",
+      "stride": 16,
+      "channels": 256,
+      "height": 40,
+      "width": 40
+    },
+    {
+      "name": "feat_p5",
+      "stride": 32,
+      "channels": 512,
+      "height": 20,
+      "width": 20
+    }
+  ],
+  "head": {
+    "file": "override-multi-640-v1-head.bin",
+    "regMax": 16,
+    "tensors": [
+      {
+        "name": "box0.0.w",
+        "shape": [
+          3,
+          3,
+          128,
+          64
+        ],
+        "offset": 0
+      },
+      {
+        "name": "box0.0.b",
+        "shape": [
+          64
+        ],
+        "offset": 73728
+      },
+      {
+        "name": "box0.1.w",
+        "shape": [
+          3,
+          3,
+          64,
+          64
+        ],
+        "offset": 73792
+      },
+      {
+        "name": "box0.1.b",
+        "shape": [
+          64
+        ],
+        "offset": 110656
+      },
+      {
+        "name": "box0.2.w",
+        "shape": [
+          1,
+          1,
+          64,
+          64
+        ],
+        "offset": 110720
+      },
+      {
+        "name": "box0.2.b",
+        "shape": [
+          64
+        ],
+        "offset": 114816
+      },
+      {
+        "name": "cls0.0.w",
+        "shape": [
+          3,
+          3,
+          128,
+          1
+        ],
+        "offset": 114880
+      },
+      {
+        "name": "cls0.0.b",
+        "shape": [
+          128
+        ],
+        "offset": 116032
+      },
+      {
+        "name": "cls0.1.w",
+        "shape": [
+          1,
+          1,
+          128,
+          128
+        ],
+        "offset": 116160
+      },
+      {
+        "name": "cls0.1.b",
+        "shape": [
+          128
+        ],
+        "offset": 132544
+      },
+      {
+        "name": "cls0.2.w",
+        "shape": [
+          3,
+          3,
+          128,
+          1
+        ],
+        "offset": 132672
+      },
+      {
+        "name": "cls0.2.b",
+        "shape": [
+          128
+        ],
+        "offset": 133824
+      },
+      {
+        "name": "cls0.3.w",
+        "shape": [
+          1,
+          1,
+          128,
+          128
+        ],
+        "offset": 133952
+      },
+      {
+        "name": "cls0.3.b",
+        "shape": [
+          128
+        ],
+        "offset": 150336
+      },
+      {
+        "name": "cls0.4.w",
+        "shape": [
+          1,
+          1,
+          128,
+          1
+        ],
+        "offset": 150464
+      },
+      {
+        "name": "cls0.4.b",
+        "shape": [
+          1
+        ],
+        "offset": 150592
+      },
+      {
+        "name": "box1.0.w",
+        "shape": [
+          3,
+          3,
+          256,
+          64
+        ],
+        "offset": 150593
+      },
+      {
+        "name": "box1.0.b",
+        "shape": [
+          64
+        ],
+        "offset": 298049
+      },
+      {
+        "name": "box1.1.w",
+        "shape": [
+          3,
+          3,
+          64,
+          64
+        ],
+        "offset": 298113
+      },
+      {
+        "name": "box1.1.b",
+        "shape": [
+          64
+        ],
+        "offset": 334977
+      },
+      {
+        "name": "box1.2.w",
+        "shape": [
+          1,
+          1,
+          64,
+          64
+        ],
+        "offset": 335041
+      },
+      {
+        "name": "box1.2.b",
+        "shape": [
+          64
+        ],
+        "offset": 339137
+      },
+      {
+        "name": "cls1.0.w",
+        "shape": [
+          3,
+          3,
+          256,
+          1
+        ],
+        "offset": 339201
+      },
+      {
+        "name": "cls1.0.b",
+        "shape": [
+          256
+        ],
+        "offset": 341505
+      },
+      {
+        "name": "cls1.1.w",
+        "shape": [
+          1,
+          1,
+          256,
+          128
+        ],
+        "offset": 341761
+      },
+      {
+        "name": "cls1.1.b",
+        "shape": [
+          128
+        ],
+        "offset": 374529
+      },
+      {
+        "name": "cls1.2.w",
+        "shape": [
+          3,
+          3,
+          128,
+          1
+        ],
+        "offset": 374657
+      },
+      {
+        "name": "cls1.2.b",
+        "shape": [
+          128
+        ],
+        "offset": 375809
+      },
+      {
+        "name": "cls1.3.w",
+        "shape": [
+          1,
+          1,
+          128,
+          128
+        ],
+        "offset": 375937
+      },
+      {
+        "name": "cls1.3.b",
+        "shape": [
+          128
+        ],
+        "offset": 392321
+      },
+      {
+        "name": "cls1.4.w",
+        "shape": [
+          1,
+          1,
+          128,
+          1
+        ],
+        "offset": 392449
+      },
+      {
+        "name": "cls1.4.b",
+        "shape": [
+          1
+        ],
+        "offset": 392577
+      },
+      {
+        "name": "box2.0.w",
+        "shape": [
+          3,
+          3,
+          512,
+          64
+        ],
+        "offset": 392578
+      },
+      {
+        "name": "box2.0.b",
+        "shape": [
+          64
+        ],
+        "offset": 687490
+      },
+      {
+        "name": "box2.1.w",
+        "shape": [
+          3,
+          3,
+          64,
+          64
+        ],
+        "offset": 687554
+      },
+      {
+        "name": "box2.1.b",
+        "shape": [
+          64
+        ],
+        "offset": 724418
+      },
+      {
+        "name": "box2.2.w",
+        "shape": [
+          1,
+          1,
+          64,
+          64
+        ],
+        "offset": 724482
+      },
+      {
+        "name": "box2.2.b",
+        "shape": [
+          64
+        ],
+        "offset": 728578
+      },
+      {
+        "name": "cls2.0.w",
+        "shape": [
+          3,
+          3,
+          512,
+          1
+        ],
+        "offset": 728642
+      },
+      {
+        "name": "cls2.0.b",
+        "shape": [
+          512
+        ],
+        "offset": 733250
+      },
+      {
+        "name": "cls2.1.w",
+        "shape": [
+          1,
+          1,
+          512,
+          128
+        ],
+        "offset": 733762
+      },
+      {
+        "name": "cls2.1.b",
+        "shape": [
+          128
+        ],
+        "offset": 799298
+      },
+      {
+        "name": "cls2.2.w",
+        "shape": [
+          3,
+          3,
+          128,
+          1
+        ],
+        "offset": 799426
+      },
+      {
+        "name": "cls2.2.b",
+        "shape": [
+          128
+        ],
+        "offset": 800578
+      },
+      {
+        "name": "cls2.3.w",
+        "shape": [
+          1,
+          1,
+          128,
+          128
+        ],
+        "offset": 800706
+      },
+      {
+        "name": "cls2.3.b",
+        "shape": [
+          128
+        ],
+        "offset": 817090
+      },
+      {
+        "name": "cls2.4.w",
+        "shape": [
+          1,
+          1,
+          128,
+          1
+        ],
+        "offset": 817218
+      },
+      {
+        "name": "cls2.4.b",
+        "shape": [
+          1
+        ],
+        "offset": 817346
+      }
+    ]
+  },
+  "note": "YOLO11s 640, trained on Highlander (136), Mall of America (41) and Smoky (35) reviewed frames. Leave-one-event-out recall on an unseen event: Smoky 64%, Mall of America 57%."
+}

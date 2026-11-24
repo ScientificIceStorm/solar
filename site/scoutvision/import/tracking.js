@@ -1,7 +1,7 @@
-import {detect, isYolo, suppress} from "./detector.js?v=rebuild";
-import {adaptedBoxes, browserDetector} from "./training.js?v=rebuild";
-import {buildScoring} from "./scoring.js?v=rebuild";
-import {scoringReferences} from "./scoring-model.js?v=rebuild";
+import {detect, isYolo, suppress} from "./detector.js?v=train2";
+import {loadHead} from "./finetune.js?v=train2";
+import {buildScoring} from "./scoring.js?v=train2";
+import {scoringReferences} from "./scoring-model.js?v=train2";
 
 const square = [[0,0], [144,0], [144,144], [0,144]];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -31,7 +31,7 @@ export function homography(source, target) {
   return ([x,y]) => [(a*x + b*y+c)/(g*x+h*y+1), (d*x+e*y+f)/(g*x+h*y+1)];
 }
 
-function field(meta) {
+export function field(meta) {
   const offset = ["left", "far", "right", "near"].indexOf(meta.wall);
   const corners = [...meta.corners.slice(offset), ...meta.corners.slice(0, offset)];
   const winding = corners.map(([x,y], i) => {
@@ -185,7 +185,7 @@ export async function analyze(video, meta, update, signal) {
   const frame = document.createElement("canvas"), crop = document.createElement("canvas");
   const pointsSeen = slots.map(() => 0);
   const yolo = isYolo(meta.detector);
-  const adjustment = meta.adapted && yolo ? browserDetector(meta.detector) : null;
+  const head = meta.adapted && yolo ? await loadHead(meta.detector) : null;
   const insideField = box => project([box.x + box.w / 2, box.y + box.h * .94])
     .every(value => value >= -12 && value <= 156);
   let scoring, provider, observed = 0, previousFrame = 0, step = fps / 2;
@@ -196,13 +196,13 @@ export async function analyze(video, meta, update, signal) {
     const cameraClear = !observed || scoring.cameraMatches(frame);
     let boxes = [];
     if (cameraClear) {
-      const inference = await detect(frame, .18, meta.detector, {proposals:Boolean(adjustment)});
+      const inference = await detect(frame, .18, meta.detector, {head});
       provider = inference.backend;
       if (!observed && provider !== "wasm") step = fps / 4;
-      boxes = adaptedBoxes(inference, adjustment).filter(insideField);
+      boxes = inference.boxes.filter(insideField);
       if (yolo && boxes.length < slots.length) {
         const restore = cropField(frame, meta.corners, crop);
-        const extra = await detect(crop, .14, meta.detector);
+        const extra = await detect(crop, .14, meta.detector, {head});
         boxes = suppress([...boxes, ...extra.boxes.map(restore).filter(insideField)]);
       }
     }
@@ -232,7 +232,8 @@ export async function analyze(video, meta, update, signal) {
     update(observed, Math.ceil(last / step) + 1, provider);
     if (indexFrame === last) break;
     previousFrame = indexFrame;
-    if (observed % 4 === 0) await new Promise(requestAnimationFrame);
+    // Let the page repaint; the timer keeps analysis going when the window is hidden or minimised.
+    if (observed % 4 === 0) await new Promise(resolve => { requestAnimationFrame(resolve); setTimeout(resolve, 50); });
   }
   const trackCoverage = pointsSeen.map(count => Math.round(100 * count / observed));
   if (trackCoverage.filter(coverage => coverage >= 12).length < 3) {
@@ -240,7 +241,8 @@ export async function analyze(video, meta, update, signal) {
   }
   Object.values(tracks).forEach(rows=>bridgeBriefGaps(rows,fps));
   const replay = scoring.finish(meta, tracks, fps, last, provider);
-  replay.robotDetector = meta.detector || "highlander";
+  replay.robotDetector = meta.detector || "override";
+  replay.robotDetectorTrained = Boolean(head);
   replay.robotTrackingVersion = 2;
   replay.trackCoverage = trackCoverage;
   return replay;

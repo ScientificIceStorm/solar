@@ -2,8 +2,8 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Match studio · ScoutVision</title>
 <link rel="stylesheet" href="/scoutvision/dashboard.css">
-<link rel="stylesheet" href="/scoutvision/import/studio.css?v=rebuild">
-<script type="module" src="/scoutvision/import/studio.js?v=rebuild"></script></head>
+<link rel="stylesheet" href="/scoutvision/import/studio.css?v=train2">
+<script type="module" src="/scoutvision/import/studio.js?v=train2"></script></head>
 <body class="sv-body"><div class="sv-shell">
 <aside class="sv-sidebar">
 <a class="sv-brand" href="/scoutvision/"><span>ScoutVision<small>by SolarScout</small></span></a>
@@ -22,13 +22,13 @@
 <video id="source-video" class="source-video" controls playsinline preload="metadata" hidden></video>
 <div class="tool-row" id="original-scoring" hidden><a class="sv-primary" id="open-original-replay">Open original scoring replay</a></div>
 <label class="studio-field">Robot detector <select id="detector-choice">
-  <option value="auto">Auto-select YOLO</option>
+  <option value="auto">Override robots · 3 events (recommended)</option>
   <option value="speedway-yolo">Speedway · YOLO</option>
   <option value="highlander">Highlander · YOLO</option>
   <option value="speedway">Speedway · RF-DETR Large</option>
 </select></label>
 <p id="detector-status" class="hint"></p>
-<label class="studio-check" id="adapted-option" hidden><input id="adapted" type="checkbox" disabled checked> Use my YOLO training</label>
+<label class="studio-check" id="adapted-option" hidden><input id="adapted" type="checkbox" disabled checked> Use my training from this browser</label>
 </section>
 <form id="match-form" class="sv-card controls">
 <h2>Match details</h2>
@@ -50,11 +50,14 @@
 <p id="run-status" class="result-status" role="status"></p>
 </form>
 <section id="training-card" class="sv-card" hidden>
-<h2>Train YOLO with your corrections</h2>
-<p class="hint">Save at least eight reviewed frames, including six with visible robots. Use different parts of the match. ScoutVision learns from your changes using the trained YOLO model and checks the result on held-out frames.</p>
-<div class="tool-row"><button class="sv-primary" type="button" id="train" disabled>Train YOLO</button><span id="label-total" class="hint">0 reviewed frames</span></div>
+<h2>Train the robot detector</h2>
+<p class="hint">Save at least eight reviewed frames, six with visible robots, spread across the match. Frames where the model missed or mis-boxed a robot teach it the most. Training runs on your GPU in this browser, holds back every fourth frame (or your last video) to check itself, and is only saved if it beats the base model on those frames.</p>
+<div class="tool-row"><button class="sv-primary" type="button" id="train" disabled>Train</button><span id="label-total" class="hint">0 reviewed frames</span></div>
 <progress id="training-progress" max="100" hidden aria-label="Training progress"></progress>
 <p id="training-status" class="result-status" role="status"></p>
+<p id="training-saved" class="hint"></p>
+<div class="tool-row"><button class="sv-secondary" type="button" id="forget-training" hidden>Remove my training</button><button class="sv-secondary" type="button" id="export-labels" disabled>Download reviewed frames</button></div>
+<p class="hint">The download contains your reviewed frames and boxes, so they can be added to a full retraining of the base model.</p>
 </section>
 </div>
 <section class="sv-card workspace-card" id="mark-card">
@@ -72,6 +75,17 @@
 <canvas id="review-preview" class="field-mark" aria-label="Review frame. Drag to draw a robot box. Click a box to select it." hidden></canvas>
 <div class="tool-row"><button type="button" class="sv-primary" id="save-label" disabled>Save reviewed frame</button></div>
 <p id="review-status" class="status" role="status"></p>
+</section>
+<section class="sv-card workspace-card" id="scoring-card" hidden>
+<h2>Teach scoring</h2>
+<p class="hint">Uses the frame loaded above. Mark the four inside floor corners clockwise from top-left, check the numbered goal boxes, then enter the pins on each goal and who owns each toggle. Tick <em>Can't see</em> for anything blocked. Label frames from different moments, including before and after stacks change. Three frames is the minimum; ten or more is better.</p>
+<div class="tool-row"><label class="studio-field">Red alliance wall <select id="score-wall"><option value="left">Left</option><option value="right">Right</option><option value="far">Far (top)</option><option value="near">Near (bottom)</option></select></label><button type="button" class="sv-secondary" id="score-reset" disabled>Re-mark corners</button></div>
+<p id="score-mark-status" class="status" role="status"></p>
+<canvas id="score-preview" class="field-mark" aria-label="Scoring frame. Click the four field corners." hidden></canvas>
+<div id="score-form" class="score-grid"></div>
+<div class="tool-row"><button type="button" class="sv-primary" id="save-scoring" disabled>Save scoring labels</button><button type="button" class="sv-secondary" id="train-scoring" disabled>Train scoring</button><span id="scoring-total" class="hint"></span></div>
+<progress id="scoring-progress" max="100" hidden aria-label="Scoring training progress"></progress>
+<p id="scoring-status" class="result-status" role="status"></p>
 </section>
 </div>
 <section id="imported-matches" class="sv-card studio-lower"><h2>Imported matches</h2><ul id="library" class="library"></ul><p id="library-status" class="hint"></p></section>

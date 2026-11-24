@@ -1,6 +1,6 @@
-import {referenceReader} from "./scoring-model.js?v=rebuild";
+import {referenceReader} from "./scoring-model.js?v=train2";
 
-const wallPoints = {far:[72,0], left:[0,72], right:[144,72], near:[72,144]};
+export const wallPoints = {far:[72,0], left:[0,72], right:[144,72], near:[72,144]};
 const walls = Object.keys(wallPoints);
 const colorNames = ["Red", "Blue", "Yellow"];
 const coords = {
@@ -8,7 +8,7 @@ const coords = {
   "left-red":[-1200,-600], midfield:[0,0], "right-blue":[1200,600],
   "right-neutral":[1200,-600], "near-red":[-600,-1200], "near-neutral":[600,-1200],
 };
-const goals = Object.entries(coords).map(([id, [x,y]]) => ({
+export const goals = Object.entries(coords).map(([id, [x,y]]) => ({
   id, name:id.replace("-", " · "), point:[72 + x / 25.4, 72 - y / 25.4],
 }));
 const opening = goal => goal.id === "midfield" || goal.id.endsWith("neutral") ? [2] : [];
@@ -187,7 +187,7 @@ export function buildScoring(frame, project, teams, fps, model) {
       if (!cameraClear) pending.clear();
       if (frame && cameraClear) {
         const read=pixels(canvas);
-        decoder.use(canvas);
+        decoder.use(canvas,boxes);
         bases.forEach((base,i)=>{
           const previous=stacks[i];
           const geometric=decoder.calibrated ? null : countStack(read,base,boxes,width,height,previous.length);

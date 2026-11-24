@@ -33,3 +33,13 @@ progress { accent-color:var(--mint); display:block; width:100%; }
 details summary { cursor:pointer; font-size:12px; font-weight:620; margin-bottom:7px; }
 @media(max-width:1040px) { .studio-grid { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:620px) { .library li { align-items:flex-start; flex-direction:column; } }
+
+#scoring-card{grid-column:1/-1}
+.score-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(25rem,1fr));gap:.4rem 1.5rem;margin:.75rem 0}
+.score-row{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap}
+.score-row>span{flex:1 1 9rem;min-width:0;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score-count{display:inline-flex;align-items:center;gap:.2rem;font-weight:600;font-size:.82rem}
+.score-count input{width:3rem}
+.score-row .studio-check{white-space:nowrap;font-size:.82rem}
+.score-row .studio-field{display:flex;align-items:center;gap:.5rem;margin:0;white-space:nowrap}
+.score-red{color:#ff8c83}.score-blue{color:#6bddff}.score-yellow{color:#ffcf68}

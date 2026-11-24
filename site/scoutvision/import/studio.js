@@ -1,8 +1,9 @@
-import {access} from "./storage.js?v=rebuild";
-import {detect, detectorNames, isYolo} from "./detector.js?v=rebuild";
-import {train, adaptedBoxes, browserDetector} from "./training.js?v=rebuild";
-import {analyze, seekFrame} from "./tracking.js?v=rebuild";
-import {originalScoringReplay} from "./scoring-model.js?v=rebuild";
+import {access} from "./storage.js?v=train2";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo} from "./detector.js?v=train2";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=train2";
+import {analyze, seekFrame} from "./tracking.js?v=train2";
+import {originalScoringReplay} from "./scoring-model.js?v=train2";
+import {setupScoring} from "./scoring-studio.js?v=train2";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -14,7 +15,7 @@ const cornerNames = ["top-left corner", "top-right corner", "bottom-right corner
 let file, objectUrl, mode = "analyze", busy = false, activeJob, calibratedAt, reviewAt;
 let boxes = [], selectedBox = -1, drawing, pendingBox, confirmed = [], fixtures = [];
 let officialFinal, officialMatch, scheduleCount = 0;
-let rebuilding;
+let rebuilding, scoring;
 
 const seconds = id => $(id).valueAsNumber;
 const rounded = value => +value.toFixed(3);
@@ -29,13 +30,30 @@ const ready = () => file && video.readyState >= 1;
 const names = () => Array.from({length:4}, (_,i) => $("team-" + i).value.trim().toUpperCase());
 const backendLabel = backend => ({webgl:"WebGL", webgpu:"WebGPU", wasm:"CPU"})[backend] || backend;
 const status = (id, text) => { $(id).textContent = text; };
-const autoYolo = () => /speedway/i.test([file?.name, $("event").value].filter(Boolean).join(" "))
-  ? "speedway-yolo" : "highlander";
+const autoYolo = () => defaultDetector;
 const selectedDetector = () => $("detector-choice").value === "auto" ? autoYolo() : $("detector-choice").value;
-const trainingDetector = () => isYolo(selectedDetector()) ? selectedDetector() : autoYolo();
+const trainingDetector = () => canFineTune(selectedDetector()) ? selectedDetector() : defaultDetector;
+const trainedHeads = {};
+async function refreshHeads() {
+  for (const choice of Object.keys(detectorNames).filter(canFineTune)) {
+    trainedHeads[choice] = await loadHead(choice).catch(() => null);
+  }
+  showDetector();
+}
+const activeHead = choice => isYolo(choice) && $("adapted").checked ? trainedHeads[choice] || null : null;
 function showDetector() {
-  status("detector-status", `${detectorNames[selectedDetector()]} is built in and ready to use.`);
+  const chosen = selectedDetector(), head = trainedHeads[chosen];
+  status("detector-status", head
+    ? `${detectorNames[chosen]} + your training from ${head.frames} reviewed frames.`
+    : `${detectorNames[chosen]} is built in and ready to use.`);
   $("train").textContent = `Train ${detectorNames[trainingDetector()]}`;
+  const saved = trainedHeads[trainingDetector()];
+  $("forget-training").hidden = !saved;
+  if (saved) {
+    const {base, trained, frames} = saved.validation;
+    status("training-saved", `Saved training: found ${trained.matched}/${trained.expected} robots on ${frames} held-out frames ` +
+      `(base model ${base.matched}/${base.expected}).`);
+  } else status("training-saved", "");
   controls();
 }
 $("detector-choice").onchange = showDetector;
@@ -44,9 +62,12 @@ $("event").oninput = showDetector;
 function controls() {
   picker.disabled = busy;
   $("detector-choice").disabled = busy;
-  const custom = isYolo(selectedDetector()) && browserDetector(selectedDetector());
+  const custom = Boolean(trainedHeads[selectedDetector()]);
   $("adapted-option").hidden = !custom;
   $("adapted").disabled = busy || !custom;
+  $("forget-training").disabled = busy;
+  $("export-labels").disabled = busy || !confirmed.length;
+  scoring?.controls(busy);
   $("mode-analyze").disabled = $("mode-review").disabled = busy;
   $("load-frame").disabled = $("review-frame").disabled = $("test-frame").disabled =
     $("review-next").disabled = busy || !ready();
@@ -65,7 +86,7 @@ function selectMode(next) {
     $("mode-" + value).setAttribute("aria-pressed",String(value===next));
   }
   $("match-form").hidden = $("mark-card").hidden = next === "review";
-  $("training-card").hidden = $("review-card").hidden = next !== "review";
+  $("training-card").hidden = $("review-card").hidden = $("scoring-card").hidden = next !== "review";
 }
 $("mode-analyze").onclick = () => selectMode("analyze");
 $("mode-review").onclick = () => selectMode("review");
@@ -282,7 +303,7 @@ function metadata() {
   return {start,driver,end:Math.min(end,video.duration), event, round, final,
     teams:selected.map((team,i)=>({team,alliance:i<2?"red":"blue"})),
     wall:$("red-wall").value,corners:marks.slice(0,4),robots:marks.slice(4),detector:selectedDetector(),
-    adapted:Boolean(isYolo(selectedDetector()) && browserDetector(selectedDetector()) && $("adapted").checked)};
+    adapted:Boolean(activeHead(selectedDetector()))};
 }
 
 $("match-form").onsubmit=async event=>{
@@ -358,13 +379,13 @@ async function reviewFrame(at, test = false){
     } else {
       const selected=selectedDetector();
       status("review-status",`Loading ${detectorNames[selected]}…`);
-      const adjustment = isYolo(selected) && $("adapted").checked ? browserDetector(selected) : null;
-      const result=await detect(review, .18, selected, {proposals:Boolean(adjustment)});
-      boxes=adaptedBoxes(result, adjustment);
-      status("review-status",`${reviewAt}s · ${boxes.length} suggestions · ${detectorNames[selected]}${adjustment?" + your training":""} · ${backendLabel(result.backend)}`);
+      const head = activeHead(selected);
+      const result=await detect(review, .18, selected, {head});
+      boxes=result.boxes;
+      status("review-status",`${reviewAt}s · ${boxes.length} suggestions · ${detectorNames[selected]}${head?" + your training":""} · ${backendLabel(result.backend)}`);
     }
   } catch(error) { status("review-status",error.message); }
-  finally { busy=false; drawReview(); }
+  finally { busy=false; drawReview(); scoring?.frameChanged(); }
 }
 $("review-frame").onclick=()=>reviewFrame(video.currentTime);
 $("test-frame").onclick=()=>reviewFrame(video.currentTime, true);
@@ -417,22 +438,51 @@ $("train").onclick=async()=>{
   $("training-progress").hidden=false;
   status("training-status","Preparing reviewed frames…");
   try {
-    const result=await train(confirmed,choice,(done,total,backend)=>{
-      $("training-progress").value=Math.round(100 * done / total);
-      status("training-status",`Reading YOLO features for frame ${done} of ${total} · ${backendLabel(backend)}`);
+    const result=await trainDetector(confirmed,choice,(stage,done,total,backend)=>{
+      $("training-progress").value=Math.round(100 * done / (total || 1));
+      status("training-status",`${stage} · ${done} of ${total} · ${backendLabel(backend)}`);
     });
-    const checked = `${result.checked} held-out ${result.heldOutClip?"frames from another clip":"frames"}`;
-    const baseline = `Base YOLO matched ${result.baseline.matched}/${result.expected} robots with ${result.baseline.detected} suggestions.`;
+    const where = `${result.checked} held-out ${result.heldOutClip?"frames from another video":"frames"}`;
+    const base = `Base model: ${result.base.matched}/${result.base.expected} robots found, ${result.base.detected-result.base.matched} false alarms.`;
     if (result.saved) {
       $("detector-choice").value=choice;
       $("adapted").checked=true;
-      showDetector();
-      status("training-status",`Saved in this browser and enabled. Your YOLO matched ${result.matched}/${result.expected} robots with ${result.detected} suggestions on ${checked}. ${baseline}`);
+      await refreshHeads();
+      status("training-status",`Trained on ${result.frames} frames and saved in this browser. On ${where} it found ` +
+        `${result.trained.matched}/${result.trained.expected} robots with ${result.trained.detected-result.trained.matched} false alarms. ${base}`);
     } else {
-      status("training-status",`The existing detector performed as well or better on ${checked}. ${baseline} Review more varied frames and try again.`);
+      status("training-status",`Training did not beat the base model on ${where}, so nothing was saved. ${base} ` +
+        "Review more frames where the model misses robots, then train again.");
     }
   } catch(error) { status("training-status",error.message); }
   finally { busy=false; $("training-progress").hidden=true; controls(); }
+};
+$("forget-training").onclick=async()=>{
+  const choice=trainingDetector();
+  if (busy || !confirm(`Remove your training for ${detectorNames[choice]} from this browser? Your reviewed frames stay saved.`)) return;
+  try { await forgetHead(choice); await refreshHeads(); status("training-status","Your training was removed. The base model is in use."); }
+  catch(error) { status("training-status",error.message); }
+};
+$("export-labels").onclick=async()=>{
+  if (busy || !confirmed.length) return;
+  busy=true; controls();
+  try {
+    const frames=[];
+    for (const item of confirmed) {
+      const bytes=new Uint8Array(await item.image.arrayBuffer());
+      let text="";
+      for (let i=0;i<bytes.length;i+=32768) text+=String.fromCharCode(...bytes.subarray(i,i+32768));
+      frames.push({clip:item.clip, at:item.at, boxes:item.boxes, jpeg:btoa(text)});
+    }
+    const blob=new Blob([JSON.stringify({format:"scoutvision-robot-labels",version:1,frames})],{type:"application/json"});
+    const link=document.createElement("a");
+    link.href=URL.createObjectURL(blob);
+    link.download=`scoutvision-robot-labels-${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
+    setTimeout(()=>URL.revokeObjectURL(link.href),2000);
+    status("training-status",`Downloaded ${frames.length} reviewed frames for GPU retraining.`);
+  } catch(error) { status("training-status",error.message); }
+  finally { busy=false; controls(); }
 };
 
 async function refreshLibrary(){
@@ -484,5 +534,10 @@ const params = new URLSearchParams(location.search);
 if (params.get("mode") === "train") selectMode("review");
 if (params.has("rebuild")) restoreReplay(params.get("rebuild"));
 $("find-schedule").disabled = false;
+scoring = setupScoring({
+  $, status, review, video, isBusy:()=>busy, setBusy:value=>{ busy=value; controls(); },
+  clip:()=>sourceKey(), clipName:()=>file?.name, at:()=>reviewAt, marks, wallSelect:$("red-wall"),
+});
 controls();
 showDetector();
+refreshHeads();

@@ -1,22 +1,29 @@
 const assets = "/scoutvision/assets/";
 const scriptLoads = new Map();
+
+// "override" is the multi-event model (Highlander + Mall of America + Smoky). The older
+// single-event models stay selectable for comparison but cannot be fine-tuned.
 export const detectorNames = {
+  override: "Override robots · 3 events",
   speedway: "Speedway RF-DETR Large",
   "speedway-yolo": "Speedway YOLO",
   highlander: "Highlander YOLO",
 };
 const yoloAssets = {
-  highlander:{prefix:"highlander-yolo-v2", size:480},
-  "speedway-yolo":{prefix:"speedway-yolo-480-v1", size:480},
+  override:{manifest:"override-multi-640-v1"},
+  highlander:{prefix:"highlander-yolo-v2", size:480, parts:2},
+  "speedway-yolo":{prefix:"speedway-yolo-480-v1", size:480, parts:2},
 };
+export const defaultDetector = "override";
 export const isYolo = choice => Object.hasOwn(yoloAssets, choice);
+export const canFineTune = choice => Boolean(yoloAssets[choice]?.manifest);
 
-export function loadScript(name) {
+export function loadScript(name, global = "ort") {
   if (!scriptLoads.has(name)) {
     scriptLoads.set(name, new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = assets + name;
-      script.onload = () => resolve(globalThis.ort);
+      script.onload = () => resolve(globalThis[global]);
       script.onerror = () => { scriptLoads.delete(name); reject(new Error("Could not load the browser model runtime.")); };
       document.head.append(script);
     }));
@@ -62,7 +69,7 @@ async function runtime(name, bytes) {
   if (name === "webgl") ort.env.webgl.pack = false;
   if (name === "wasm") {
     ort.env.wasm.wasmPaths = assets;
-    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1;
   }
   const session = await ort.InferenceSession.create(bytes, {executionProviders: [name]});
   return {ort, session, name};
@@ -95,20 +102,34 @@ export async function webgpuRuntime(bytes, size) {
   } finally { input?.dispose(); }
 }
 
+const manifests = new Map();
+export function modelManifest(choice) {
+  const asset = yoloAssets[choice];
+  if (!asset?.manifest) return Promise.resolve({name:asset.prefix, size:asset.size, parts:asset.parts, features:[]});
+  if (!manifests.has(choice)) {
+    manifests.set(choice, fetch(assets + asset.manifest + ".json").then(response => {
+      if (!response.ok) throw new Error("Could not load the robot detector description.");
+      return response.json();
+    }).catch(error => { manifests.delete(choice); throw error; }));
+  }
+  return manifests.get(choice);
+}
+
 const loadingModels = new Map();
 function detector(choice) {
   if (loadingModels.has(choice)) return loadingModels.get(choice);
   const loading = (async () => {
-    const {prefix, size} = yoloAssets[choice];
-    const bytes = await downloadModel(prefix, 2);
+    const manifest = await modelManifest(choice);
+    const {name, size, parts} = manifest;
+    const bytes = await downloadModel(name, parts);
     const webgpu = await webgpuRuntime(bytes, size);
-    if (webgpu) return webgpu;
+    if (webgpu) return {...webgpu, manifest};
     let runner;
     try {
       runner = await runtime("webgl", bytes);
       const input = new runner.ort.Tensor("float32", new Float32Array(3 * size * size), [1, 3, size, size]);
       try {
-        const outputs = await runner.session.run({[runner.session.inputNames[0]]:input}, [runner.session.outputNames[0]]);
+        const outputs = await runner.session.run({[runner.session.inputNames[0]]:input});
         Object.values(outputs).forEach(tensor => tensor.dispose());
       } finally { input.dispose(); }
     } catch (error) {
@@ -116,7 +137,7 @@ function detector(choice) {
       await runner?.session.release().catch(()=>{});
       runner = await runtime("wasm", bytes);
     }
-    return runner;
+    return {...runner, manifest};
   })().catch(error => { loadingModels.delete(choice); throw error; });
   loadingModels.set(choice, loading);
   return loading;
@@ -125,13 +146,19 @@ function detector(choice) {
 const inferenceCanvas = document.createElement("canvas");
 const context = inferenceCanvas.getContext("2d", {willReadFrequently: true});
 
-export async function detect(frame, minimum = .20, choice = "highlander", options = {}) {
+/**
+ * Detect robots in a canvas/bitmap. Boxes are normalised to the frame.
+ * options.raw  - also return the letterbox geometry, every anchor's score and box, and
+ *                the neck feature maps (needed to train or apply a fine-tuned head).
+ * options.head - a fine-tuned head from finetune.js; its scores replace the base scores.
+ */
+export async function detect(frame, minimum = .20, choice = defaultDetector, options = {}) {
   if (choice === "speedway") {
-    const {detectSpeedway} = await import("./speedway.js?v=rebuild");
+    const {detectSpeedway} = await import("./speedway.js?v=train2");
     return detectSpeedway(frame, minimum);
   }
-  const {ort, session, name} = await detector(choice);
-  const {size} = yoloAssets[choice];
+  const {ort, session, name, manifest} = await detector(choice);
+  const {size} = manifest;
   if (inferenceCanvas.width !== size) inferenceCanvas.width = inferenceCanvas.height = size;
   const ratio = Math.min(size / frame.width, size / frame.height);
   const w = frame.width * ratio, h = frame.height * ratio;
@@ -148,53 +175,44 @@ export async function detect(frame, minimum = .20, choice = "highlander", option
     rgb[i + area * 2] = rgba[i * 4 + 2] / 255;
   }
   const input = new ort.Tensor("float32", rgb, [1, 3, size, size]);
+  const wantFeatures = Boolean((options.raw || options.head) && manifest.features.length);
+  const fetches = [session.outputNames[0], ...(wantFeatures ? manifest.features.map(feature => feature.name) : [])];
   let result;
   try {
-    const outputs = options.proposals ? session.outputNames : [session.outputNames[0]];
-    result = await session.run({[session.inputNames[0]]: input}, outputs);
-    const tensor = result[session.outputNames[0]], {data:values} = tensor, count = tensor.dims[2];
+    result = await session.run({[session.inputNames[0]]: input}, fetches);
+    const tensor = result[session.outputNames[0]];
+    const count = tensor.dims[2];
+    const values = tensor.data;
+    const letterbox = {size, x, y, w, h};
+    const raw = wantFeatures ? {
+      letterbox, count,
+      scores: values.slice(4 * count, 5 * count),
+      boxes: values.slice(0, 4 * count),
+      features: manifest.features.map(feature => ({...feature, data: result[feature.name].data.slice()})),
+    } : null;
+    let scores = values.subarray(4 * count, 5 * count), boxValues = values, cut = minimum;
+    if (options.head && raw) {
+      const adapted = await options.head.apply(raw);
+      scores = adapted.scores;
+      boxValues = adapted.boxes;
+      // The head picked its own threshold on held-out frames; keep callers' relative leniency.
+      cut = options.head.threshold * minimum / .18;
+    }
     const candidates = [];
     for (let i = 0; i < count; i++) {
-      const score = values[4 * count + i];
-      if (score < (options.proposals ? .0008 : minimum)) continue;
-      const halfW = values[count * 2 + i] / 2, halfH = values[count * 3 + i] / 2;
-      const centerX = values[i] - x, centerY = values[i + count] - y;
+      const score = scores[i];
+      if (score < cut) continue;
+      const halfW = boxValues[count * 2 + i] / 2, halfH = boxValues[count * 3 + i] / 2;
+      const centerX = boxValues[i] - x, centerY = boxValues[i + count] - y;
       const left = Math.max(0, (centerX - halfW) / w), top = Math.max(0, (centerY - halfH) / h);
       const right = Math.min(1, (centerX + halfW) / w), bottom = Math.min(1, (centerY + halfH) / h);
       if (right - left > .01 && bottom - top > .02) {
         candidates.push({x:left, y:top, w:right-left, h:bottom-top, score, index:i});
       }
     }
-    const boxes = suppress(candidates.filter(box => box.score >= minimum));
-    const proposals = options.proposals ? yoloProposals(candidates, outputs.slice(1).map(output => result[output])) : [];
-    return {boxes, proposals, backend:name};
+    return {boxes:suppress(candidates), backend:name, raw:options.raw ? raw : undefined};
   } finally {
     input.dispose();
     if (result) Object.values(result).forEach(tensor => tensor.dispose());
   }
-}
-
-function yoloProposals(candidates, scales) {
-  const features = scales.map(scale => scale.data);
-  const area = scales.map(scale => scale.dims[2] * scale.dims[3]);
-  const regions = new Map();
-  const proposals = [];
-  for (const box of candidates.sort((a,b) => b.score - a.score)) {
-    const region = Math.floor((box.x + box.w/2) * 20) + "," + Math.floor((box.y + box.h/2) * 16);
-    const seen = regions.get(region) || 0;
-    if (seen >= 4) continue;
-    regions.set(region, seen + 1);
-    const level = box.index < area[0] ? 0 : box.index < area[0] + area[1] ? 1 : 2;
-    const cell = box.index - (level ? area[0] : 0) - (level === 2 ? area[1] : 0);
-    const embedding = new Float32Array(130);
-    for (let channel = 0; channel < 128; channel++) {
-      const value = features[level][channel * area[level] + cell];
-      embedding[channel] = value / (1 + Math.abs(value));
-    }
-    embedding[128] = Math.max(-1, Math.log(box.score) / 8);
-    embedding[129] = 1;
-    proposals.push({box, embedding});
-    if (proposals.length >= 220) break;
-  }
-  return proposals;
 }

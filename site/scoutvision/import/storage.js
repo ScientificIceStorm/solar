@@ -1,16 +1,24 @@
 let opening;
 
+// Version 2 adds "models" (detector heads and scoring cameras trained in this browser)
+// and "scoring" (frames where someone labelled goal stacks and toggles).
+const STORES = ["replays", "labels", "models", "scoring"];
+
 function database() {
   opening ||= new Promise((resolve, reject) => {
-    const request = indexedDB.open("scoutvision-browser", 1);
+    const request = indexedDB.open("scoutvision-browser", 2);
     request.onupgradeneeded = () => {
-      for (const name of ["replays", "labels"]) {
-        request.result.createObjectStore(name, {keyPath: "id"});
+      for (const name of STORES) {
+        if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name, {keyPath: "id"});
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
-  });
+    request.onblocked = () => reject(new Error("Close other Match studio tabs, then reload this page."));
+  }).catch(error => { opening = undefined; throw error; });
   return opening;
 }
 

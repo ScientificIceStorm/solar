@@ -1,26 +1,37 @@
+import {access} from "./storage.js?v=train2";
+
 const COLORS = ["red", "blue", "yellow"];
 const OWNERS = {unknown:null, neutral:0, red:1, blue:2};
 const COLS = 14, ROWS = 24;
 let loading;
 
+export const decodeValues = data => Uint8Array.from(atob(data), value => value.charCodeAt(0));
+
+// Built-in cameras (Smoky, Mall of America, Highlander, Speedway) plus any scoring camera
+// trained in this browser from labelled frames (see scoring-train.js).
 export function scoringReferences() {
   loading ||= Promise.all(["goal-references-v1.json","speedway-scoring-camera.json"].map(async file=>{
     const response=await fetch("/scoutvision/assets/"+file);
     if (!response.ok) throw new Error("Could not open the scoring references. Try again.");
     return response.json();
-  })).then(([model,speedway])=>{
+  })).then(async ([model,speedway])=>{
     model.cameras.push(speedway);
+    const trained=(await access("models","getAll").catch(()=>[])).filter(item=>item.kind==="scoring-camera");
+    model.cameras.push(...trained.map(camera=>structuredClone(camera)));
     for (const camera of model.cameras) {
       for (const [goal, examples] of Object.entries(camera.references)) {
-        camera.references[goal] = examples.map(([counts, data]) => ({
-          counts, values:Uint8Array.from(atob(data),value=>value.charCodeAt(0)),
-        }));
+        camera.references[goal] = examples.map(([counts, data]) => ({counts, values:decodeValues(data)}));
+      }
+      for (const [wall, examples] of Object.entries(camera.toggleReferences || {})) {
+        camera.toggleReferences[wall] = examples.map(([owner, data]) => ({owner, values:decodeValues(data)}));
       }
     }
     return model;
   }).catch(error=>{ loading=undefined; throw error; });
   return loading;
 }
+
+export function resetScoringReferences() { loading = undefined; }
 
 export async function originalScoringReplay(file) {
   const {cameras} = await scoringReferences();
@@ -31,7 +42,7 @@ export async function originalScoringReplay(file) {
   return possible.find(camera=>camera.recording.sha256===key) || null;
 }
 
-function pixelReader(canvas) {
+export function pixelReader(canvas) {
   const {width,height}=canvas;
   const {data}=canvas.getContext("2d").getImageData(0,0,width,height);
   return (x,y) => {
@@ -53,7 +64,7 @@ function color(pixel, kind) {
   return +(kind==="red" ? h<=11 || h>=153 : kind==="blue" ? h>=85 && h<=133 : h>=14 && h<=44);
 }
 
-function blocked(x,y,boxes,width,height) {
+export function blocked(x,y,boxes,width,height) {
   return boxes.some(box=>x/width>=box.x && x/width<=box.x+box.w &&
     y/height>=box.y && y/height<=box.y+box.h);
 }
@@ -102,7 +113,7 @@ function bands(read, spec, map, boxes, width, height) {
   return stable.map(run=>COLORS.indexOf(run.hue));
 }
 
-function signature(read, crop, map) {
+export function signature(read, crop, map) {
   const [left,top,right,bottom]=crop;
   const values=new Float32Array(ROWS*COLS*4);
   for (let row=0;row<ROWS;row++) for (let col=0;col<COLS;col++) {
@@ -119,7 +130,7 @@ function signature(read, crop, map) {
   return values;
 }
 
-function closestCounts(query, examples, goal, strict) {
+export function closestCounts(query, examples, goal, strict) {
   if (!examples.length) return null;
   const [left,,right]=goal.crop, span=right-left;
   const anchor=goal.base[0];
@@ -191,7 +202,41 @@ function learnedToggle(rows, model) {
     first.owner : null;
 }
 
-const FIELD_CORNERS=[[0,0],[144,0],[144,144],[0,144]];
+// A trained camera stores each goal's look at exact pixel positions. The corners clicked
+// for a replay are rarely within a pixel of the ones clicked while labelling, so try small
+// shifts and keep the best-aligned match.
+// The misalignment is the same all match, so the full search runs until a goal first
+// matches; after that only the neighbours of its locked shift are checked.
+const SHIFTS=[];
+for (let dy=-6;dy<=6;dy+=2) for (let dx=-6;dx<=6;dx+=2) SHIFTS.push([dx,dy]);
+function aligned(read, crop, map, match, locks, key) {
+  const lock=locks.get(key);
+  const tries=lock ? [[0,0],[2,0],[-2,0],[0,2],[0,-2]].map(([x,y])=>[lock[0]+x,lock[1]+y]) : SHIFTS;
+  let best=null, shift=null;
+  for (const [dx,dy] of tries) {
+    const result=match(signature(read,crop,([x,y])=>map([x+dx,y+dy])));
+    if (result && (!best || result.distance<best.distance)) { best=result; shift=[dx,dy]; }
+  }
+  if (shift) locks.set(key,shift);
+  return best;
+}
+
+export function closestOwner(query, examples) { return rankOwner(query, examples)?.owner ?? null; }
+
+/** Nearest labelled toggle look, or null when the two closest owners are too alike. */
+export function rankOwner(query, examples) {
+  const ranked=examples.map(({owner,values})=>{
+    let diff=0;
+    for (let i=0;i<values.length;i++) diff+=Math.abs(query[i]-values[i])*(i%4===3 ? .5 : 1);
+    return {owner, distance:diff/values.length/255};
+  }).sort((a,b)=>a.distance-b.distance);
+  const best=ranked[0], other=ranked.find(item=>item.owner!==best.owner);
+  if (!best || best.distance>.16) return null;
+  if (other && other.distance-best.distance<.012) return null;
+  return best;
+}
+
+export const FIELD_CORNERS=[[0,0],[144,0],[144,144],[0,144]];
 
 export function referenceReader(model, project, width, height, goals, baseAnchors) {
   const toImage=point=>project(point).map((v,i)=>v*(i ? height : width));
@@ -204,12 +249,13 @@ export function referenceReader(model, project, width, height, goals, baseAnchor
   const offset=currentCorners.reduce((total, point,i)=>total.map((value,j)=>
     value+(point[j]-camera.corners[i][j])*(j ? height : width)/4),[0,0]);
   const cameraPoint=([x,y])=>[x*scale+offset[0],y*(height/camera.size[1])+offset[1]];
-  let read;
+  let read, boxesNow=[];
+  const locks=new Map();
 
   return {
     label:calibrated ? camera.name : "Three-event scoring references",
     calibrated,
-    use(canvas) { read=pixelReader(canvas); },
+    use(canvas, boxes=[]) { read=pixelReader(canvas); boxesNow=boxes; },
     stack(id, index, previous, boxes, geometric) {
       const goal=camera.goals.find(g=>g.id===id);
       if (calibrated && camera.unreadableGoals.includes(id)) return null;
@@ -217,8 +263,9 @@ export function referenceReader(model, project, width, height, goals, baseAnchor
         anchor ? [anchor.x,anchor.y+anchor.unit*2] : toImage(goals[index].point);
       if (calibrated) {
         const examples=camera.references[id];
-        const nearest=examples.length && !blocked(...point,boxes,width,height) ?
-          closestCounts(signature(read,goal.crop,cameraPoint),examples,goal,false) : null;
+        const nearest=!examples.length || blocked(...point,boxes,width,height) ? null :
+          camera.kind==="scoring-camera" ? aligned(read,goal.crop,cameraPoint,sig=>closestCounts(sig,examples,goal,false),locks,id) :
+          closestCounts(signature(read,goal.crop,cameraPoint),examples,goal,false);
         if (nearest?.distance<=.13) return adoptCounts(nearest.counts,previous);
         const column=camera.columns[id];
         const measured=column && bands(read,column,cameraPoint,boxes,width,height);
@@ -262,6 +309,13 @@ export function referenceReader(model, project, width, height, goals, baseAnchor
       return null;
     },
     toggle(wall, samples) {
+      if (calibrated && camera.toggleReferences) {
+        const crop=camera.toggleCrops?.[wall], examples=camera.toggleReferences[wall];
+        if (!crop || !examples?.length) return null;
+        const center=cameraPoint([(crop[0]+crop[2])/2,(crop[1]+crop[3])/2]);
+        if (blocked(...center,boxesNow,width,height)) return null;
+        return aligned(read,crop,cameraPoint,sig=>rankOwner(sig,examples),locks,wall)?.owner ?? null;
+      }
       if (!calibrated) {
         if (!samples) return null;
         const [a,b]=[samples[0],samples.at(-1)];
