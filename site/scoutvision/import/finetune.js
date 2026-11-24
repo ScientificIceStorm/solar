@@ -14,7 +14,9 @@ import {detect, loadScript, modelManifest, overlap, suppress} from "./detector.j
 import {access} from "./storage.js?v=train2";
 
 // Tunable from the console for experiments; defaults chosen on held-out Mall of America frames.
-export const settings = {steps:150, batch:4, rate:2e-4, checkEvery:10, topk:10};
+// Steps scale with the number of training frames (about `epochs` passes over them).
+export const settings = {epochs:15, minSteps:150, maxSteps:900, checks:15, batch:4, rate:2e-4, topk:10,
+  cacheMB:320, maxHeld:40};
 const THRESHOLDS = [.10, .14, .18, .22, .26, .30, .35, .40, .50, .60];
 const BINS = 16;
 const headId = modelName => "detector-head:" + modelName;
@@ -229,7 +231,7 @@ function score(frames, predictions) {
   frames.forEach((frame, i) => {
     const {scores, boxes} = predictions[i];
     THRESHOLDS.forEach((threshold, k) => {
-      const counts = countMatches(decode(frame.raw, scores, boxes, threshold), frame.labels);
+      const counts = countMatches(decode(frame.geometry, scores, boxes, threshold), frame.labels);
       for (const key in counts) totals[k][key] += counts[key];
     });
   });
@@ -237,12 +239,49 @@ function score(frames, predictions) {
   return {...totals[best], threshold:THRESHOLDS[best], f1:f1(totals[best])};
 }
 
-async function measure(tf, W, frames, grid) {
+async function measure(tf, W, frames, grid, store) {
   const predictions = [];
   for (let i = 0; i < frames.length; i += settings.batch) {
-    predictions.push(...await predict(tf, W, frames.slice(i, i + settings.batch).map(f => f.raw), grid));
+    const raws = [];
+    for (const frame of frames.slice(i, i + settings.batch)) raws.push(await store.load(frame));
+    predictions.push(...await predict(tf, W, raws, grid));
   }
   return score(frames, predictions);
+}
+
+// Feature maps are ~6 MB per frame, so only `cacheMB` worth stay in memory; anything else is
+// recomputed from its image when needed. Held-out frames are checked repeatedly, so they are
+// pinned first.
+function frameStore(choice) {
+  const budget = settings.cacheMB * 1e6, pinned = new Map(), recent = new Map();
+  let bytes = 0;
+  const sizeOf = raw => raw.features.reduce((total, f) => total + f.data.byteLength, 0) + raw.boxes.byteLength + raw.scores.byteLength;
+  const store = {backend:null};
+  async function compute(frame) {
+    const bitmap = await createImageBitmap(frame.sample.image);
+    try {
+      const result = await detect(bitmap, .18, choice, {raw:true});
+      store.backend = result.backend;
+      return result;
+    } finally { bitmap.close(); }
+  }
+  return Object.assign(store, {
+    async load(frame) {
+      if (pinned.has(frame)) return pinned.get(frame);
+      if (recent.has(frame)) { const raw = recent.get(frame); recent.delete(frame); recent.set(frame, raw); return raw; }
+      const {raw} = await compute(frame);
+      const n = sizeOf(raw);
+      if (frame.held && bytes + n <= budget / 2) { pinned.set(frame, raw); bytes += n; return raw; }
+      while (bytes + n > budget && recent.size) {
+        const [oldest, value] = recent.entries().next().value;
+        recent.delete(oldest);
+        bytes -= sizeOf(value);
+      }
+      if (bytes + n <= budget) { recent.set(frame, raw); bytes += n; }
+      return raw;
+    },
+    compute,
+  });
 }
 
 function split(samples) {
@@ -261,7 +300,7 @@ function random(seed) {
   return () => ((state = Math.imul(state ^ state >>> 15, 2246822507) + 1013904223 >>> 0) / 4294967296);
 }
 
-async function fit(tf, manifest, blob, frames, grid, steps, onCheck) {
+async function fit(tf, manifest, blob, frames, grid, steps, store, checkEvery, onCheck) {
   const parts = unpack(manifest, blob);
   const W = Object.fromEntries(Object.entries(parts).map(([name, {shape, values}]) => [name, tf.variable(tf.tensor(values, shape))]));
   const optimizer = tf.train.adam(settings.rate);
@@ -270,11 +309,14 @@ async function fit(tf, manifest, blob, frames, grid, steps, onCheck) {
   try {
     for (let step = 1; step <= steps; step++) {
       if (order.length < settings.batch) order = [...order, ...frames.map((_, i) => i).sort(() => next() - .5)];
-      const batch = order.splice(0, Math.min(settings.batch, frames.length)).map(i => frames[i]);
+      const batch = [];
+      for (const i of order.splice(0, Math.min(settings.batch, frames.length))) {
+        batch.push({raw:await store.load(frames[i]), truth:frames[i].truth});
+      }
       const predictions = await predict(tf, W, batch.map(item => item.raw), grid);
       const targets = batch.map((item, b) => assign(predictions[b], item.truth, grid));
       optimizer.minimize(() => loss(tf, W, batch, grid, targets), false, Object.values(W));
-      if (onCheck && step % settings.checkEvery === 0) await onCheck(step, W);
+      if (onCheck && step % checkEvery === 0) await onCheck(step, W);
       await pause();
     }
     return Object.fromEntries(Object.entries(W).map(([name, variable]) => [name, variable.dataSync().slice()]));
@@ -300,32 +342,44 @@ export async function trainDetector(samples, choice, update) {
   const blob = await baseHead(manifest);
   const grid = anchors(manifest.features);
   const {train, validation, heldOutClip} = split(samples);
+  // Checking costs time on every check, so at most `maxHeld` frames (evenly spread) are held
+  // out; the rest go into training.
+  const keep = new Set(validation.filter((_, i) =>
+    validation.length <= settings.maxHeld || Math.floor(i * settings.maxHeld / validation.length) !==
+      Math.floor((i - 1) * settings.maxHeld / validation.length)));
+  const ordered = [...train, ...validation.filter(sample => !keep.has(sample)), ...validation.filter(sample => keep.has(sample))];
+  const store = frameStore(choice);
   const frames = [];
-  for (const [index, sample] of [...train, ...validation].entries()) {
-    const bitmap = await createImageBitmap(sample.image);
-    try {
-      const result = await detect(bitmap, .18, choice, {raw:true});
-      frames.push({raw:result.raw, labels:sample.boxes, truth:sample.boxes.map(box => toLetterbox(result.raw, box)),
-        held:index >= train.length});
-      update("Reading frames", index + 1, train.length + validation.length, result.backend);
-    } finally { bitmap.close(); }
+  for (const [index, sample] of ordered.entries()) {
+    const frame = {sample, labels:sample.boxes, held:keep.has(sample)};
+    const raw = await store.load(frame);
+    frame.geometry = {count:raw.count, letterbox:raw.letterbox};
+    frame.truth = sample.boxes.map(box => toLetterbox(raw, box));
+    frames.push(frame);
+    update("Reading frames", index + 1, ordered.length, store.backend);
   }
   const trainFrames = frames.filter(frame => !frame.held), held = frames.filter(frame => frame.held);
   if (!trainFrames.some(frame => frame.labels.length)) throw new Error("Save more reviewed frames with visible robots before training.");
+  const steps = Math.max(settings.minSteps, Math.min(settings.maxSteps,
+    Math.round(settings.epochs * trainFrames.length / settings.batch)));
+  const checkEvery = Math.max(10, Math.round(steps / settings.checks));
   const baseWeights = unpack(manifest, blob);
   const baseVariables = Object.fromEntries(Object.entries(baseWeights).map(([name, {shape, values}]) => [name, tf.tensor(values, shape)]));
-  const base = await measure(tf, baseVariables, held, grid);
+  const base = await measure(tf, baseVariables, held, grid, store);
   Object.values(baseVariables).forEach(tensor => tensor.dispose());
   let best = {...base, step:0};
-  await fit(tf, manifest, blob, trainFrames, grid, settings.steps, async (step, W) => {
-    const result = await measure(tf, W, held, grid);
+  await fit(tf, manifest, blob, trainFrames, grid, steps, store, checkEvery, async (step, W) => {
+    const result = await measure(tf, W, held, grid, store);
     if (result.f1 > best.f1 + .005) best = {...result, step};
-    update("Training", step, settings.steps, tf.getBackend());
+    update("Training", step, steps, tf.getBackend());
   });
   let saved = null;
   if (best.step > 0) {
-    update("Final pass on all frames", 0, best.step, tf.getBackend());
-    const weights = await fit(tf, manifest, blob, frames, grid, best.step, async step => update("Final pass on all frames", step, best.step, tf.getBackend()));
+    // Same number of passes over every reviewed frame as the best held-out checkpoint had.
+    const finalSteps = Math.min(Math.round(settings.maxSteps * 1.5), Math.round(best.step * frames.length / trainFrames.length));
+    update("Final pass on all frames", 0, finalSteps, tf.getBackend());
+    const weights = await fit(tf, manifest, blob, frames, grid, finalSteps, store, 10,
+      async step => update("Final pass on all frames", step, finalSteps, tf.getBackend()));
     saved = {id:headId(manifest.name), kind:"detector-head", model:manifest.name, modelBytes:manifest.bytes, choice, format:"yolo-head-v1",
       threshold:best.threshold, weights:pack(manifest, weights), frames:frames.length, created:Date.now(),
       validation:{base, trained:{matched:best.matched, detected:best.detected, expected:best.expected,
@@ -333,7 +387,7 @@ export async function trainDetector(samples, choice, update) {
     await access("models", "put", saved);
     heads.delete(choice);
   }
-  return {base, trained:best, saved:Boolean(saved), checked:held.length, heldOutClip, frames:frames.length};
+  return {base, trained:best, saved:Boolean(saved), checked:held.length, heldOutClip, frames:frames.length, steps};
 }
 
 const heads = new Map();
@@ -363,4 +417,4 @@ export async function forgetHead(choice) {
 }
 
 // Internals, exposed for console experiments (see tools/eval_browser_detector.py for the offline side).
-export const debug = {tensorflow, baseHead, unpack, anchors, predict, assign, measure, fit, split, toLetterbox, score};
+export const debug = {tensorflow, baseHead, unpack, anchors, predict, assign, measure, fit, split, toLetterbox, score, frameStore};
