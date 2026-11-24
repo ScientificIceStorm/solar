@@ -2,8 +2,8 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Match studio · ScoutVision</title>
 <link rel="stylesheet" href="/scoutvision/dashboard.css">
-<link rel="stylesheet" href="/scoutvision/import/studio.css?v=load5">
-<script type="module" src="/scoutvision/import/studio.js?v=load5"></script></head>
+<link rel="stylesheet" href="/scoutvision/import/studio.css?v=load6">
+<script type="module" src="/scoutvision/import/studio.js?v=load6"></script></head>
 <body class="sv-body"><div class="sv-shell">
 <aside class="sv-sidebar">
 <a class="sv-brand" href="/scoutvision/"><span>ScoutVision<small>by SolarScout</small></span></a>
@@ -11,7 +11,7 @@
 <div class="sv-foot"><a href="/">← Solar</a></div>
 </aside>
 <main class="sv-main">
-<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Your footage stays in this browser.</p><p class="hint">Build 2026-11-24 · load5</p></div></header>
+<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Your footage stays in this browser.</p><p class="hint">Build 2026-11-24 · load6</p></div></header>
 <div class="studio-mode" role="group" aria-label="Studio mode"><button class="sv-secondary" id="mode-analyze" aria-pressed="true" type="button" disabled>Analyze a match</button><button class="sv-secondary" id="mode-review" aria-pressed="false" type="button" disabled>Review &amp; train</button></div>
 <noscript><p>The Match studio requires JavaScript for video analysis and training.</p></noscript>
 <div class="studio-grid">
@@ -88,5 +88,15 @@
 <p id="scoring-status" class="result-status" role="status"></p>
 </section>
 </div>
+<section id="check-card" class="sv-card studio-lower" hidden>
+<div class="review-top"><h2 id="check-title">Check the scoring</h2><span id="check-when" class="hint"></span></div>
+<p class="hint">Seven quick checks per match. Each shows a couple of goals and all four toggles at one moment, filled in with what the replay read. Fix any pin count or toggle that's wrong, or tick <em>Can't see</em> if it's blocked. Your answers teach ScoutVision this camera, then you can rebuild the replay with them.</p>
+<div id="check-goals" class="check-grid"></div>
+<div id="check-toggles" class="check-grid"></div>
+<div class="tool-row"><button type="button" class="sv-primary" id="check-save" disabled>Save and next</button><button type="button" class="sv-secondary" id="check-skip" disabled>Skip this one</button><button type="button" class="sv-secondary" id="check-finish" disabled>Finish and learn</button><button type="button" class="sv-secondary" id="check-close">Close</button></div>
+<progress id="check-progress" max="100" hidden aria-label="Scoring check progress"></progress>
+<p id="check-status" class="result-status" role="status"></p>
+<div class="tool-row" id="check-after" hidden><button type="button" class="sv-primary" id="check-rebuild">Rebuild replay with your answers</button></div>
+</section>
 <section id="imported-matches" class="sv-card studio-lower"><h2>Imported matches</h2><ul id="library" class="library"></ul><p id="library-status" class="hint"></p></section>
 </main></div></body></html>

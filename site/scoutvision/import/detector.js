@@ -195,7 +195,7 @@ const context = inferenceCanvas.getContext("2d", {willReadFrequently: true});
  */
 export async function detect(frame, minimum = .20, choice = defaultDetector, options = {}) {
   if (choice === "speedway") {
-    const {detectSpeedway} = await import("./speedway.js?v=load5");
+    const {detectSpeedway} = await import("./speedway.js?v=load6");
     return detectSpeedway(frame, minimum);
   }
   const {ort, session, name, manifest} = await detector(choice);

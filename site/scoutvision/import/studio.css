@@ -43,3 +43,10 @@ details summary { cursor:pointer; font-size:12px; font-weight:620; margin-bottom
 .score-row .studio-check{white-space:nowrap;font-size:.82rem}
 .score-row .studio-field{display:flex;align-items:center;gap:.5rem;margin:0;white-space:nowrap}
 .score-red{color:#ff8c83}.score-blue{color:#6bddff}.score-yellow{color:#ffcf68}
+
+.check-grid{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}
+.check-tile{display:grid;gap:6px;justify-items:start;padding:8px;border-radius:8px;background:rgba(255,255,255,.04)}
+.check-tile canvas{border-radius:6px;background:#090b10;max-width:100%}
+.check-counts{display:flex;gap:6px}
+.check-toggle select{width:100%}
+.check-video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}

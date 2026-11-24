@@ -1,9 +1,10 @@
-import {access} from "./storage.js?v=load5";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load5";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load5";
-import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load5";
-import {originalScoringReplay} from "./scoring-model.js?v=load5";
-import {setupScoring} from "./scoring-studio.js?v=load5";
+import {access} from "./storage.js?v=load6";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load6";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load6";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load6";
+import {originalScoringReplay} from "./scoring-model.js?v=load6";
+import {setupScoring} from "./scoring-studio.js?v=load6";
+import {setupScoringCheck} from "./scoring-check.js?v=load6";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -15,7 +16,7 @@ const cornerNames = ["top-left corner", "top-right corner", "bottom-right corner
 let file, objectUrl, mode = "analyze", busy = false, activeJob, calibratedAt, reviewAt;
 let boxes = [], selectedBox = -1, drawing, pendingBox, confirmed = [], fixtures = [];
 let officialFinal, officialMatch, scheduleCount = 0;
-let rebuilding, scoring;
+let rebuilding, scoring, scoringCheck;
 
 const seconds = id => $(id).valueAsNumber;
 const rounded = value => +value.toFixed(3);
@@ -345,7 +346,8 @@ $("match-form").onsubmit=async event=>{
     const link=document.createElement("a");
     link.href="/scoutvision/replay/?id="+id;
     link.textContent="Open 3D replay →";
-    $("run-status").replaceChildren(link);
+    $("run-status").replaceChildren(link, document.createTextNode(" · Check the scoring below to make it more accurate."));
+    scoringCheck.open(id).catch(error=>status("check-status",error.message));
   } catch(error) {
     status("run-status",current.signal.aborted?"Analysis canceled.":error.name==="QuotaExceededError"?
       "The browser is out of storage. Remove an imported replay or choose a smaller video.":error.message);
@@ -524,7 +526,10 @@ async function refreshLibrary(){
         try { await access("replays","delete",id); await refreshLibrary(); }
         catch(error) { status("library-status",error.message); }
       };
-      info.append(link,detail); actions.append(rebuild,remove); row.append(info,actions);
+      const check=document.createElement("button");
+      check.type="button"; check.textContent="Check scoring"; check.className="sv-secondary";
+      check.onclick=()=>scoringCheck.open(id).catch(error=>status("library-status",error.message));
+      info.append(link,detail); actions.append(rebuild,check,remove); row.append(info,actions);
       return row;
     }));
     status("library-status",items.length?"":"No browser replays saved yet.");
@@ -556,6 +561,7 @@ scoring = setupScoring({
   $, status, review, video, isBusy:()=>busy, setBusy:value=>{ busy=value; controls(); },
   clip:()=>sourceKey(), clipName:()=>file?.name, at:()=>reviewAt, marks, wallSelect:$("red-wall"),
 });
+scoringCheck = setupScoringCheck({$, status, setBusy:value=>{ busy=value; controls(); }, onRebuilt:refreshLibrary});
 controls();
 showDetector();
 refreshHeads();

@@ -1,4 +1,4 @@
-import {access} from "../import/storage.js?v=load5";
+import {access} from "../import/storage.js?v=load6";
 
 const status = document.getElementById("browser-replay-loading");
 const key = new URLSearchParams(location.search).get("id");

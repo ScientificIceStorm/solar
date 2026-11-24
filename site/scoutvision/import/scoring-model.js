@@ -1,4 +1,4 @@
-import {access} from "./storage.js?v=load5";
+import {access} from "./storage.js?v=load6";
 
 const COLORS = ["red", "blue", "yellow"];
 const OWNERS = {unknown:null, neutral:0, red:1, blue:2};

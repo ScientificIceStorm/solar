@@ -1,7 +1,7 @@
-import {detect, isYolo, report, suppress} from "./detector.js?v=load5";
-import {loadHead} from "./finetune.js?v=load5";
-import {buildScoring} from "./scoring.js?v=load5";
-import {scoringReferences} from "./scoring-model.js?v=load5";
+import {detect, isYolo, report, suppress} from "./detector.js?v=load6";
+import {loadHead} from "./finetune.js?v=load6";
+import {buildScoring} from "./scoring.js?v=load6";
+import {scoringReferences} from "./scoring-model.js?v=load6";
 
 const square = [[0,0], [144,0], [144,144], [0,144]];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
