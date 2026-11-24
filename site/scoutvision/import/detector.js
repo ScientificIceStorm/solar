@@ -48,11 +48,42 @@ export function suppress(boxes, limit = 12) {
   return selected;
 }
 
-export async function downloadModel(prefix, count) {
+// The page shows what the detector is doing while it loads (download progress, GPU start-up),
+// so a slow first visit never looks frozen.
+let reporter = () => {};
+export function onLoadingStatus(callback) { reporter = callback || (() => {}); }
+const report = text => { try { reporter(text); } catch { /* the page may have moved on */ } };
+
+// A GPU start-up that never settles (seen on some phones and Safari builds) must not hang the
+// page: each backend gets a time limit, then the next one is tried.
+const GPU_START_LIMIT = 30000;
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })])
+    .finally(() => clearTimeout(timer));
+}
+
+export async function downloadModel(prefix, count, label = "robot detector") {
+  const received = new Array(count).fill(0), expected = new Array(count).fill(0);
+  const megabytes = values => (values.reduce((a, b) => a + b, 0) / 1e6).toFixed(0);
   const parts = await Promise.all(Array.from({length: count}, async (_, index) => {
     const response = await fetch(assets + `${prefix}-${index + 1}.bin`);
-    if (!response.ok) throw new Error("Could not load the selected robot detector. Try again.");
-    return new Uint8Array(await response.arrayBuffer());
+    if (!response.ok) throw new Error("Could not load the selected robot detector. Check your connection and try again.");
+    expected[index] = +response.headers.get("content-length") || 0;
+    if (!response.body?.getReader) return new Uint8Array(await response.arrayBuffer());
+    const reader = response.body.getReader(), chunks = [];
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received[index] += value.length;
+      const total = expected.every(Boolean) ? ` of ${megabytes(expected)} MB` : " MB";
+      report(`Downloading the ${label}: ${megabytes(received)}${total} (first time only)…`);
+    }
+    const part = new Uint8Array(received[index]);
+    let offset = 0;
+    for (const chunk of chunks) { part.set(chunk, offset); offset += chunk.length; }
+    return part;
   }));
   const bytes = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
   let offset = 0;
@@ -88,13 +119,16 @@ export async function webgpuRuntime(bytes, size) {
   })();
   let session, input;
   try {
-    const ort = await webgpuLibrary;
-    if (!ort) return null;
-    session = await ort.InferenceSession.create(bytes, {executionProviders:["webgpu","wasm"]});
-    input = new ort.Tensor("float32",new Float32Array(3 * size * size),[1,3,size,size]);
-    const outputs = await session.run({[session.inputNames[0]]:input});
-    Object.values(outputs).forEach(tensor=>tensor.dispose());
-    return {ort, session, name:"webgpu"};
+    report("Starting the detector on your GPU (WebGPU, up to 30 s the first time)…");
+    return await withTimeout((async () => {
+      const ort = await webgpuLibrary;
+      if (!ort) return null;
+      session = await ort.InferenceSession.create(bytes, {executionProviders:["webgpu","wasm"]});
+      input = new ort.Tensor("float32",new Float32Array(3 * size * size),[1,3,size,size]);
+      const outputs = await session.run({[session.inputNames[0]]:input});
+      Object.values(outputs).forEach(tensor=>tensor.dispose());
+      return {ort, session, name:"webgpu"};
+    })(), GPU_START_LIMIT, "WebGPU did not start in time.");
   } catch (error) {
     console.info("ScoutVision WebGPU detector unavailable", error.message);
     await session?.release().catch(()=>{});
@@ -126,17 +160,24 @@ function detector(choice) {
     if (webgpu) return {...webgpu, manifest};
     let runner;
     try {
-      runner = await runtime("webgl", bytes);
-      const input = new runner.ort.Tensor("float32", new Float32Array(3 * size * size), [1, 3, size, size]);
-      try {
-        const outputs = await runner.session.run({[runner.session.inputNames[0]]:input});
-        Object.values(outputs).forEach(tensor => tensor.dispose());
-      } finally { input.dispose(); }
+      report("WebGPU is unavailable here. Starting the detector with WebGL…");
+      runner = await withTimeout((async () => {
+        const started = await runtime("webgl", bytes);
+        runner = started;
+        const input = new started.ort.Tensor("float32", new Float32Array(3 * size * size), [1, 3, size, size]);
+        try {
+          const outputs = await started.session.run({[started.session.inputNames[0]]:input});
+          Object.values(outputs).forEach(tensor => tensor.dispose());
+        } finally { input.dispose(); }
+        return started;
+      })(), GPU_START_LIMIT, "WebGL did not start in time.");
     } catch (error) {
       console.info("ScoutVision WebGL detector unavailable", error.message);
       await runner?.session.release().catch(()=>{});
+      report("No usable GPU found. Starting the detector on the CPU; analysis will be slower…");
       runner = await runtime("wasm", bytes);
     }
+    report("Detector ready. Reading the first frame…");
     return {...runner, manifest};
   })().catch(error => { loadingModels.delete(choice); throw error; });
   loadingModels.set(choice, loading);

@@ -1,5 +1,5 @@
 import {access} from "./storage.js?v=train2";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo} from "./detector.js?v=train2";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=train2";
 import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=train2";
 import {analyze, seekFrame} from "./tracking.js?v=train2";
 import {originalScoringReplay} from "./scoring-model.js?v=train2";
@@ -319,6 +319,7 @@ $("match-form").onsubmit=async event=>{
   $("progress").hidden=false;
   $("progress").value=0;
   status("run-status",`Loading ${detectorNames[meta.detector]}…`);
+  onLoadingStatus(text=>status("run-status",text));
   try {
     const data=await analyze(video,meta,(done,total,backend)=>{
       $("progress").value=Math.round(done/total*100);
@@ -336,6 +337,7 @@ $("match-form").onsubmit=async event=>{
     status("run-status",current.signal.aborted?"Analysis canceled.":error.name==="QuotaExceededError"?
       "The browser is out of storage. Remove an imported replay or choose a smaller video.":error.message);
   } finally {
+    onLoadingStatus(null);
     activeJob=undefined; busy=false;
     $("progress").hidden=true;
     controls();
@@ -379,13 +381,14 @@ async function reviewFrame(at, test = false){
     } else {
       const selected=selectedDetector();
       status("review-status",`Loading ${detectorNames[selected]}…`);
+      onLoadingStatus(text=>status("review-status",text));
       const head = activeHead(selected);
       const result=await detect(review, .18, selected, {head});
       boxes=result.boxes;
       status("review-status",`${reviewAt}s · ${boxes.length} suggestions · ${detectorNames[selected]}${head?" + your training":""} · ${backendLabel(result.backend)}`);
     }
   } catch(error) { status("review-status",error.message); }
-  finally { busy=false; drawReview(); scoring?.frameChanged(); }
+  finally { onLoadingStatus(null); busy=false; drawReview(); scoring?.frameChanged(); }
 }
 $("review-frame").onclick=()=>reviewFrame(video.currentTime);
 $("test-frame").onclick=()=>reviewFrame(video.currentTime, true);
@@ -437,6 +440,7 @@ $("train").onclick=async()=>{
   $("training-progress").value=0;
   $("training-progress").hidden=false;
   status("training-status","Preparing reviewed frames…");
+  onLoadingStatus(text=>status("training-status",text));
   try {
     const result=await trainDetector(confirmed,choice,(stage,done,total,backend)=>{
       $("training-progress").value=Math.round(100 * done / (total || 1));
@@ -455,7 +459,7 @@ $("train").onclick=async()=>{
         "Review more frames where the model misses robots, then train again.");
     }
   } catch(error) { status("training-status",error.message); }
-  finally { busy=false; $("training-progress").hidden=true; controls(); }
+  finally { onLoadingStatus(null); busy=false; $("training-progress").hidden=true; controls(); }
 };
 $("forget-training").onclick=async()=>{
   const choice=trainingDetector();
