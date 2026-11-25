@@ -513,7 +513,7 @@ function replayButton(match) {
   if (!match.replay) {
     return match.webcast ? '<span class="webcast-fallback" title="Full event webcast">' +
       externalLink(match.webcast, '▶') + '</span>' :
-      '<button type="button" class="play-match no-replay" disabled aria-label="Replay unavailable" title="Replay unavailable">▶</button>';
+      '';
   }
   return '<button type="button" class="play-match" data-replay="' + escape(match.replay) +
     '" data-match-title="' + escape(match.name) + '" aria-label="Play ' +
@@ -814,7 +814,8 @@ function renderEvent(data, loadExtras) {
     '<button type="button" class="metrics-help" id="showMetrics" aria-haspopup="dialog" aria-label="Explain standings metrics">?</button></div>' +
     '</div><div id="eventContent"></div>';
   const decimalCell = (value) => '<td class="numeric">' + (Number.isFinite(value) ? oneDecimal(value) : '—') + '</td>';
-  const standingsTable = () => standings.length ? table(
+  const standingsTable = () => standings.length ? (data.standingsSource === 'previous'
+    ? '<p class="status" role="status">Showing the last posted standings while RobotEvents updates them.</p>' : '') + table(
     [['Rank'], ['Team'], ['W–L–T'], ['WP', 'numeric'], ['AP', 'numeric'], ['SP', 'numeric'],
       ['OpenSkill', 'numeric'], ['Rated', 'numeric'], ['OPR', 'numeric'], ['DPR', 'numeric'], ['CCWM', 'numeric']],
     standings.map((row) => '<tr data-team-report="' + escape(row.team.id) + '"><td>' + shown(row.rank) + '</td><td>' +
@@ -827,7 +828,9 @@ function renderEvent(data, loadExtras) {
       '</td><td class="numeric">' + (row.skill?.matches || '—') + '</td>' +
       decimalCell(row.opr) + decimalCell(row.dpr) + decimalCell(row.ccwm) + '</tr>')
   )
-    : '<p class="status">Standings have not been posted.</p>';
+    : '<p class="status">' + (data.standingsSource === 'missing'
+      ? 'Matches have been scored but RobotEvents hasn’t posted standings yet. Solar checks again every minute.'
+      : 'Standings have not been posted.') + '</p>';
   const content = $('eventContent');
   const tabs = ui.detail.querySelector('.detail-tabs');
   disconnectEventIndicator?.();

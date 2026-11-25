@@ -40,38 +40,64 @@
   };
   const box = (x, y, w, h, alpha = 1) => { s.globalAlpha = alpha; s.fillRect(x, y, w, h); };
 
-  // Side view in a 560 x 360 frame. lift: 0 = down, 1 = fully raised.
+  // Side view of an Override robot in a 560 x 360 frame, modelled on a real
+  // competition bot: big wheels behind a patterned skirt, a tall tower braced
+  // with crossing bars, a roller on top, a cylinder mechanism at the back and
+  // a long arm down the front. lift: 0 = arm down at the floor, 1 = arm raised.
   function drawRobot(lift) {
     s.setTransform(1 / GAP, 0, 0, 1 / GAP, 0, 0);
     s.clearRect(0, 0, W, H);
+    s.globalCompositeOperation = "source-over";
     s.fillStyle = s.strokeStyle = "#fff";
     s.lineCap = "round";
-    // Drivetrain: chassis rail, wheels, and the battery/brain block.
-    box(140, 298, 280, 22);
-    for (const x of [176, 280, 384]) { disc(x, 322, 25, .62); disc(x, 322, 9, 1); }
-    box(300, 268, 82, 30, .7);
-    // Base tower.
-    box(236, 196, 26, 104, .9);
-    const L = 96, gap = 30, px = 249, py = 214;
-    const angle = (-18 + 72 * lift) * Math.PI / 180;
-    const dx = L * Math.cos(angle), dy = -L * Math.sin(angle);
-    // Stage one: two parallel bars forward and up to the middle link.
-    const mx = px + dx, my = py + dy;
-    line(px, py, mx, my, 11);
-    line(px, py + gap, mx, my + gap, 11);
-    line(mx, my - 8, mx, my + gap + 8, 13, .9);
-    // Stage two: bars back over the base, so the carriage rises straight up.
-    const cx = mx - dx, cy = my + dy;
-    line(mx, my, cx, cy, 11);
-    line(mx, my + gap, cx, cy + gap, 11);
-    for (const [x, y] of [[px, py], [px, py + gap], [mx, my], [mx, my + gap], [cx, cy], [cx, cy + gap]]) disc(x, y, 9);
-    // Carriage and intake with two rollers, holding a pin.
-    line(cx, cy - 10, cx, cy + gap + 10, 14);
-    box(cx + 4, cy - 2, 86, 18, .85);
-    disc(cx + 92, cy + 7, 15, .7);
-    disc(cx + 92, cy + 27, 11, .55);
-    s.globalAlpha = .75;
-    s.beginPath(); s.moveTo(cx + 118, cy - 18); s.lineTo(cx + 132, cy + 30); s.lineTo(cx + 104, cy + 30); s.closePath(); s.fill();
+    s.lineJoin = "round";
+    // Wheels and chassis rails.
+    for (const x of [176, 282, 388]) { disc(x, 318, 27, .6); disc(x, 318, 8, 1); }
+    box(150, 266, 280, 14);
+    box(150, 284, 280, 8, .8);
+    // Patterned skirt across the bottom front (the waves read as lighter dots).
+    s.globalAlpha = .85;
+    s.beginPath(); s.moveTo(158, 300); s.lineTo(436, 300); s.lineTo(446, 342); s.lineTo(150, 342); s.closePath(); s.fill();
+    s.globalCompositeOperation = "destination-out";
+    for (const offset of [0, 13]) {
+      s.globalAlpha = .55;
+      s.lineWidth = 5;
+      s.beginPath();
+      for (let x = 160; x <= 440; x += 6) s.lineTo(x, 316 + offset + 6 * Math.sin((x + offset * 3) / 26));
+      s.stroke();
+    }
+    s.globalCompositeOperation = "source-over";
+    // Cylinder mechanism at the back, tied into the tower.
+    box(150, 196, 46, 70, .7);
+    s.globalAlpha = .8;
+    s.beginPath(); s.ellipse(173, 196, 23, 8, 0, 0, Math.PI * 2); s.fill();
+    line(196, 214, 236, 206, 7, .9);
+    // Tower: two uprights braced with crossing bars, some running past them.
+    line(236, 266, 236, 70, 12);
+    line(306, 266, 306, 84, 12);
+    for (const [top, bottom] of [[84, 136], [136, 190], [190, 244]]) {
+      line(236, bottom, 306, top, 8, .9);
+      line(306, bottom, 236, top, 8, .9);
+    }
+    line(204, 122, 330, 74, 7, .85);
+    line(200, 170, 236, 156, 7, .85);
+    line(306, 150, 348, 132, 6, .75);
+    // Team plate.
+    box(318, 224, 88, 40, .55);
+    // Roller wheel on top of the tower.
+    disc(306, 70, 19, .95);
+    disc(306, 70, 6, 1);
+    // Long arm from the top of the tower down the front; it swings up and down.
+    const px = 312, py = 92, length = 158;
+    const angle = (58 - 70 * lift) * Math.PI / 180;
+    const ex = px + length * Math.cos(angle), ey = py + length * Math.sin(angle);
+    const nx = -Math.sin(angle) * 9, ny = Math.cos(angle) * 9;
+    line(px, py, ex, ey, 9);
+    line(px + nx, py + ny, ex + nx, ey + ny, 5, .8);
+    disc(px, py, 9);
+    disc(ex + nx / 2, ey + ny / 2, 12, .9);
+    // A thin brace from the chassis up to the arm.
+    line(392, 266, px + (ex - px) * .55, py + (ey - py) * .55, 5, .7);
     // Floor.
     box(40, 348, 480, 3, .45);
   }
