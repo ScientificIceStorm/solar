@@ -3,10 +3,11 @@
 // (the same labels Teach scoring makes), so scoring is trained from every match people check,
 // and the replay can be rebuilt with what was learned.
 
-import {access} from "./storage.js?v=load7";
-import {analyze, seekFrame} from "./tracking.js?v=load7";
-import {goals} from "./scoring.js?v=load7";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load7";
+import {access} from "./storage.js?v=load8";
+import {analyze, seekFrame} from "./tracking.js?v=load8";
+import {goals} from "./scoring.js?v=load8";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load8";
+import {clipId, share, sharingOn} from "./share.js?v=load8";
 
 const ROUNDS = 7;
 const WALL_GOALS = {far:["far-neutral", "far-blue"], left:["left-neutral", "left-red"],
@@ -58,7 +59,7 @@ export function setupScoringCheck(ctx) {
   video.className = "check-video";
   card.append(video);
   const frame = document.createElement("canvas");
-  let entry, rounds = [], index = 0, url, answered = 0;
+  let entry, rounds = [], index = 0, url, answered = 0, shared = 0;
 
   const say = text => status("check-status", text);
   function buttons(working) {
@@ -157,6 +158,9 @@ export function setupScoringCheck(ctx) {
       await access("scoring", "put", {id, clip, clipName:entry.video.name, at, image, corners:entry.setup.corners,
         wall:entry.setup.wall, goals:{...existing?.goals, ...goalAnswers}, toggles:{...existing?.toggles, ...toggles}, source:"check"});
       answered++;
+      share("scoring", image, {corners:entry.setup.corners, wall:entry.setup.wall, goals:goalAnswers, toggles, at,
+        event:entry.event, round:entry.round, teams:entry.data.teams.map(t => t.team), clip:await clipId(clip), source:"check"})
+        .then(result => { if (result === "shared") shared++; });
       index++;
       await show();
     } catch (error) { say(error.message); buttons(false); }
@@ -179,7 +183,7 @@ export function setupScoringCheck(ctx) {
       const camera = results.find(result => result.name.includes(entry.video.name)) || results[0];
       const check = camera?.validation;
       const describe = ({correct, wrong, unsure}) => `${correct} right, ${wrong} wrong, ${unsure} unsure`;
-      say(`Saved ${answered} checks. ScoutVision now has ${camera?.frames ?? answered} labelled moments for this camera` +
+      say(`Saved ${answered} checks${sharingOn() ? ` (${shared} shared to improve ScoutVision for everyone)` : ""}. ScoutVision now has ${camera?.frames ?? answered} labelled moments for this camera` +
         (check ? ` (self-test on held-out moments · goals: ${describe(check.goals)}; toggles: ${describe(check.toggles)})` : "") +
         ". Rebuild the replay to use them. Every match you check makes this camera more accurate.");
       $("check-after").hidden = false;
@@ -231,6 +235,7 @@ export function setupScoringCheck(ctx) {
       rounds = plan(entry.data);
       index = 0;
       answered = 0;
+      shared = 0;
       $("check-after").hidden = true;
       card.hidden = false;
       card.scrollIntoView({behavior:"smooth", block:"start"});

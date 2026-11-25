@@ -1,7 +1,8 @@
 // "Teach scoring" card: label goal stacks and toggles on review frames, then train.
-import {access} from "./storage.js?v=load7";
-import {goals} from "./scoring.js?v=load7";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load7";
+import {access} from "./storage.js?v=load8";
+import {goals} from "./scoring.js?v=load8";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load8";
+import {clipId, share} from "./share.js?v=load8";
 
 const COLOR_NAMES = ["Red", "Blue", "Yellow"];
 const startingCounts = id => id === "midfield" || id.endsWith("neutral") ? [0, 0, 1] : [0, 0, 0];
@@ -187,6 +188,8 @@ export function setupScoring(ctx) {
       const label = {id:ctx.clip() + "#" + ctx.at(), clip:ctx.clip(), clipName:ctx.clipName(), at:ctx.at(),
         image, corners, wall, ...read()};
       await access("scoring", "put", label);
+      share("scoring", image, {corners, wall, goals:label.goals, toggles:label.toggles, at:ctx.at(),
+        clip:await clipId(ctx.clip()), source:"teach"});
       await refresh();
       status("scoring-status", `${ctx.at()}s · Scoring labels saved.`);
     } catch (error) { status("scoring-status", error.message); }

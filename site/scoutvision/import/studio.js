@@ -1,10 +1,11 @@
-import {access} from "./storage.js?v=load7";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load7";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load7";
-import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load7";
-import {originalScoringReplay} from "./scoring-model.js?v=load7";
-import {setupScoring} from "./scoring-studio.js?v=load7";
-import {setupScoringCheck} from "./scoring-check.js?v=load7";
+import {access} from "./storage.js?v=load8";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load8";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load8";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load8";
+import {originalScoringReplay} from "./scoring-model.js?v=load8";
+import {setupScoring} from "./scoring-studio.js?v=load8";
+import {setupScoringCheck} from "./scoring-check.js?v=load8";
+import {clipId, setSharing, share, sharingOn} from "./share.js?v=load8";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -444,6 +445,7 @@ $("save-label").onclick=async()=>{
     const image=await new Promise(resolve=>review.toBlob(resolve,"image/jpeg",.84));
     if(!image) throw new Error("This video frame could not be saved.");
     await access("labels","put",{id:boxID(),clip:sourceKey(),at:reviewAt,image,boxes:boxes.map(({x,y,w,h})=>({x,y,w,h}))});
+    share("robots",image,{boxes:boxes.map(({x,y,w,h})=>({x,y,w,h})),at:reviewAt,clip:await clipId(sourceKey()),source:"review"});
     status("review-status",`${reviewAt}s · Saved ${boxes.length} robot boxes`);
     await labels();
   } catch(error) { status("review-status",error.message); }
@@ -562,6 +564,8 @@ scoring = setupScoring({
   clip:()=>sourceKey(), clipName:()=>file?.name, at:()=>reviewAt, marks, wallSelect:$("red-wall"),
 });
 scoringCheck = setupScoringCheck({$, status, setBusy:value=>{ busy=value; controls(); }, onRebuilt:refreshLibrary});
+$("share-data").checked = sharingOn();
+$("share-data").onchange = () => setSharing($("share-data").checked);
 controls();
 showDetector();
 refreshHeads();
