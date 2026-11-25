@@ -1,4 +1,4 @@
-import {referenceReader} from "./scoring-model.js?v=load6";
+import {referenceReader} from "./scoring-model.js?v=load7";
 
 export const wallPoints = {far:[72,0], left:[0,72], right:[144,72], near:[72,144]};
 const walls = Object.keys(wallPoints);
@@ -120,7 +120,19 @@ function fixedView(frame, image) {
   };
 }
 
-export function buildScoring(frame, project, teams, fps, model) {
+// Keep the order of pins already on a goal and append whatever a checked count adds.
+function ordered(counts, previous) {
+  const remaining=[...counts];
+  const order=previous.filter(color=>remaining[color]-- > 0);
+  remaining.forEach((n,color)=>{ for (let i=0;i<n;i++) order.push(color); });
+  return order;
+}
+
+// anchors: [{frame, goals:{id:[r,b,y]|null}, toggles:{wall:0|1|2|null}}] from "Check the
+// scoring" answers for this video. At those moments the replay takes the person's answer,
+// and holds it against the reader for a few seconds, so a toggle the camera cannot read
+// (for example the far face of the near toggle) still changes when it really did.
+export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
   const {width,height} = frame;
   const image = point => project(point).map((value, i) => value * (i ? height : width));
   const middle = image([72,72])[0];
@@ -179,16 +191,51 @@ export function buildScoring(frame, project, teams, fps, model) {
       actor, actorEvidence:actor ? "track" : null, points:next, ...details});
   }
 
+  const checked=[...anchors].sort((a,b)=>a.frame-b.frame), hold=new Map();
+  let nextCheck=0;
+  const held=(id,frame)=>(hold.get(id) ?? -1)>frame;
+  function applyChecks(frame, positions) {
+    while (nextCheck<checked.length && checked[nextCheck].frame<=frame) {
+      const answer=checked[nextCheck++];
+      goals.forEach((goal,i)=>{
+        const counts=answer.goals?.[goal.id];
+        if (!Array.isArray(counts)) return;
+        hold.set(goal.id,frame+fps*5); pending.delete(goal.id); seen[i]=frame;
+        const previous=stacks[i], current=ordered(counts,previous);
+        if (current.join()===previous.join()) return;
+        const points=score(stacks,ownership);
+        const delta=colorNames.map((_,c)=>current.filter(color=>color===c).length-previous.filter(color=>color===c).length);
+        stacks[i]=current;
+        change(frame,points,goal.point,positions,{title:`Goal ${i+1} ${delta.every(value=>value<=0)?"descore":"stack change"} (your check)`,
+          kind:"stack", goals:[goal.id], wall:null, pinDelta:delta, checked:true,
+          detail:delta.flatMap((value,c)=>value ? [`${value>0?"+":""}${value} ${colorNames[c].toLowerCase()}`] : []).join(" · ")});
+      });
+      walls.forEach((wall,i)=>{
+        const owner=answer.toggles?.[wall];
+        if (!Number.isInteger(owner)) return;
+        hold.set(wall,frame+fps*5); pending.delete(wall); wallSeen[i]=frame;
+        if (owner===ownership[wall]) return;
+        const previous=ownership[wall], points=score(stacks,ownership);
+        ownership[wall]=owner;
+        change(frame,points,wallPoints[wall],positions,{title:`${titled(wall)} toggle changes (your check)`,kind:"toggle",
+          wall,goals:goals.filter(goal=>goal.id.startsWith(wall+"-")).map(goal=>goal.id),pinDelta:null,checked:true,
+          detail:`${["Neutral","Red","Blue"][previous]} to ${["Neutral","Red","Blue"][owner]}`});
+      });
+    }
+  }
+
   return {
     cameraMatches,
     read(canvas, frame, boxes, positions, cameraClear=true) {
       if (frame % fps === 0) checks++;
       if (cameraClear && frame % fps === 0) usableChecks++;
       if (!cameraClear) pending.clear();
+      applyChecks(frame, positions);
       if (frame && cameraClear) {
         const read=pixels(canvas);
         decoder.use(canvas,boxes);
         bases.forEach((base,i)=>{
+          if (held(goals[i].id,frame)) return;
           const previous=stacks[i];
           const geometric=decoder.calibrated ? null : countStack(read,base,boxes,width,height,previous.length);
           const current=decoder.stack(goals[i].id,i,previous,boxes,geometric);
@@ -209,6 +256,7 @@ export function buildScoring(frame, project, teams, fps, model) {
           });
         });
         toggles.forEach((samples,i)=>{
+          if (held(walls[i],frame)) return;
           const wall=walls[i], next=decoder.toggle(wall,samples);
           if (!stable(wall,next)) return;
           wallSeen[i]=frame;

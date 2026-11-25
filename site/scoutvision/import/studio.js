@@ -1,10 +1,10 @@
-import {access} from "./storage.js?v=load6";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load6";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load6";
-import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load6";
-import {originalScoringReplay} from "./scoring-model.js?v=load6";
-import {setupScoring} from "./scoring-studio.js?v=load6";
-import {setupScoringCheck} from "./scoring-check.js?v=load6";
+import {access} from "./storage.js?v=load7";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load7";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load7";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load7";
+import {originalScoringReplay} from "./scoring-model.js?v=load7";
+import {setupScoring} from "./scoring-studio.js?v=load7";
+import {setupScoringCheck} from "./scoring-check.js?v=load7";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -311,7 +311,7 @@ function metadata() {
   return {start,driver,end:Math.min(end,video.duration), event, round, final,
     teams:selected.map((team,i)=>({team,alliance:i<2?"red":"blue"})),
     wall:$("red-wall").value,corners:marks.slice(0,4),robots:marks.slice(4),detector:selectedDetector(),
-    adapted:Boolean(activeHead(selectedDetector()))};
+    adapted:Boolean(activeHead(selectedDetector())), clip:sourceKey()};
 }
 
 $("match-form").onsubmit=async event=>{

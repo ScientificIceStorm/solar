@@ -7,10 +7,10 @@
 // This is the same method that reads the built-in Smoky / Mall of America / Highlander
 // cameras; training here builds the reference set for a camera ScoutVision has never seen.
 
-import {access} from "./storage.js?v=load6";
-import {field} from "./tracking.js?v=load6";
-import {goals, wallPoints} from "./scoring.js?v=load6";
-import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load6";
+import {access} from "./storage.js?v=load7";
+import {field} from "./tracking.js?v=load7";
+import {goals, wallPoints} from "./scoring.js?v=load7";
+import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load7";
 
 export const WALLS = ["far", "left", "right", "near"];
 export const OWNER_NAMES = ["Neutral", "Red", "Blue"];
@@ -31,11 +31,12 @@ export function geometry(corners, wall, width, height) {
     goals: goals.map(goal => {
       const base = px(goal.point), unit = unitAt(goal.point);
       return {id:goal.id, name:goal.name, base:round(base),
-        crop:round([base[0] - 8 * unit, base[1] - 24 * unit, base[0] + 8 * unit, base[1] + 2 * unit])};
+        // ~3 ft above the base so the tallest stacks fit (it used to stop at 2 ft and cut them off).
+        crop:round([base[0] - 8 * unit, base[1] - 36 * unit, base[0] + 8 * unit, base[1] + 2 * unit])};
     }),
     toggleCrops: Object.fromEntries(WALLS.map(wall => {
       const point = px(wallPoints[wall]), unit = unitAt(wallPoints[wall]);
-      return [wall, round([point[0] - 11 * unit, point[1] - 13 * unit, point[0] + 11 * unit, point[1] + 4 * unit])];
+      return [wall, round([point[0] - 15 * unit, point[1] - 17 * unit, point[0] + 15 * unit, point[1] + 6 * unit])];
     })),
   };
 }

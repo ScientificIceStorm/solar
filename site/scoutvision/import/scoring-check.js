@@ -3,10 +3,10 @@
 // (the same labels Teach scoring makes), so scoring is trained from every match people check,
 // and the replay can be rebuilt with what was learned.
 
-import {access} from "./storage.js?v=load6";
-import {analyze, seekFrame} from "./tracking.js?v=load6";
-import {goals} from "./scoring.js?v=load6";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load6";
+import {access} from "./storage.js?v=load7";
+import {analyze, seekFrame} from "./tracking.js?v=load7";
+import {goals} from "./scoring.js?v=load7";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load7";
 
 const ROUNDS = 7;
 const WALL_GOALS = {far:["far-neutral", "far-blue"], left:["left-neutral", "left-red"],
@@ -39,7 +39,7 @@ function plan(data) {
 
 // Draw a crop of the frame, padded, scaled up so stacked pins are easy to count.
 function zoom(frame, [left, top, right, bottom], width) {
-  const padX = (right - left) * .25, padY = (bottom - top) * .12;
+  const padX = (right - left) * .3, padY = (bottom - top) * .15;
   const x = Math.max(0, left - padX), y = Math.max(0, top - padY);
   const w = Math.min(frame.width, right + padX) - x, h = Math.min(frame.height, bottom + padY) - y;
   const canvas = document.createElement("canvas");
@@ -192,7 +192,8 @@ export function setupScoringCheck(ctx) {
     ctx.setBusy(true);
     $("check-progress").hidden = false;
     const meta = {...entry.setup, event:entry.event, round:entry.round, teams:entry.data.teams,
-      final:entry.data.finalScore ?? null, detector:entry.data.robotDetector || "override", adapted:Boolean(entry.data.robotDetectorTrained)};
+      final:entry.data.finalScore ?? null, detector:entry.data.robotDetector || "override", adapted:Boolean(entry.data.robotDetectorTrained),
+      clip:[entry.video.name, entry.video.size, entry.video.lastModified].join(":")};
     try {
       const data = await analyze(video, meta, (done, total, backend) => {
         $("check-progress").value = Math.round(100 * done / total);

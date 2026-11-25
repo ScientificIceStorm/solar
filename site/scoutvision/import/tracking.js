@@ -1,7 +1,8 @@
-import {detect, isYolo, report, suppress} from "./detector.js?v=load6";
-import {loadHead} from "./finetune.js?v=load6";
-import {buildScoring} from "./scoring.js?v=load6";
-import {scoringReferences} from "./scoring-model.js?v=load6";
+import {detect, isYolo, report, suppress} from "./detector.js?v=load7";
+import {loadHead} from "./finetune.js?v=load7";
+import {buildScoring} from "./scoring.js?v=load7";
+import {scoringReferences} from "./scoring-model.js?v=load7";
+import {access} from "./storage.js?v=load7";
 
 const square = [[0,0], [144,0], [144,144], [0,144]];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -205,6 +206,10 @@ export async function analyze(video, meta, update, signal) {
   const seeds = placement.seeds;
   const duration = meta.end - meta.start, fps = 20;
   const last = Math.round(duration * fps);
+  // "Check the scoring" answers for this video become fixed points in the scoring timeline.
+  const anchors = meta.clip ? (await access("scoring", "getAll").catch(() => []))
+    .filter(label => label.clip === meta.clip && label.at >= meta.start && label.at <= meta.end)
+    .map(label => ({frame:Math.round((label.at - meta.start) * fps), goals:label.goals, toggles:label.toggles})) : [];
   const tracks = Object.fromEntries(meta.teams.map(entry => [entry.team, []]));
   const slots = seeds.map(xy => ({xy, velocity:[0,0], missed:0}));
   const frame = document.createElement("canvas"), crop = document.createElement("canvas");
@@ -219,7 +224,7 @@ export async function analyze(video, meta, update, signal) {
     await seekFrame(video, meta.start + indexFrame / fps, frame, signal);
     if (!observed) {
       report("Setting up goal and toggle reading…");
-      scoring = buildScoring(frame, image, meta.teams, fps, scoringModel);
+      scoring = buildScoring(frame, image, meta.teams, fps, scoringModel, anchors);
       report("Loading the robot detector…");
     }
     const cameraClear = !observed || scoring.cameraMatches(frame);
