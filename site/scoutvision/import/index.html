@@ -2,16 +2,39 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Match studio · ScoutVision</title>
 <link rel="stylesheet" href="/scoutvision/dashboard.css">
-<link rel="stylesheet" href="/scoutvision/import/studio.css?v=load8">
-<script type="module" src="/scoutvision/import/studio.js?v=load8"></script></head>
-<body class="sv-body"><div class="sv-shell">
+<link rel="stylesheet" href="/scoutvision/import/studio.css?v=load9">
+<script type="module" src="/scoutvision/import/studio.js?v=load9"></script><link rel="stylesheet" href="/scoutvision/solar-shell.css?v=solar1">
+<link rel="stylesheet" href="/scoutvision/solar-theme.css?v=solar1">
+<script src="/profile.js" defer></script>
+</head>
+<body class="sv-body">
+<header class="masthead">
+<a class="brand" href="/" aria-label="Solar home">solar<span class="brand-dot">.</span></a>
+<nav class="top-nav" aria-label="Explore Solar">
+<a href="/#skills">Skills</a><a href="/#teams">Teams</a><a href="/#insights">Insights</a><a href="/#events">Events</a><a href="/#map">Map</a>
+<a class="scoutvision-link" href="/scoutvision/" aria-current="page">ScoutVision <span class="scoutvision-beta">Beta</span></a>
+<button id="profileToggle" type="button" aria-expanded="false" aria-controls="profilePanel">Profile</button>
+<section id="profilePanel" hidden aria-label="Profile">
+<button type="button" id="profileGoogle">Continue with Google</button>
+<form id="profileForm">
+<label>Email<input name="email" type="email" autocomplete="email" required></label>
+<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit" value="login">Log in</button>
+<button type="submit" value="signup">Sign up</button>
+</form>
+<button type="button" id="profileLogout" hidden>Sign out</button>
+<p id="profileStatus" role="status"></p>
+</section>
+</nav>
+</header>
+<div class="sv-shell">
 <aside class="sv-sidebar">
 <a class="sv-brand" href="/scoutvision/"><span>ScoutVision<small>by SolarScout</small></span></a>
 <nav class="sv-nav" aria-label="ScoutVision"><a href="/scoutvision/">Overview</a><a href="/scoutvision/#analytics">Analytics</a><a href="/scoutvision/import/" aria-current="page">Match studio</a></nav>
 <div class="sv-foot"><a href="/">← Solar</a></div>
 </aside>
 <main class="sv-main">
-<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Your video stays in this browser; if you turn on sharing, only the frames you check and your answers are sent to improve ScoutVision.</p><p class="hint">Build 2026-11-24 · load8</p></div></header>
+<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Your video stays in this browser; if you turn on sharing, only the frames you check and your answers are sent to improve ScoutVision.</p><p class="hint">Build 2026-11-24 · load9</p></div></header>
 <div class="studio-mode" role="group" aria-label="Studio mode"><button class="sv-secondary" id="mode-analyze" aria-pressed="true" type="button" disabled>Analyze a match</button><button class="sv-secondary" id="mode-review" aria-pressed="false" type="button" disabled>Review &amp; train</button></div>
 <noscript><p>The Match studio requires JavaScript for video analysis and training.</p></noscript>
 <div class="studio-grid">
@@ -28,8 +51,8 @@
   <option value="speedway">Speedway · RF-DETR Large</option>
 </select></label>
 <p id="detector-status" class="hint"></p>
-<label class="studio-check"><input id="share-data" type="checkbox"> Share the frames I check and my answers to improve ScoutVision for everyone</label>
-<p class="hint">Off by default. Only the single frames you check or review are sent, with your answers and the event and team numbers. Never the video.</p>
+<div id="share-option" hidden><label class="studio-check"><input id="share-data" type="checkbox"> Share the frames I check and my answers to improve ScoutVision for everyone</label>
+<p class="hint">Off by default. Only the single frames you check or review are sent, with your answers and the event and team numbers. Never the video.</p></div>
 <label class="studio-check" id="adapted-option" hidden><input id="adapted" type="checkbox" disabled checked> Use my training from this browser</label>
 </section>
 <form id="match-form" class="sv-card controls">

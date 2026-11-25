@@ -1,8 +1,8 @@
 // "Teach scoring" card: label goal stacks and toggles on review frames, then train.
-import {access} from "./storage.js?v=load8";
-import {goals} from "./scoring.js?v=load8";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load8";
-import {clipId, share} from "./share.js?v=load8";
+import {access} from "./storage.js?v=load9";
+import {goals} from "./scoring.js?v=load9";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load9";
+import {clipId, share} from "./share.js?v=load9";
 
 const COLOR_NAMES = ["Red", "Blue", "Yellow"];
 const startingCounts = id => id === "midfield" || id.endsWith("neutral") ? [0, 0, 1] : [0, 0, 0];
@@ -19,6 +19,7 @@ export function setupScoring(ctx) {
     row.className = "score-row";
     const name = document.createElement("span");
     name.textContent = `${index + 1} · ${goal.name}`;
+    name.dataset.goalName = goal.id;
     row.append(name, ...COLOR_NAMES.map((color, c) => {
       const label = document.createElement("label");
       label.className = "score-count score-" + color.toLowerCase();
@@ -42,6 +43,7 @@ export function setupScoring(ctx) {
     const label = document.createElement("label");
     label.className = "studio-field";
     label.textContent = `${wall[0].toUpperCase() + wall.slice(1)} toggle `;
+    label.dataset.wallName = wall;
     const select = document.createElement("select");
     select.dataset.wall = wall;
     select.append(new Option("Can't see", ""), ...OWNER_NAMES.map((owner, i) => new Option(owner, i)));
@@ -104,6 +106,8 @@ export function setupScoring(ctx) {
     g.closePath();
     g.stroke();
     g.font = "bold 13px Montserrat, sans-serif";
+    geo.goals.forEach((goal, i) => { const row = form.querySelector(`[data-goal-name="${goal.id}"]`); if (row) row.textContent = `${i + 1} · ${goal.name}`; });
+    for (const wall of WALLS) { const label = form.querySelector(`[data-wall-name="${wall}"]`); if (label?.firstChild) label.firstChild.textContent = geo.toggleNames[wall] + " "; }
     geo.goals.forEach((goal, i) => {
       const [l, t, r, b] = goal.crop;
       g.strokeStyle = "#ffcf68";

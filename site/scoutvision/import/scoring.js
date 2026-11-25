@@ -1,4 +1,4 @@
-import {referenceReader} from "./scoring-model.js?v=load8";
+import {referenceReader} from "./scoring-model.js?v=load9";
 
 export const wallPoints = {far:[72,0], left:[0,72], right:[144,72], near:[72,144]};
 const walls = Object.keys(wallPoints);
@@ -104,6 +104,49 @@ export function score(counts, ownership) {
 
 const titled = value => value[0].toUpperCase() + value.slice(1);
 
+// ---- Toggle colour reading -------------------------------------------------------------
+// Each toggle is a red or blue bar on top of its wall. Sample a band along the middle of the
+// wall from just above the floor to about 15 in up, and count red and blue pixels. Works on
+// any camera, with no training. `imagePx` maps field inches to frame pixels.
+const ALONG = {far:[1,0], near:[1,0], left:[0,1], right:[0,1]};
+export function wallBand(imagePx, wall) {
+  const [wx, wy] = wallPoints[wall], [dx, dy] = ALONG[wall], points = [];
+  for (let s = -10; s <= 10; s += 2) {
+    const floor = [wx + dx * s, wy + dy * s], p = imagePx(floor);
+    const a = imagePx([floor[0] + 4, floor[1]]), b = imagePx([floor[0], floor[1] + 4]);
+    const unit = Math.max(Math.hypot(a[0] - p[0], a[1] - p[1]), Math.hypot(b[0] - p[0], b[1] - p[1])) / 4;
+    for (let h = 3; h <= 15; h += 2) points.push([p[0], p[1] - h * unit]);
+  }
+  return points;
+}
+
+/** "red", "blue" or null (unsure / blocked) for one wall's band. `read` is pixels(canvas). */
+export function bandColor(read, points, boxes, width, height) {
+  let red = 0, blue = 0, total = 0;
+  for (const [x, y] of points) {
+    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+    if (boxes.some(box => x / width >= box.x && x / width <= box.x + box.w && y / height >= box.y && y / height <= box.y + box.h)) continue;
+    total++;
+    const color = read(x, y);
+    if (color === 0) red++;
+    else if (color === 1) blue++;
+  }
+  if (total < 20) return null;
+  const most = Math.max(red, blue);
+  if (most < 5 || most < 2 * Math.min(red, blue) + 2) return null;
+  return red > blue ? "red" : "blue";
+}
+
+/** The wall closest to the camera (lowest in the picture); its toggle is seen from behind. */
+export function backFacingWall(imagePx) {
+  return walls.reduce((best, wall) => imagePx(wallPoints[wall])[1] > imagePx(wallPoints[best])[1] ? wall : best, walls[0]);
+}
+
+/** Toggle owner from the visible bar colour: 1 red, 2 blue; swapped for a wall seen from behind. */
+export const ownerFromColor = (color, flipped) => color === "red" ? (flipped ? 2 : 1) : color === "blue" ? (flipped ? 1 : 2) : null;
+
+export {pixels};
+
 function fixedView(frame, image) {
   const read = pixels(frame, true);
   const slices = [
@@ -153,6 +196,10 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
       slope:(mark[0]-middle)/(width*3.6)};
   });
   const decoder = referenceReader(model,project,width,height,goals,bases);
+  // Bar-colour toggle reading, used whenever the camera-specific reader has no answer. The
+  // wall nearest the camera is seen from behind; check answers can correct that per wall.
+  const bands = Object.fromEntries(walls.map(wall => [wall, wallBand(image, wall)]));
+  const flips = decoder.toggleFlip || {[backFacingWall(image)]: true};
   const toggles = walls.map(wall => {
     const [wx,wy] = wallPoints[wall], [x,y]=image([wx,wy]);
     const along = wall === "near" || wall === "far";
@@ -257,7 +304,8 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
         });
         toggles.forEach((samples,i)=>{
           if (held(walls[i],frame)) return;
-          const wall=walls[i], next=decoder.toggle(wall,samples);
+          const wall=walls[i];
+          const next=decoder.toggle(wall,samples) ?? ownerFromColor(bandColor(read,bands[wall],boxes,width,height),flips[wall]);
           if (!stable(wall,next)) return;
           wallSeen[i]=frame;
           if (next===ownership[wall]) return;

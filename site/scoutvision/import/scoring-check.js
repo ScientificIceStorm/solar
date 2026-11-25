@@ -3,11 +3,11 @@
 // (the same labels Teach scoring makes), so scoring is trained from every match people check,
 // and the replay can be rebuilt with what was learned.
 
-import {access} from "./storage.js?v=load8";
-import {analyze, seekFrame} from "./tracking.js?v=load8";
-import {goals} from "./scoring.js?v=load8";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load8";
-import {clipId, share, sharingOn} from "./share.js?v=load8";
+import {access} from "./storage.js?v=load9";
+import {analyze, seekFrame} from "./tracking.js?v=load9";
+import {goals} from "./scoring.js?v=load9";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load9";
+import {clipId, share, sharingOn} from "./share.js?v=load9";
 
 const ROUNDS = 7;
 const WALL_GOALS = {far:["far-neutral", "far-blue"], left:["left-neutral", "left-red"],
@@ -76,7 +76,7 @@ export function setupScoringCheck(ctx) {
     const tile = document.createElement("div");
     tile.className = "check-tile";
     const title = document.createElement("strong");
-    title.textContent = goals[goalIndex].name;
+    title.textContent = card.geo.goals.find(goal => goal.id === id).name;
     tile.append(title, zoom(frame, crop, 170));
     const row = document.createElement("div");
     row.className = "check-counts";
@@ -104,7 +104,7 @@ export function setupScoringCheck(ctx) {
     const tile = document.createElement("div");
     tile.className = "check-tile check-toggle";
     const title = document.createElement("strong");
-    title.textContent = `${wall[0].toUpperCase() + wall.slice(1)} toggle`;
+    title.textContent = card.geo.toggleNames[wall];
     const select = document.createElement("select");
     select.dataset.wall = wall;
     select.append(new Option("Can't see", ""), ...OWNER_NAMES.map((name, i) => new Option(name, i)));

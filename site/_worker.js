@@ -67,8 +67,8 @@ async function tooMany(request) {
 }
 
 async function contribute(request, env, ctx) {
-  if (request.method !== 'POST') return error('Method not allowed.', 405);
   if (!env.CONTRIBUTIONS) return error('Sharing is not set up yet.', 503);
+  if (request.method !== 'POST') return error('Method not allowed.', 405);
   if (Number(request.headers.get('Content-Length') || 0) > MAX_BODY) return error('This upload is too large.', 413);
   if (await tooMany(request)) return error('Too many uploads. Try again in an hour.', 429);
   let body;

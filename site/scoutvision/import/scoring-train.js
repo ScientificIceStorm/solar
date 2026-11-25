@@ -7,10 +7,10 @@
 // This is the same method that reads the built-in Smoky / Mall of America / Highlander
 // cameras; training here builds the reference set for a camera ScoutVision has never seen.
 
-import {access} from "./storage.js?v=load8";
-import {field} from "./tracking.js?v=load8";
-import {goals, wallPoints} from "./scoring.js?v=load8";
-import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load8";
+import {access} from "./storage.js?v=load9";
+import {field} from "./tracking.js?v=load9";
+import {backFacingWall, bandColor, goals, pixels, wallBand, wallPoints} from "./scoring.js?v=load9";
+import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load9";
 
 export const WALLS = ["far", "left", "right", "near"];
 export const OWNER_NAMES = ["Neutral", "Red", "Blue"];
@@ -25,12 +25,33 @@ export function geometry(corners, wall, width, height) {
     return Math.max(Math.hypot(b[0] - a[0], b[1] - a[1]), Math.hypot(c[0] - a[0], c[1] - a[1])) / 4;
   };
   const round = values => values.map(Math.round);
+  // Names by where things are in the picture, since "far" in field terms can be the wall at
+  // the bottom of the screen on some cameras.
+  const center = px([72, 72]);
+  const xs = FIELD_CORNERS.map(c => px(c)[0]), ys = FIELD_CORNERS.map(c => px(c)[1]);
+  const halfW = (Math.max(...xs) - Math.min(...xs)) / 2 || 1, halfH = (Math.max(...ys) - Math.min(...ys)) / 2 || 1;
+  const backWall = backFacingWall(px);
+  const place = ([x, y]) => {
+    const dx = (x - center[0]) / halfW, dy = (y - center[1]) / halfH;
+    const v = dy < -.3 ? "Top" : dy > .3 ? "Bottom" : "", h = dx < -.3 ? "left" : dx > .3 ? "right" : "";
+    return v && h ? `${v}-${h}` : v || (h ? h[0].toUpperCase() + h.slice(1) : "Middle");
+  };
+  const baseName = id => id === "midfield" ? "middle goal" : id.endsWith("red") ? "goal · red base" :
+    id.endsWith("blue") ? "goal · blue base" : "goal · neutral";
+  const side = wall => {
+    const [x, y] = px(wallPoints[wall]), dx = (x - center[0]) / halfW, dy = (y - center[1]) / halfH;
+    return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "top" : "bottom");
+  };
   return {
     size: [width, height],
     corners: FIELD_CORNERS.map(image),
+    backWall,
+    bands: Object.fromEntries(WALLS.map(wall => [wall, wallBand(px, wall)])),
+    toggleNames: Object.fromEntries(WALLS.map(wall =>
+      [wall, `Toggle on the ${side(wall)} wall${wall === backWall ? " (seen from behind)" : ""}`])),
     goals: goals.map(goal => {
       const base = px(goal.point), unit = unitAt(goal.point);
-      return {id:goal.id, name:goal.name, base:round(base),
+      return {id:goal.id, name:`${place(base)} ${baseName(goal.id)}`, base:round(base),
         // ~3 ft above the base so the tallest stacks fit (it used to stop at 2 ft and cut them off).
         crop:round([base[0] - 8 * unit, base[1] - 36 * unit, base[0] + 8 * unit, base[1] + 2 * unit])};
     }),
@@ -58,7 +79,7 @@ async function readLabel(label) {
   canvas.getContext("2d", {willReadFrequently:true}).drawImage(bitmap, 0, 0);
   bitmap.close();
   const geo = geometry(label.corners, label.wall, canvas.width, canvas.height);
-  const read = pixelReader(canvas);
+  const read = pixelReader(canvas), classes = pixels(canvas);
   const identity = point => point;
   return {
     label, geo,
@@ -67,8 +88,23 @@ async function readLabel(label) {
       return Array.isArray(counts) ? [{id:goal.id, counts, values:signature(read, goal.crop, identity)}] : [];
     }),
     toggles: WALLS.flatMap(wall => Number.isInteger(label.toggles[wall]) ?
-      [{wall, owner:label.toggles[wall], values:signature(read, geo.toggleCrops[wall], identity)}] : []),
+      [{wall, owner:label.toggles[wall], values:signature(read, geo.toggleCrops[wall], identity),
+        color:bandColor(classes, geo.bands[wall], [], canvas.width, canvas.height)}] : []),
   };
+}
+
+// For each wall, does the visible bar colour match the owner people entered, or is it the
+// opposite (a toggle seen from behind)? Starts from "the wall nearest the camera is seen from
+// behind" and follows the answers once there are any for that wall.
+function learnFlips(group, backWall) {
+  return Object.fromEntries(WALLS.map(wall => {
+    let same = 0, opposite = 0;
+    for (const entry of group) for (const toggle of entry.toggles) {
+      if (toggle.wall !== wall || ![1, 2].includes(toggle.owner) || !toggle.color) continue;
+      (toggle.color === (toggle.owner === 1 ? "red" : "blue") ? (() => same++) : (() => opposite++))();
+    }
+    return [wall, same === opposite ? wall === backWall : opposite > same];
+  }));
 }
 
 // Predict one frame from the others in its camera group, the way analysis would.
@@ -128,6 +164,7 @@ export async function trainScoring(update = () => {}) {
       name:`Your scoring labels · ${label.clipName || "video"}`, size:geo.size, corners:geo.corners,
       goals:geo.goals, references, toggleCrops:geo.toggleCrops, toggleReferences,
       columns:{}, unreadableGoals:[], visibleFaces:{}, toggleFaces:{}, insideFaces:{}, yellowEdges:{},
+      toggleFlip:learnFlips(group, geo.backWall),
       frames:group.length, validation:validate(group), created:Date.now(),
     };
     await access("models", "put", camera);

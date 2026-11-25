@@ -1,11 +1,11 @@
-import {access} from "./storage.js?v=load8";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load8";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load8";
-import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load8";
-import {originalScoringReplay} from "./scoring-model.js?v=load8";
-import {setupScoring} from "./scoring-studio.js?v=load8";
-import {setupScoringCheck} from "./scoring-check.js?v=load8";
-import {clipId, setSharing, share, sharingOn} from "./share.js?v=load8";
+import {access} from "./storage.js?v=load9";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load9";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load9";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load9";
+import {originalScoringReplay} from "./scoring-model.js?v=load9";
+import {setupScoring} from "./scoring-studio.js?v=load9";
+import {setupScoringCheck} from "./scoring-check.js?v=load9";
+import {clipId, setSharing, share, sharingAvailable, sharingOn} from "./share.js?v=load9";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");
@@ -564,7 +564,8 @@ scoring = setupScoring({
   clip:()=>sourceKey(), clipName:()=>file?.name, at:()=>reviewAt, marks, wallSelect:$("red-wall"),
 });
 scoringCheck = setupScoringCheck({$, status, setBusy:value=>{ busy=value; controls(); }, onRebuilt:refreshLibrary});
-$("share-data").checked = sharingOn();
+$("share-option").hidden = true;
+sharingAvailable().then(ready => { $("share-option").hidden = !ready; $("share-data").checked = sharingOn(); });
 $("share-data").onchange = () => setSharing($("share-data").checked);
 controls();
 showDetector();

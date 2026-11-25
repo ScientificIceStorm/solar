@@ -435,8 +435,31 @@ h1 { font-size: clamp(24px, 3vw, 43px); font-weight: 700; letter-spacing: -.045e
   .analysis-summary dd { font-size: 17px; }
 }
 </style>
+<link rel="stylesheet" href="/scoutvision/solar-shell.css?v=solar1">
+<link rel="stylesheet" href="/scoutvision/solar-theme.css?v=solar1">
+<script src="/profile.js" defer></script>
 </head>
-<body>
+<body class="sv-replay">
+<header class="masthead">
+<a class="brand" href="/" aria-label="Solar home">solar<span class="brand-dot">.</span></a>
+<nav class="top-nav" aria-label="Explore Solar">
+<a href="/#skills">Skills</a><a href="/#teams">Teams</a><a href="/#insights">Insights</a><a href="/#events">Events</a><a href="/#map">Map</a>
+<a class="scoutvision-link" href="/scoutvision/" aria-current="page">ScoutVision <span class="scoutvision-beta">Beta</span></a>
+<button id="profileToggle" type="button" aria-expanded="false" aria-controls="profilePanel">Profile</button>
+<section id="profilePanel" hidden aria-label="Profile">
+<button type="button" id="profileGoogle">Continue with Google</button>
+<form id="profileForm">
+<label>Email<input name="email" type="email" autocomplete="email" required></label>
+<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit" value="login">Log in</button>
+<button type="submit" value="signup">Sign up</button>
+</form>
+<button type="button" id="profileLogout" hidden>Sign out</button>
+<p id="profileStatus" role="status"></p>
+</section>
+</nav>
+</header>
+
   <div class="dashboard">
     <aside class="sidebar">
       <div class="identity"><span class="brand-mark" aria-hidden="true"></span><div><a class="brand" href="/scoutvision/">ScoutVision</a><small>by SolarScout</small></div></div>

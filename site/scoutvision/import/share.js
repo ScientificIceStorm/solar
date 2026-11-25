@@ -4,7 +4,14 @@
 
 const KEY = "scoutvision-share-v1";
 
-export const sharingOn = () => { try { return localStorage.getItem(KEY) === "yes"; } catch { return false; } };
+let available = false;
+// The site answers 405 (wrong method) when sharing storage is connected, 503 when it is not.
+export async function sharingAvailable() {
+  try { available = (await fetch("/api/scoutvision/contribute", {method:"GET"})).status === 405; }
+  catch { available = false; }
+  return available;
+}
+export const sharingOn = () => { try { return available && localStorage.getItem(KEY) === "yes"; } catch { return false; } };
 export function setSharing(on) { try { localStorage.setItem(KEY, on ? "yes" : "no"); } catch { /* private mode */ } }
 
 async function base64(blob) {

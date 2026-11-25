@@ -1,4 +1,4 @@
-import {access} from "./storage.js?v=load8";
+import {access} from "./storage.js?v=load9";
 
 const COLORS = ["red", "blue", "yellow"];
 const OWNERS = {unknown:null, neutral:0, red:1, blue:2};
@@ -255,6 +255,7 @@ export function referenceReader(model, project, width, height, goals, baseAnchor
   return {
     label:calibrated ? camera.name : "Three-event scoring references",
     calibrated,
+    toggleFlip:calibrated ? camera.toggleFlip || null : null,
     use(canvas, boxes=[]) { read=pixelReader(canvas); boxesNow=boxes; },
     stack(id, index, previous, boxes, geometric) {
       const goal=camera.goals.find(g=>g.id===id);
