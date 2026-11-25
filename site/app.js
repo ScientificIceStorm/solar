@@ -944,7 +944,7 @@ function renderEvent(data, loadExtras) {
     } else if (kind === 'history') forecasts = payload;
     else replays = payload;
     for (const match of matches) {
-      if (Object.hasOwn(forecasts, match.id)) match.forecast = forecasts[match.id];
+      if (Object.hasOwn(forecasts, match.id) && !match.forecast) match.forecast = forecasts[match.id];
       match.replay = replays[match.id];
     }
     if (section !== 'information' && section !== 'roster' &&

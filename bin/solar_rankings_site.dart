@@ -6,10 +6,19 @@ import 'dart:math' as math;
 import 'package:args/args.dart';
 import 'package:solar_v6/solar_v6.dart';
 import 'package:solar_v6/src/core/solar_competition_scope.dart';
+import 'package:solar_v6/src/core/solar_match_analysis.dart';
+import 'package:solar_v6/src/core/solar_season_forecast.dart';
+import 'solar_event_information.dart';
+import 'solar_division_metrics.dart';
+import 'solar_streams.dart';
+
+part 'solar_season_index.dart';
 
 const _defaultPort = 8787;
 const _siteDirectoryName = 'site';
-const _cacheDirectoryName = '.solar_rankings_cache';
+final _cacheDirectoryName =
+    Platform.environment['SOLAR_SITE_CACHE_DIR'] ?? '.solar_rankings_cache';
+final _originToken = Platform.environment['SOLAR_ORIGIN_TOKEN']?.trim() ?? '';
 const _gradeLevels = <String>['High School', 'Middle School', 'College'];
 const _initialRating = 1500.0;
 const _fieldKFactor = 92.0;
@@ -21,6 +30,353 @@ Future<Map<int, TeamSummary>>? _teamDirectoryFuture;
 final Map<String, Future<Map<String, dynamic>>> _rankingsCache =
     <String, Future<Map<String, dynamic>>>{};
 final Map<String, Future<void>> _backgroundRefreshes = <String, Future<void>>{};
+final _companionCache = <String, (DateTime, Future<Object>)>{};
+final _snapshotLoads = <String, Future<Map<String, dynamic>>>{};
+final _snapshotRetryAt = <String, DateTime>{};
+final _openSkillSeasonJobs = <int, Future<void>>{};
+final _openSkillSeasonRefresh = <int, DateTime>{};
+final _openSkillSeasonMatches = <int, Map<(int, int, int), MatchSummary>>{};
+final _webcastJobs = <int, Future<void>>{};
+final _webcastResults = <int, Map<String, List<String>>>{};
+final _webcastRefresh = <int, DateTime>{};
+
+// Event dates may arrive as UTC midnight or as venue midnight converted to UTC.
+bool _eventToday(EventSummary event, DateTime now) {
+  final start = event.start;
+  if (start == null) return false;
+  int day(DateTime value) => value.year * 10000 + value.month * 100 + value.day;
+  final longitude = event.location.longitude;
+  final estimate = longitude == null ? 0 : (longitude * 4).round();
+  final country = event.location.country.toLowerCase();
+  if (country.startsWith('united states') || country == 'usa') {
+    // VEX event dates use a shared Eastern offset for some U.S. venues.
+    final utc = now.toUtc();
+    final march = DateTime.utc(utc.year, 3, 1);
+    final november = DateTime.utc(utc.year, 11, 1);
+    DateTime sunday(DateTime month) =>
+        month.add(Duration(days: (7 - month.weekday) % 7));
+    final observesDst = !const {
+      'Arizona',
+      'Hawaii',
+    }.contains(event.location.region);
+    final dst =
+        observesDst &&
+        !utc.isBefore(sunday(march).add(const Duration(days: 7, hours: 9))) &&
+        utc.isBefore(sunday(november).add(const Duration(hours: 8)));
+    final west = switch (event.location.region) {
+      'California' || 'Washington' || 'Oregon' || 'Nevada' => -8,
+      'Arizona' ||
+      'Colorado' ||
+      'New Mexico' ||
+      'Utah' ||
+      'Wyoming' ||
+      'Montana' => -7,
+      'Hawaii' => -10,
+      'Georgia' ||
+      'Ohio' ||
+      'South Carolina' ||
+      'North Carolina' ||
+      'Virginia' ||
+      'West Virginia' ||
+      'New York' ||
+      'Pennsylvania' ||
+      'Maryland' ||
+      'New Jersey' ||
+      'Delaware' ||
+      'Connecticut' ||
+      'Rhode Island' ||
+      'Massachusetts' ||
+      'Vermont' ||
+      'New Hampshire' ||
+      'Maine' ||
+      'District of Columbia' => -5,
+      _ => longitude == null ? -5 : (longitude / 15).round(),
+    };
+    final today = day(utc.add(Duration(hours: west + (dst ? 1 : 0))));
+    return today >= day(start.toUtc()) &&
+        today <= day((event.end ?? start).toUtc());
+  }
+  int offset(DateTime value) {
+    final utc = value.toUtc();
+    final minutes = utc.hour * 60 + utc.minute;
+    if (minutes == 0) return estimate;
+    final candidates = [-minutes, 1440 - minutes];
+    candidates.sort(
+      (a, b) => (a - estimate).abs().compareTo((b - estimate).abs()),
+    );
+    return candidates.first;
+  }
+
+  final end = event.end ?? start;
+  DateTime venueDate(DateTime value) =>
+      value.toUtc().hour == 0 && value.toUtc().minute == 0
+      ? value.toUtc()
+      : value.toUtc().add(Duration(minutes: offset(value)));
+  final today = day(now.toUtc().add(Duration(minutes: offset(start))));
+  return today >= day(venueDate(start)) && today <= day(venueDate(end));
+}
+
+Future<List<SeasonSummary>> _siteSeasons(SolarApi api) async {
+  final snapshot = await _siteSnapshot(
+    'seasons',
+    const Duration(hours: 12),
+    () async {
+      final seasons = await api.robotEvents.fetchSeasons(
+        programId: solarPrimaryProgramId,
+      );
+      return {'rows': seasons.map((season) => season.toJson()).toList()};
+    },
+  );
+  return (snapshot['rows'] as List)
+      .cast<Map<String, dynamic>>()
+      .map(SeasonSummary.fromJson)
+      .toList();
+}
+
+Future<List<Map<String, dynamic>>> _skillsRows(
+  SolarApi api,
+  int season,
+  String grade,
+) async {
+  final snapshot = await _siteSnapshot(
+    'skills-$season-${_slugify(grade)}',
+    const Duration(minutes: 15),
+    () async {
+      final rows = await api.worldSkills.fetchRankings(
+        seasonId: season,
+        gradeLevel: grade,
+      );
+      return {
+        'rows': rows
+            .where((row) => isSolarPrimaryProgramText(row.program))
+            .map((row) => row.toJson())
+            .toList(),
+      };
+    },
+  );
+  return (snapshot['rows'] as List).cast<Map<String, dynamic>>();
+}
+
+int _seasonYear(SeasonSummary season) =>
+    int.tryParse(RegExp(r'\b20\d{2}\b').firstMatch(season.name)?[0] ?? '') ?? 0;
+
+Future<int?> _previousSeasonId(SolarApi api, int id) async {
+  final seasons = await _siteSeasons(api);
+  final current = seasons.where((season) => season.id == id).firstOrNull;
+  if (current == null || _seasonYear(current) == 0) return null;
+  return (seasons
+          .where((season) => _seasonYear(season) < _seasonYear(current))
+          .toList()
+        ..sort((a, b) => _seasonYear(b).compareTo(_seasonYear(a))))
+      .firstOrNull
+      ?.id;
+}
+
+Future<Map<String, dynamic>> _siteSnapshot(
+  String key,
+  Duration maxAge,
+  Future<Map<String, dynamic>> Function() load, {
+  bool waitForRefresh = false,
+}) async {
+  final file = File('$_cacheDirectoryName/companion/$key.json');
+  final saved = await _readSiteSnapshot(key);
+  final now = DateTime.now();
+  final timestamp = DateTime.tryParse(saved?['_cachedAt'] as String? ?? '');
+  if (timestamp != null && now.difference(timestamp) < maxAge) {
+    return saved!;
+  }
+  _snapshotRetryAt.removeWhere((_, retryAt) => !retryAt.isAfter(now));
+  if (_snapshotRetryAt.containsKey(key)) {
+    if (saved != null) return saved;
+    throw SolarApiException('Snapshot refresh is cooling down');
+  }
+  final pending = _snapshotLoads.putIfAbsent(key, () async {
+    try {
+      final value = {
+        ...await load(),
+        '_cachedAt': DateTime.now().toIso8601String(),
+      };
+      try {
+        await file.parent.create(recursive: true);
+        final temporary = File('${file.path}.tmp');
+        await temporary.writeAsString(jsonEncode(value));
+        await temporary.rename(file.path);
+      } on FileSystemException {
+        // Cache failures should not prevent the live response.
+      }
+      return value;
+    } on Exception catch (error) {
+      final retry = error is SolarApiException ? error.retryAfter : null;
+      _snapshotRetryAt[key] = DateTime.now().add(
+        retry ?? const Duration(seconds: 30),
+      );
+      rethrow;
+    } finally {
+      _snapshotLoads.remove(key);
+    }
+  });
+  if (saved != null && !waitForRefresh) {
+    unawaited(pending.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
+    return saved;
+  }
+  try {
+    return await pending;
+  } on Exception {
+    if (saved != null) return saved;
+    rethrow;
+  }
+}
+
+Future<List<MatchSummary>> _seasonTeamMatches(
+  SolarApi api,
+  int team,
+  int season, {
+  Duration maxAge = const Duration(minutes: 15),
+  bool waitForRefresh = false,
+}) async {
+  final snapshot = await _siteSnapshot(
+    'team-matches-$team-$season',
+    maxAge,
+    () async {
+      final matches = await api.robotEvents.fetchTeamMatches(
+        team,
+        season: season,
+      );
+      return {'matches': matches.map((match) => match.toJson()).toList()};
+    },
+    waitForRefresh: waitForRefresh,
+  );
+  return (snapshot['matches'] as List)
+      .cast<Map<String, dynamic>>()
+      .map(MatchSummary.fromJson)
+      .toList();
+}
+
+/// Scored matches from [event]'s season to rate its teams with: the season
+/// index, plus each team's saved match history when [savedTeams] is set or
+/// the index doesn't know most of them yet (e.g. right after a restart).
+Future<List<MatchSummary>> _seasonHistory(
+  EventSummary event,
+  List<MatchSummary> matches, {
+  bool savedTeams = false,
+}) async {
+  final history = <MatchSummary>[
+    ...?_openSkillSeasonMatches[event.seasonId]?.values,
+  ];
+  if (event.seasonId <= 0) return history;
+  final teamIds = {
+    for (final match in matches)
+      for (final alliance in match.alliances)
+        for (final team in alliance.teams)
+          if (team.id > 0) team.id,
+  };
+  final known = {
+    for (final match in history)
+      if (match.event.id != event.id)
+        for (final alliance in match.alliances)
+          for (final team in alliance.teams) team.id,
+  };
+  if (!savedTeams &&
+      known.intersection(teamIds).length * 2 >= teamIds.length) {
+    return history;
+  }
+  await _mapWithConcurrency(teamIds.toList(), 4, (team, _) async {
+    final saved = await _readSiteSnapshot(
+      'team-matches-$team-${event.seasonId}',
+    );
+    history.addAll(
+      (saved?['matches'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(MatchSummary.fromJson),
+    );
+  });
+  return history;
+}
+
+Future<Map<String, Object?>> _previousEventOdds(
+  SolarApi api,
+  EventSummary event,
+  List<MatchSummary> matches,
+) async {
+  final start = event.start;
+  if (start == null || event.seasonId <= 0 || matches.isEmpty) return {};
+  final teamIds = matches
+      .expand((match) => match.alliances)
+      .expand((alliance) => alliance.teams)
+      .map((team) => team.id)
+      .where((id) => id > 0)
+      .toSet()
+      .toList();
+  final history = <MatchSummary>[
+    ...?_openSkillSeasonMatches[event.seasonId]?.values,
+  ];
+  Future<List<MatchSummary>> savedHistory(int team, int season) async {
+    final saved = await _readSiteSnapshot('team-matches-$team-$season');
+    return (saved?['matches'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(MatchSummary.fromJson)
+        .toList();
+  }
+
+  await _mapWithConcurrency(teamIds, 2, (team, _) async {
+    history.addAll(await savedHistory(team, event.seasonId));
+  });
+  final now = DateTime.now();
+  final prior = SolarMatchAnalysis.beforeEvent(
+    history,
+    eventId: event.id,
+    cutoff: start.isBefore(now) ? start : now,
+    openSkill: true,
+  );
+  final missing = teamIds
+      .where((id) => (prior.ratings[id]?.matches ?? 0) == 0)
+      .toList();
+  final previousMatches = <MatchSummary>[];
+  if (missing.isNotEmpty) {
+    final previousSeason = await _previousSeasonId(api, event.seasonId);
+    if (previousSeason != null) {
+      previousMatches.addAll(
+        _openSkillSeasonMatches[previousSeason]?.values ?? [],
+      );
+      await _mapWithConcurrency(missing, 2, (team, _) async {
+        previousMatches.addAll(await savedHistory(team, previousSeason));
+      });
+    }
+  }
+  final previous = SolarMatchAnalysis.beforeEvent(
+    previousMatches,
+    eventId: event.id,
+    cutoff: start,
+    openSkill: true,
+  );
+  final analysis = SolarMatchAnalysis(
+    matches,
+    now: now,
+    prior: prior,
+    conservativeOdds: true,
+    openSkill: true,
+    previousSeason: previous.ratings,
+  );
+  return {for (final row in analysis.rows) '${row['id']}': row['forecast']};
+}
+
+Future<Object> _companionData(
+  String key,
+  Future<Object> Function() load,
+) async {
+  final now = DateTime.now();
+  _companionCache.removeWhere((_, entry) => entry.$1.isBefore(now));
+  final pending = _companionCache.putIfAbsent(
+    key,
+    () => (now.add(const Duration(minutes: 5)), load()),
+  );
+  try {
+    return await pending.$2;
+  } catch (_) {
+    if (identical(_companionCache[key], pending)) _companionCache.remove(key);
+    rethrow;
+  }
+}
 
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
@@ -38,7 +394,11 @@ Future<void> main(List<String> arguments) async {
 
   final host = (results['host'] as String).trim();
   final port = int.tryParse(results['port'] as String) ?? _defaultPort;
-  final api = await SolarApi.fromLocalConfig();
+  final api = await SolarApi.fromLocalConfig(
+    configFilePath: await File('solar.local.json').exists()
+        ? 'solar.local.json'
+        : 'assets/config/solar.local.json',
+  );
   final siteDirectory = Directory(_siteDirectoryName);
 
   if (!await siteDirectory.exists()) {
@@ -51,7 +411,15 @@ Future<void> main(List<String> arguments) async {
   }
 
   final server = await HttpServer.bind(host, port);
+  server.autoCompress = true;
   stdout.writeln('Solar rankings site running at http://$host:$port');
+  if (Platform.environment['RAILWAY_ENVIRONMENT'] != null) {
+    unawaited(_scanWebcastArchive(api));
+    unawaited(_warmCurrentRatings(api));
+    Timer.periodic(const Duration(days: 1), (_) {
+      unawaited(_scanWebcastArchive(api));
+    });
+  }
 
   ProcessSignal.sigint.watch().listen((_) async {
     await server.close(force: true);
@@ -78,6 +446,11 @@ Future<void> _handleRequest(
     }
 
     final path = request.uri.path;
+    if (path.startsWith('/api/') &&
+        _originToken.isNotEmpty &&
+        request.headers['X-Solar-Origin-Token']?.singleOrNull != _originToken) {
+      return _writeError(request.response, HttpStatus.forbidden, 'Forbidden.');
+    }
     if (path == '/api/health') {
       return _writeJson(request.response, <String, dynamic>{
         'ok': true,
@@ -86,31 +459,549 @@ Future<void> _handleRequest(
     }
 
     if (path == '/api/seasons') {
-      final seasons = await api.robotEvents.fetchSeasons(
-        programId: solarPrimaryProgramId,
-      );
-      seasons.sort((left, right) {
-        return compareSolarSeasonPriority(
-          leftName: left.name,
-          leftId: left.id,
-          rightName: right.name,
-          rightId: right.id,
-        );
+      final seasons = await _companionData('seasons', () async {
+        final values = await _siteSeasons(api);
+        return values.map((season) => season.toJson()).toList();
       });
 
       return _writeJson(request.response, <String, dynamic>{
         'program': solarPrimaryProgramFilter,
         'gradeLevels': _gradeLevels,
-        'seasons': seasons
-            .map(
-              (season) => <String, dynamic>{
-                'id': season.id,
-                'name': season.name,
-                'programName': season.programName,
-              },
-            )
-            .toList(growable: false),
+        'seasons': seasons,
+      }, maxAge: const Duration(minutes: 5));
+    }
+
+    if (path == '/api/event') {
+      final sku = (request.uri.queryParameters['sku'] ?? '').toUpperCase();
+      final divisionId = int.tryParse(
+        request.uri.queryParameters['division'] ?? '',
+      );
+      if (!RegExp(r'^(RE|VE)-[A-Z0-9-]{4,40}$').hasMatch(sku)) {
+        return _writeError(
+          request.response,
+          HttpStatus.badRequest,
+          'Invalid event code.',
+        );
+      }
+      final snapshot = await _siteSnapshot(
+        'event-$sku',
+        const Duration(minutes: 30),
+        () async {
+          final season = int.tryParse(
+            request.uri.queryParameters['seasonId'] ?? '',
+          );
+          if (season != null && season > 0) {
+            final calendar = await _readSiteSnapshot('calendar-map-v1-$season');
+            final savedEvent = (calendar?['events'] as List? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .where((event) => event['sku'] == sku)
+                .firstOrNull;
+            if (savedEvent != null) return {'event': savedEvent};
+          }
+          final event =
+              (await api.robotEvents
+                      .fetchEvents(sku: sku)
+                      .timeout(const Duration(seconds: 6)))
+                  .where((item) => item.sku == sku)
+                  .firstOrNull;
+          return {'event': event?.toJson()};
+        },
+      );
+      final rawEvent = snapshot['event'];
+      if (rawEvent is! Map<String, dynamic>) {
+        return _writeError(
+          request.response,
+          HttpStatus.notFound,
+          'Event not found.',
+        );
+      }
+      final event = EventSummary.fromJson(rawEvent);
+      if (request.uri.queryParameters['scouting'] == '1') {
+        final detail = await _siteSnapshot(
+          'scouting-event-${event.id}',
+          _eventToday(event, DateTime.now())
+              ? const Duration(minutes: 2)
+              : const Duration(days: 1),
+          () async {
+            final (skills, awards) = await (
+              api.robotEvents.fetchEventSkills(event.id),
+              api.robotEvents.fetchEventAwards(event.id),
+            ).wait;
+            return {
+              'skills': skills.map((row) => row.toJson()).toList(),
+              'awards': awards.map((row) => row.toJson()).toList(),
+            };
+          },
+        );
+        return _writeJson(request.response, detail);
+      }
+      if (request.uri.queryParameters['information'] == '1') {
+        final information = await _eventInformation(event.sku, event: event);
+        return _writeJson(request.response, information);
+      }
+      if (request.uri.queryParameters['roster'] == '1') {
+        final roster = await _siteSnapshot(
+          'roster-${event.id}',
+          const Duration(minutes: 10),
+          () async {
+            final teams = (await api.robotEvents.fetchEventTeams(
+              event.id,
+            )).toList()..sort((a, b) => a.number.compareTo(b.number));
+            return {'teams': teams.map((team) => team.toJson()).toList()};
+          },
+        );
+        return _writeJson(request.response, roster['teams'] as List);
+      }
+      final division = divisionId == null
+          ? event.divisions.firstOrNull
+          : event.divisions.where((item) => item.id == divisionId).firstOrNull;
+      if (divisionId != null && division == null) {
+        return _writeError(
+          request.response,
+          HttpStatus.notFound,
+          'Division not found.',
+        );
+      }
+      final now = DateTime.now();
+      final active = _eventToday(event, now);
+      Future<Map<String, dynamic>> indexedDivision() async {
+        final cached = await _readSiteSnapshot(
+          'rated-matches-${event.id}-${division?.id}',
+        );
+        final indexed = <(int, int, int), MatchSummary>{};
+        _rememberMatches(indexed, cached?['matches']);
+        for (final entry
+            in _openSkillSeasonMatches[event.seasonId]?.entries ??
+                const <MapEntry<(int, int, int), MatchSummary>>[]) {
+          if (entry.key.$1 == event.id && entry.key.$2 == division?.id) {
+            indexed[entry.key] = entry.value;
+          }
+        }
+        return {
+          'event': event.toJson(),
+          'division': division?.toJson(),
+          'matches': SolarMatchAnalysis(
+            indexed.values,
+            now: now,
+            openSkill: true,
+          ).rows,
+          'partial': true,
+        };
+      }
+
+      final detailsOnly =
+          request.uri.queryParameters['streams'] == '1' ||
+          request.uri.queryParameters['history'] == '1';
+      final divisionKey = 'division-v5-${event.id}-${division?.id}';
+      // When RobotEvents had no standings (or the request failed) the saved
+      // snapshot is retried within a minute instead of being kept all day.
+      final savedDivision = await _readSiteSnapshot(divisionKey);
+      final standingsPending = const {'previous', 'missing'}.contains(
+        savedDivision?['standingsSource'],
+      );
+      final snapshotLoad = _siteSnapshot(
+        divisionKey,
+        active
+            ? const Duration(seconds: 12)
+            : standingsPending
+            ? const Duration(minutes: 1)
+            : event.end?.isBefore(now) == true
+            ? const Duration(days: 1)
+            : const Duration(minutes: 15),
+        () async {
+          if (division == null) {
+            return <String, Object?>{'event': event.toJson()};
+          }
+          final (standings, matches) = await (
+            api.robotEvents
+                .fetchDivisionRankings(
+                  eventId: event.id,
+                  divisionId: division.id,
+                )
+                .onError<Exception>((_, _) => <RankingRecord>[]),
+            api.robotEvents.fetchDivisionMatches(
+              eventId: event.id,
+              divisionId: division.id,
+            ),
+          ).wait;
+          final seasonHistory =
+              _openSkillSeasonMatches[event.seasonId]?.values ??
+              const <MatchSummary>[];
+          final prior = SolarMatchAnalysis.beforeEvent(
+            seasonHistory,
+            eventId: event.id,
+            cutoff: event.start ?? now,
+            openSkill: true,
+          );
+          final analysis = SolarMatchAnalysis(
+            matches,
+            now: DateTime.now(),
+            prior: prior,
+            conservativeOdds: true,
+            openSkill: true,
+          );
+          final metrics = solarDivisionMetrics(matches);
+          final divisionRatings = prior.ratings.isEmpty
+              ? analysis.ratings
+              : SolarMatchAnalysis(matches, now: now, openSkill: true).ratings;
+          standings.sort((a, b) => a.rank.compareTo(b.rank));
+          // A failed or empty rankings request must not wipe standings that
+          // were already posted: keep the last official ones and retry soon.
+          // (Standings can't be rebuilt from scores; DQs and corrections only
+          // show up in RobotEvents' own rankings.)
+          var rows = standings.map((row) => row.toJson()).toList();
+          String? source;
+          if (rows.isEmpty) {
+            final previous = (await _readSiteSnapshot(divisionKey))?['standings'];
+            if (previous is List && previous.isNotEmpty) {
+              rows = previous.whereType<Map<String, dynamic>>().toList();
+              source = 'previous';
+            } else if (matches.any(
+              (match) =>
+                  match.round == MatchRound.qualification &&
+                  match.alliances.any((alliance) => alliance.score > 0),
+            )) {
+              source = 'missing';
+            }
+          }
+          final seasonOdds = SolarSeasonForecast.forMatches(
+            await _seasonHistory(event, matches),
+            matches,
+          );
+          return <String, Object?>{
+            'event': event.toJson(),
+            'division': division.toJson(),
+            'active': active,
+            'standingsSource': ?source,
+            'standings': rows
+                .map(
+                  (row) => {
+                    ...row,
+                    'skill': divisionRatings[(row['team'] as Map)['id']]
+                        ?.toJson(),
+                    ...?metrics[(row['team'] as Map)['id']],
+                  },
+                )
+                .toList(),
+            // Score-based season odds (see SolarSeasonForecast); the rating
+            // forecast stays only for teams with no scored match yet.
+            'matches': [
+              for (final row in analysis.rows)
+                {...row, 'forecast': seasonOdds[row['id']] ?? row['forecast']},
+            ],
+          };
+        },
+      );
+      final data = detailsOnly
+          ? await snapshotLoad
+          : await snapshotLoad
+                .timeout(const Duration(seconds: 3), onTimeout: indexedDivision)
+                .onError<Object>((_, _) => indexedDivision());
+      final rows =
+          (data['matches'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (request.uri.queryParameters['streams'] == '1' && division != null) {
+        final streams = await _siteSnapshot(
+          'streams-v5-${event.id}-${division.id}',
+          active ? const Duration(minutes: 2) : const Duration(hours: 2),
+          () async => {
+            'rows': await solarMatchStreams(
+              event,
+              division,
+              rows.map(MatchSummary.fromJson),
+              () async =>
+                  ((await _eventInformation(event.sku, event: event))['webcasts'] as List)
+                      .cast<String>(),
+            ),
+          },
+        );
+        return _writeJson(request.response, streams['rows'] as Map);
+      }
+      if (request.uri.queryParameters['history'] == '1' && division != null) {
+        final odds = await _siteSnapshot(
+          'odds-season-v1-${event.id}-${division.id}',
+          active ? const Duration(minutes: 2) : const Duration(hours: 6),
+          () async {
+            final matches = rows.map(MatchSummary.fromJson).toList();
+            final previous = await _previousEventOdds(api, event, matches);
+            final season = SolarSeasonForecast.forMatches(
+              await _seasonHistory(event, matches, savedTeams: true),
+              matches,
+            );
+            return {
+              ...previous,
+              for (final entry in season.entries) '${entry.key}': entry.value,
+            };
+          },
+        );
+        return _writeJson(request.response, odds);
+      }
+      if (active) request.response.headers.set('X-Solar-Live', '1');
+      if (data['partial'] == true) {
+        request.response.headers.set('Cache-Control', 'no-store');
+      }
+      return _writeJson(request.response, {
+        ...data,
+        'active': active,
+        'nextLiveCheck': event.start?.toIso8601String(),
       });
+    }
+
+    if (const {
+      '/api/skills',
+      '/api/events',
+      '/api/team',
+      '/api/openskill',
+      '/api/webcasts',
+    }.contains(path)) {
+      final query = request.uri.queryParameters;
+      final season = int.tryParse(query['seasonId'] ?? '');
+      final grade = query['gradeLevel'] ?? 'High School';
+      final number = (query['number'] ?? '').trim().toUpperCase();
+      if (season == null ||
+          season <= 0 ||
+          (path == '/api/skills' && !_gradeLevels.contains(grade)) ||
+          (path == '/api/openskill' &&
+              grade != 'All' &&
+              !_gradeLevels.contains(grade)) ||
+          (path == '/api/team' &&
+              !RegExp(r'^[A-Z0-9]{1,12}$').hasMatch(number))) {
+        return _writeError(
+          request.response,
+          HttpStatus.badRequest,
+          'Invalid filters.',
+        );
+      }
+      if (path == '/api/openskill') {
+        final board = await _siteSnapshot(
+          'leaderboard-v2-$season-${grade.replaceAll(' ', '-')}',
+          const Duration(minutes: 5),
+          () => _openSkillLeaderboard(api, season, grade),
+        );
+        return _writeJson(
+          request.response,
+          board,
+          maxAge: const Duration(minutes: 2),
+        );
+      }
+      if (path == '/api/webcasts') {
+        final calendar = await _calendar(api, season);
+        return _writeJson(
+          request.response,
+          await _seasonWebcasts(season, calendar),
+        );
+      }
+      if (path == '/api/skills') {
+        return _writeJson(
+          request.response,
+          await _skillsRows(api, season, grade),
+          maxAge: const Duration(minutes: 1),
+        );
+      }
+      if (path == '/api/events') {
+        final events = await _calendar(api, season);
+        return _writeJson(
+          request.response,
+          events.map((event) => event.toJson()).toList(),
+          maxAge: const Duration(minutes: 1),
+        );
+      }
+      final profileKey = 'profile-$season-$number';
+      final savedProfile = await _readSiteSnapshot(profileKey);
+      final indexedMatches =
+          (_openSkillSeasonMatches[season]?.values ?? const <MatchSummary>[])
+              .where(
+                (match) => match.alliances.any(
+                  (alliance) => alliance.teams.any(
+                    (team) => team.number.toUpperCase() == number,
+                  ),
+                ),
+              )
+              .toList();
+      final indexedTeam = indexedMatches
+          .expand((match) => match.alliances)
+          .expand((alliance) => alliance.teams)
+          .where((team) => team.number.toUpperCase() == number)
+          .firstOrNull;
+      final indexedEventIds = indexedMatches
+          .map((match) => match.event.id)
+          .toSet();
+      final calendar = await _readSiteSnapshot('calendar-map-v1-$season');
+      final eventsById = {
+        for (final event in [
+          ...(calendar?['events'] as List? ?? []),
+          ...(savedProfile?['events'] as List? ?? []),
+        ].whereType<Map<String, dynamic>>().map(EventSummary.fromJson))
+          if (indexedEventIds.contains(event.id) ||
+              (savedProfile?['events'] as List? ?? []).any(
+                (row) => row is Map && row['id'] == event.id,
+              ))
+            event.id: event,
+      };
+      final liveHint = eventsById.values.any(
+        (event) => _eventToday(event, DateTime.now()),
+      );
+      Future<Map<String, dynamic>?> lookup() async {
+        if (api.isRateLimited) return null;
+        try {
+          return await _lookupTeam(
+            api,
+            number,
+          ).timeout(const Duration(seconds: 2), onTimeout: () => null);
+        } on Exception {
+          return null;
+        }
+      }
+
+      Future<Object?> identity() async =>
+          savedProfile?['team'] ??
+          (await _readSiteSnapshot('team-identity-$number'))?['team'] ??
+          (indexedTeam == null
+              ? null
+              : {'id': indexedTeam.id, 'number': number}) ??
+          await lookup();
+      if (query['upcoming'] == '1') {
+        final data = await _siteSnapshot(
+          'team-registrations-$season-$number',
+          const Duration(minutes: 15),
+          () async {
+            final team = await identity();
+            if (team is! Map || team['id'] is! int) {
+              throw SolarApiException('Could not look up team registrations');
+            }
+            final now = DateTime.now();
+            final entries = await api.robotEvents.fetchEvents(
+              teamId: team['id'] as int,
+              season: season,
+              startsAfter: now.subtract(const Duration(days: 1)),
+            );
+            return {'events': entries.map((event) => event.toJson()).toList()};
+          },
+        );
+        final now = DateTime.now();
+        final upcoming =
+            (data['events'] as List? ?? [])
+                .whereType<Map<String, dynamic>>()
+                .map(EventSummary.fromJson)
+                .where((event) => event.start?.isAfter(now) == true)
+                .toList()
+              ..sort((a, b) => a.start!.compareTo(b.start!));
+        return _writeJson(request.response, {
+          'events': upcoming.map((event) => event.toJson()).toList(),
+        }, maxAge: const Duration(minutes: 3));
+      }
+      if (query['summary'] == '1') {
+        final team = await identity();
+        return _writeJson(
+          request.response,
+          {'team': team, 'skill': savedProfile?['skill']},
+          maxAge: team == null ? Duration.zero : const Duration(minutes: 1),
+        );
+      }
+      if (savedProfile?['team'] != null && !liveHint) {
+        return _writeJson(request.response, {
+          ...savedProfile!,
+          'active': false,
+        }, maxAge: const Duration(seconds: 30));
+      }
+      Future<Map<String, dynamic>> indexedProfile() async {
+        final analysis = SolarMatchAnalysis(
+          indexedMatches,
+          now: DateTime.now(),
+          conservativeOdds: true,
+          openSkill: true,
+        );
+        return {
+          'team': await identity() ?? {'number': number},
+          'events': eventsById.values.map((event) => event.toJson()).toList(),
+          'matches': analysis.rows,
+          'skill': analysis.ratings[indexedTeam?.id]?.toJson(),
+          'partial': true,
+        };
+      }
+
+      final data =
+          await _siteSnapshot(
+                profileKey,
+                const Duration(seconds: 25),
+                () async {
+                  if (api.isRateLimited) {
+                    throw SolarApiException('VEX is cooling down');
+                  }
+                  final identity =
+                      savedProfile?['team'] as Map<String, dynamic>? ??
+                      await _lookupTeam(api, number);
+                  if (identity == null) return <String, Object?>{'team': null};
+                  final team = TeamSummary.fromJson(identity);
+                  final events = savedProfile?['team'] == null
+                      ? await api.robotEvents.fetchEvents(
+                          teamId: team.id,
+                          season: season,
+                        )
+                      : eventsById.values.toList();
+                  final matches = <(int, int, int), MatchSummary>{};
+                  if (savedProfile?['team'] == null) {
+                    for (final match in await _seasonTeamMatches(
+                      api,
+                      team.id,
+                      season,
+                    )) {
+                      matches[(match.event.id, match.division.id, match.id)] =
+                          match;
+                    }
+                  } else {
+                    _rememberMatches(matches, savedProfile?['matches']);
+                    for (final event in events.where(
+                      (event) => _eventToday(event, DateTime.now()),
+                    )) {
+                      final liveMatches = await api.robotEvents
+                          .fetchTeamMatches(team.id, eventId: event.id);
+                      for (final match in liveMatches.where(
+                        (m) => m.event.id == event.id,
+                      )) {
+                        matches[(match.event.id, match.division.id, match.id)] =
+                            match;
+                      }
+                    }
+                  }
+                  _rememberMatches(
+                    _openSkillSeasonMatches.putIfAbsent(season, () => {}),
+                    matches.values.map((match) => match.toJson()).toList(),
+                  );
+                  final analysis = SolarMatchAnalysis(
+                    matches.values,
+                    now: DateTime.now(),
+                    conservativeOdds: true,
+                    openSkill: true,
+                  );
+                  return {
+                    'team': team.toJson(),
+                    'events': events.map((event) => event.toJson()).toList(),
+                    'skill': analysis.ratings[team.id]?.toJson(),
+                    'matches': analysis.rows,
+                  };
+                },
+              )
+              .timeout(const Duration(seconds: 3), onTimeout: indexedProfile)
+              .onError<Exception>((_, _) => indexedProfile());
+      final live =
+          liveHint ||
+          (data['events'] as List? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .map(EventSummary.fromJson)
+              .any((event) => _eventToday(event, DateTime.now()));
+      if (live) request.response.headers.set('X-Solar-Live', '1');
+      if (data['partial'] == true) {
+        request.response.headers.set('Cache-Control', 'no-store');
+      }
+      return _writeJson(
+        request.response,
+        {...data, 'active': live},
+        maxAge: data['partial'] == true
+            ? null
+            : live
+            ? const Duration(seconds: 5)
+            : const Duration(seconds: 30),
+      );
     }
 
     if (path == '/api/rankings') {
@@ -140,7 +1031,22 @@ Future<void> _handleRequest(
       return _writeJson(request.response, payload);
     }
 
-    final assetPath = path == '/' ? '/index.html' : path;
+    final isDetailPage = RegExp(
+      r'^/(event/(?:RE|VE)-[A-Z0-9-]+|team/[A-Z0-9]+)$',
+      caseSensitive: false,
+    ).hasMatch(path);
+    final assetPath = path == '/' || isDetailPage ? '/index.html' : path;
+    if (!const {
+      '/index.html',
+      '/styles.css',
+      '/app.js',
+      '/map.js',
+      '/california-counties.json',
+      '/solar-photo.jpg',
+      '/manrope.woff2',
+    }.contains(assetPath)) {
+      return _writeError(request.response, HttpStatus.notFound, 'Not found.');
+    }
     final file = File(
       '${siteDirectory.path}${assetPath.replaceAll('/', Platform.pathSeparator)}',
     );
@@ -157,10 +1063,60 @@ Future<void> _handleRequest(
     await _writeError(
       request.response,
       HttpStatus.internalServerError,
-      '$error',
+      'Solar could not load this data. Try again shortly.',
     );
   }
 }
+
+Future<Map<String, dynamic>?> _lookupTeam(SolarApi api, String number) async {
+  final snapshot = await _siteSnapshot(
+    'team-identity-$number',
+    const Duration(days: 1),
+    () async {
+      final teams = await api.robotEvents.searchTeams(number: number);
+      final team = teams
+          .where((team) => team.number.toUpperCase() == number)
+          .firstOrNull;
+      return {'team': team?.toJson()};
+    },
+  );
+  return snapshot['team'] as Map<String, dynamic>?;
+}
+
+Future<Map<String, dynamic>?> _readSiteSnapshot(String key) async {
+  for (final directory in [
+    '$_cacheDirectoryName/companion',
+    if (Platform.environment['SOLAR_SITE_SEED_DIR'] case final String seed)
+      seed,
+  ]) {
+    try {
+      final file = File('$directory/$key.json');
+      return jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    } on Exception {
+      // A deployment can ship a public snapshot for a cold cache.
+    }
+  }
+  return null;
+}
+
+Future<Map<String, dynamic>> _eventInformation(
+  String sku, {
+  EventSummary? event,
+}) => _siteSnapshot(
+  'event-information-v4-$sku',
+  const Duration(minutes: 15),
+  () async {
+    final information = await solarEventInformation(sku);
+    final webcasts = (information['webcasts'] as List? ?? [])
+        .whereType<String>()
+        .toList();
+    return {
+      ...information,
+      // Only streams that were live around this event's dates.
+      'webcasts': await solarWebcastsDuring(webcasts, event?.start, event?.end),
+    };
+  },
+);
 
 Future<Map<String, dynamic>> _loadRankingsPayload(
   SolarApi api, {
@@ -336,7 +1292,7 @@ bool _isPayloadStale(Map<String, dynamic> payload) {
 
 File _cacheFileFor({required int seasonId, required String gradeLevel}) {
   return File(
-    '${Directory.current.path}${Platform.pathSeparator}$_cacheDirectoryName${Platform.pathSeparator}$seasonId-${_slugify(gradeLevel)}.json',
+    '$_cacheDirectoryName${Platform.pathSeparator}$seasonId-${_slugify(gradeLevel)}.json',
   );
 }
 
@@ -968,10 +1924,20 @@ Future<void> _mapWithConcurrency<T>(
   );
 }
 
-Future<void> _writeJson(HttpResponse response, Object value) async {
+Future<void> _writeJson(
+  HttpResponse response,
+  Object value, {
+  Duration? maxAge,
+}) async {
   _applyApiHeaders(response);
+  if (maxAge != null) {
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=${maxAge.inSeconds}',
+    );
+  }
   response.headers.contentType = ContentType.json;
-  response.write(const JsonEncoder.withIndent('  ').convert(value));
+  response.write(jsonEncode(value));
   await response.close();
 }
 
@@ -981,6 +1947,7 @@ Future<void> _writeError(
   String message,
 ) async {
   response.statusCode = statusCode;
+  response.headers.set('Cache-Control', 'no-store');
   _applyApiHeaders(response);
   response.headers.contentType = ContentType.json;
   response.write(jsonEncode(<String, dynamic>{'error': message}));
@@ -994,6 +1961,7 @@ void _applyApiHeaders(HttpResponse response) {
 }
 
 ContentType _contentTypeFor(String path) {
+  if (path.endsWith('.woff2')) return ContentType('font', 'woff2');
   if (path.endsWith('.css')) {
     return ContentType('text', 'css', charset: 'utf-8');
   }
