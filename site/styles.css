@@ -377,3 +377,4 @@ button:active:not(:disabled),.jump-list a:active,.map-events a:active{transform:
   .top-nav{font-size:11px;gap:1px;padding-inline:3px}
   .top-nav>a,.top-nav>#profileToggle{padding-inline:5px;white-space:nowrap}
 }
+.show-small{display:none}@media(max-width:520px){.hide-narrow{display:none}.show-small{display:inline}}

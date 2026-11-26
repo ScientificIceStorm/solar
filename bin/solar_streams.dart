@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:solar_v6/solar_v6.dart';
 
 const _jumper = 'jumper.robostem.org';
+
+/// Seconds a YouTube replay starts before the match's computed moment.
+const _replayLead = 35;
 final _youtubeId = RegExp(r'^[A-Za-z0-9_-]{11}$');
 final _vimeoId = RegExp(r'^\d{6,14}$');
 final _vimeoHash = RegExp(r'^[a-f0-9]{6,20}$');
@@ -117,7 +120,7 @@ Future<List<String>?> _channelVideosFromApi(
       Uri.https('www.googleapis.com', '/youtube/v3/playlistItems', {
         'playlistId': uploads,
         'part': 'contentDetails',
-        'maxResults': '15',
+        'maxResults': '30',
         'key': key,
       }),
     );
@@ -144,7 +147,7 @@ Future<List<String>> _channelVideos(http.Client client, Uri link) async {
       : <String>[];
   if (channel.isEmpty) return [];
   final fromApi = await _channelVideosFromApi(client, channel);
-  if (fromApi != null && fromApi.isNotEmpty) return fromApi.take(10).toList();
+  if (fromApi != null && fromApi.isNotEmpty) return fromApi.take(30).toList();
   try {
     final body = await _youtubePage(
       client,
@@ -162,13 +165,35 @@ Future<List<String>> _channelVideos(http.Client client, Uri link) async {
     );
     return RegExp(
       r'"(?:videoId|contentId)"\s*:\s*"([A-Za-z0-9_-]{11})"',
-    ).allMatches(data).map((match) => match[1]!).toSet().take(10).toList();
+    ).allMatches(data).map((match) => match[1]!).toSet().take(30).toList();
   } on Exception {
     return [];
   }
 }
 
+/// Broadcast timing by video id. An ended broadcast's timing never changes,
+/// so it is kept; anything else is looked up again after a few minutes.
+/// Organizer channels list the same videos for every event they stream.
+final _streamTimes = <String, ({_Stream? stream, DateTime checked})>{};
+
+/// The channel each looked-up YouTube video belongs to.
+final _videoChannels = <String, String>{};
+final _channelId = RegExp(r'^UC[A-Za-z0-9_-]{22}$');
+
 Future<_Stream?> _youtubeStream(http.Client client, String id) async {
+  final known = _streamTimes[id];
+  if (known != null &&
+      (known.stream?.end != null ||
+          DateTime.now().difference(known.checked) <
+              const Duration(minutes: 5))) {
+    return known.stream;
+  }
+  final stream = await _readYoutubeStream(client, id);
+  _streamTimes[id] = (stream: stream, checked: DateTime.now());
+  return stream;
+}
+
+Future<_Stream?> _readYoutubeStream(http.Client client, String id) async {
   try {
     final key = Platform.environment['YOUTUBE_API_KEY'];
     if (key != null && key.isNotEmpty) {
@@ -177,11 +202,15 @@ Future<_Stream?> _youtubeStream(http.Client client, String id) async {
           client,
           Uri.https('www.googleapis.com', '/youtube/v3/videos', {
             'id': id,
-            'part': 'liveStreamingDetails,status',
+            'part': 'liveStreamingDetails,status,snippet',
             'key': key,
           }),
         );
         final item = data is Map ? _maps(data['items']).firstOrNull : null;
+        if (item?['snippet'] case {'channelId': final String channel}
+            when _channelId.hasMatch(channel)) {
+          _videoChannels[id] = channel;
+        }
         final timing = item?['liveStreamingDetails'];
         if (timing is Map) {
           if (item?['status'] case {'embeddable': false}) return null;
@@ -207,6 +236,10 @@ Future<_Stream?> _youtubeStream(http.Client client, String id) async {
       Uri.https('www.youtube.com', '/watch', {'v': id}),
     );
     if (body == null) return null;
+    final channel = RegExp(
+      r'"channelId"\s*:\s*"(UC[A-Za-z0-9_-]{22})"',
+    ).firstMatch(body)?.group(1);
+    if (channel != null) _videoChannels[id] = channel;
     final details = RegExp(
       r'"liveBroadcastDetails"\s*:\s*(\{[^}]+\})',
     ).firstMatch(body)?.group(1);
@@ -402,10 +435,34 @@ Future<Map<String, Object?>> solarMatchStreams(
         ids.take(6).map((id) => _youtubeStream(client, id)),
       )).whereType<_Stream>(),
     );
+    // A listed broadcast that covers none of the matches is usually a false
+    // start (organizers restart streams that drop); the real one is then on
+    // the same channel.
+    final covered = matches.any((match) {
+      final started = match.started;
+      return started != null &&
+          streams.any(
+            (stream) =>
+                !started.isBefore(stream.anchor) &&
+                !started.isAfter(stream.end ?? DateTime.now()),
+          );
+    });
+    if (!covered && channelIds.isEmpty) {
+      for (final channel in {
+        for (final id in ids.take(3)) ?_videoChannels[id],
+      }) {
+        channelIds.addAll(
+          await _channelVideos(
+            client,
+            Uri.https('www.youtube.com', '/channel/$channel'),
+          ),
+        );
+      }
+    }
     final channelStreams = (await Future.wait(
       channelIds
           .difference(ids)
-          .take(10)
+          .take(30)
           .map((id) => _youtubeStream(client, id)),
     )).whereType<_Stream>();
 
@@ -432,7 +489,14 @@ Future<Map<String, Object?>> solarMatchStreams(
             (stream.end != null && started.isAfter(stream.end!))) {
           continue;
         }
-        final seek = offset;
+        // A YouTube broadcast's start time and RobotEvents' match start
+        // disagree by up to about half a minute, either way, and drift over a
+        // day (checked against the on-screen match clock: Supernova 13–34 s
+        // late, Beach Brawl 0–17 s early). Starting the replay a little early
+        // keeps autonomous in view. Vimeo anchors are set by hand per match.
+        final seek = stream.provider == 'vimeo'
+            ? offset
+            : (offset - _replayLead).clamp(0, offset);
         final uri = stream.provider == 'vimeo'
             ? Uri.https('player.vimeo.com', '/video/${stream.id}', {
                 if (stream.hash != null) 'h': stream.hash!,

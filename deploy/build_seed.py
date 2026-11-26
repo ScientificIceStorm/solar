@@ -82,9 +82,12 @@ def main():
             offer((data['event']['id'], data['division']['id']), data.get('matches'),
                   not data.get('partial'))
 
-    if os.path.isdir(args.out):
-        shutil.rmtree(args.out)
-    os.makedirs(args.out)
+    # Only this script's files are replaced; match-videos-* (from
+    # build_match_videos.py) stay.
+    os.makedirs(args.out, exist_ok=True)
+    for pattern in ('rated-matches-*.json', 'rating-signals-*.json', 'rating-awards-*.json'):
+        for path in glob.glob(os.path.join(args.out, pattern)):
+            os.remove(path)
     total = 0
     for (event, division), (_, count, matches) in sorted(best.items()):
         with open(os.path.join(args.out, f'rated-matches-{event}-{division}.json'), 'w',

@@ -18,6 +18,14 @@ python deploy/build_seed.py --cache .solar_rankings_cache/companion
 
 `--cache` reuses a local server's cache (run the server and open the Teams page to fill it); `--events <dir>` also accepts saved `/api/event?...&division=...` responses.
 
+The seed also carries each finished event's match replay links (`match-videos-<event>-<division>.json`): the API can't read YouTube broadcast start times from a datacenter host without `YOUTUBE_API_KEY`, so they are worked out locally, where it can. Save the season's event list (`/api/events?seasonId=<season>` from a local server) and run:
+
+```sh
+dart run deploy/build_match_videos.dart --events events.json --state progress.json
+```
+
+It makes no RobotEvents API calls (matches come from the seed). `--state` lets an interrupted run resume. Each link starts 35 seconds before the computed moment, because broadcast and match clocks drift by up to about half a minute.
+
 For a local Pages preview with the Dart server on port 8787, run:
 
 ```sh

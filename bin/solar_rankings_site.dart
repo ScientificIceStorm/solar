@@ -653,6 +653,17 @@ Future<void> _handleRequest(
       final detailsOnly =
           request.uri.queryParameters['streams'] == '1' ||
           request.uri.queryParameters['history'] == '1';
+      // Match videos for a finished event were found ahead of time (see
+      // deploy/build_match_videos.py): the server can't read YouTube's
+      // broadcast times itself without YOUTUBE_API_KEY.
+      final recordedVideos = request.uri.queryParameters['streams'] == '1'
+          ? await _recordedMatchVideos(event.id, division?.id)
+          : const <String, dynamic>{};
+      if (recordedVideos.isNotEmpty &&
+          event.end != null &&
+          now.difference(event.end!) > const Duration(days: 2)) {
+        return _writeJson(request.response, recordedVideos);
+      }
       final divisionKey = 'division-v6-${event.id}-${division?.id}';
       // When RobotEvents had no standings (or the request failed) the saved
       // snapshot is retried within a minute instead of being kept all day.
@@ -773,7 +784,7 @@ Future<void> _handleRequest(
           (data['matches'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       if (request.uri.queryParameters['streams'] == '1' && division != null) {
         final streams = await _siteSnapshot(
-          'streams-v6-${event.id}-${division.id}',
+          'streams-v8-${event.id}-${division.id}',
           active ? const Duration(minutes: 2) : const Duration(hours: 2),
           () async => {
             'rows': await solarMatchStreams(
@@ -790,7 +801,10 @@ Future<void> _handleRequest(
             ),
           },
         );
-        return _writeJson(request.response, streams['rows'] as Map);
+        return _writeJson(request.response, {
+          ...recordedVideos,
+          ...streams['rows'] as Map,
+        });
       }
       if (request.uri.queryParameters['history'] == '1' && division != null) {
         final oddsKey = 'odds-season-v2-${event.id}-${division.id}';
@@ -1173,6 +1187,25 @@ Future<Map<String, dynamic>?> _lookupTeam(SolarApi api, String number) async {
     },
   );
   return snapshot['team'] as Map<String, dynamic>?;
+}
+
+/// Match id → replay link shipped in the deployment's seed folder for
+/// [event]'s [division]; empty when there is none.
+Future<Map<String, dynamic>> _recordedMatchVideos(
+  int event,
+  int? division,
+) async {
+  final seed = Platform.environment['SOLAR_SITE_SEED_DIR'];
+  if (seed == null || division == null) return const {};
+  try {
+    final data = jsonDecode(
+      await File('$seed/match-videos-$event-$division.json').readAsString(),
+    );
+    final rows = data is Map ? data['rows'] : null;
+    return rows is Map<String, dynamic> ? rows : const {};
+  } on Exception {
+    return const {};
+  }
 }
 
 Future<Map<String, dynamic>?> _readSiteSnapshot(String key) async {

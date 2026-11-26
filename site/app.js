@@ -790,12 +790,15 @@ function renderEvent(data, loadExtras) {
   let rosterLoading = false;
   let rosterOrder = 'number';
   let seasonRatings;
+  let awards;
+  let awardsError = false;
+  let awardsLoading = false;
   const upcoming = Boolean(event.start && new Date(event.start) > new Date());
   const sections = [
     ...(upcoming ? [['roster', 'Teams']] : []),
     ['standings', 'Standings'], ['matches', 'Matches'],
     ...(!upcoming ? [['roster', 'Teams']] : []),
-    ['bracket', 'Alliance bracket'], ['information', 'Information'],
+    ['bracket', '<span class="hide-narrow">Alliance bracket</span><span class="show-small">Bracket</span>'], ['awards', 'Awards'], ['information', 'Information'],
   ];
   let section = sections[0][0];
   document.title = event.name + ' · Solar';
@@ -852,11 +855,43 @@ function renderEvent(data, loadExtras) {
     ? 'Could not load the team list. <button type="button" id="retryRoster">Retry</button>'
     : roster ? 'No registered teams have been posted.' : 'Loading registered teams…') + '</p>';
   };
+  const renderAwards = () => {
+    if (!awards) {
+      return '<p class="status" role="status">' + (awardsError
+        ? 'Could not load awards. <button type="button" id="retryAwards">Retry</button>'
+        : 'Loading awards…') + '</p>';
+    }
+    if (!awards.length) {
+      return '<p class="status" role="status">' +
+        (upcoming ? 'Awards are posted after the event.' : 'No awards have been posted.') + '</p>';
+    }
+    // "Excellence Award - High School (VRC/VEXU/VEXAIR)" → "Excellence Award - High School"
+    const title = (text) => String(text || 'Award').replace(/\s*\((?:[A-Z0-9]+\/)*[A-Z0-9]+\)\s*$/, '');
+    const winner = (name) => name === 'Recipient pending'
+      ? '<span class="muted">Not announced</span>' : teamLink(name, event.seasonId);
+    const qualifies = awards.some((award) => award.qualifications?.length);
+    return table([['Award'], ['Winner'], ...(qualifies ? [['Qualifies for']] : [])],
+      [...awards].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((award) =>
+        '<tr><td>' + escape(title(award.title)) + '</td><td>' +
+        (award.recipients || []).map(winner).join(', ') + '</td>' + (qualifies ? '<td class="muted">' +
+        escape((award.qualifications || []).join(', ') || '—') + '</td>' : '') + '</tr>'));
+  };
+  const loadAwards = () => {
+    if (awardsLoading || awards) return;
+    awardsLoading = true;
+    awardsError = false;
+    api('event', {sku: event.sku, scouting: 1}).then((result) => { awards = result.awards || []; })
+      .catch(() => { awardsError = true; }).finally(() => {
+        awardsLoading = false;
+        if (content.isConnected && section === 'awards') renderSection();
+      });
+  };
   const renderSection = (animate = false) => {
     const webcastLinks = section === 'matches' ? eventWebcastLinks(event, information) : [];
     const matchRows = section === 'matches' && information?.webcasts?.length ?
       matches.map((match) => ({...match, webcast: match.completed ? information.webcasts[0] : null})) : matches;
     const html = section === 'information' ? eventInformation(event, information, informationPending, infoSelection) :
+      section === 'awards' ? renderAwards() :
       section === 'roster' ? renderRoster() :
       section === 'standings' ? standingsTable() :
       section === 'matches' ? (webcastLinks.length ?
@@ -898,6 +933,9 @@ function renderEvent(data, loadExtras) {
     } else if (event.target.id === 'retryRoster') {
       loadRoster();
       renderSection();
+    } else if (event.target.id === 'retryAwards') {
+      loadAwards();
+      renderSection();
     } else if (!event.target.closest('a, input, select') || event.target.closest('[data-report-team]')) {
       const row = event.target.closest('[data-team-report]');
       const team = standings.find((entry) => String(entry.team.id) === row?.dataset.teamReport)?.team;
@@ -914,6 +952,7 @@ function renderEvent(data, loadExtras) {
       tabs.querySelectorAll('[data-section]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
       section = button.dataset.section;
       if (section === 'roster') loadRoster();
+      if (section === 'awards') loadAwards();
       if (section === 'matches' || section === 'bracket') loadExtras?.();
       indicator.sync();
       if (['information', 'matches'].includes(section) && !information && !informationPending) {
