@@ -1055,7 +1055,7 @@ function renderInsights(visible, filtered) {
   };
   const compared = rows.filter((row) => comparedTeams.has(row.teamNumber));
   ui.results.innerHTML = '<div class="insights-top"><div><h2>Season scouting</h2><p>Select up to four teams to compare. Points are alliance averages; OPR, DPR and CCWM average available division estimates.</p>' +
-    '<details><summary>How Solar ranks teams</summary><p>Solar score starts with each team’s season strength: the points it adds to its alliance and takes away from opponents, rated against everyone it played across every event, so beating strong fields counts for more than beating a weak local. Strength is discounted by how unsure it is, so teams with only one or two events can’t top the list on thin evidence. Teamwork, autonomous points, driving and programming Skills, and awards adjust it slightly.</p></details></div>' +
+    '<details><summary>How Solar ranks teams</summary><p>Solar ranks teams by OpenSkill: a rating learned from every match each team played this season, across all events, where beating a highly rated alliance counts for more than beating a weak one. Solar score is that rating as a percentile (0–100). Results from only one event are pulled toward the middle, since one run through a single field says less than results across several events.</p></details></div>' +
     '<label>Sort by <select id="insightMetric">' +
     insightColumns.map(([key, name]) => '<option value="' + key + '"' +
       (key === insightMetric ? ' selected' : '') + '>' + name + '</option>').join('') +

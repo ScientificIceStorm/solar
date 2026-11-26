@@ -314,7 +314,15 @@ Future<Map<String, dynamic>> _withSeasonOdds(
   if (rows.isEmpty) return profile;
   Map<String, dynamic> odds;
   try {
-    final key = 'team-odds-v2-$season-$number';
+    // Keyed by the exact match list, so odds saved for a quick partial
+    // profile are never reused for the full one (or after new matches).
+    final ids = [for (final row in rows) row['id']]
+      ..sort((a, b) => '$a'.compareTo('$b'));
+    final digest = ids.fold<int>(
+      ids.length,
+      (hash, id) => (hash * 31 + '$id'.hashCode) & 0x7fffffff,
+    );
+    final key = 'team-odds-v3-$season-$number-$digest';
     final saved = await _readSiteSnapshot(key);
     odds = await _siteSnapshot(
       key,
@@ -1077,9 +1085,7 @@ Future<void> _handleRequest(
       return _writeJson(
         request.response,
         {
-          ...data['partial'] == true
-              ? data
-              : await _withSeasonOdds(season, number, data, live: live),
+          ...await _withSeasonOdds(season, number, data, live: live),
           'active': live,
         },
         maxAge: data['partial'] == true

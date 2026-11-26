@@ -146,7 +146,6 @@ Map<int, double> _percentiles(Map<int, double> values) {
 Map<int, Map<String, Object>> _combinedRatings(
   int season,
   Map<int, double> base,
-  Map<int, double> openSkill,
   Map<Object?, Map<String, dynamic>> skills,
   Map<int, String> numbers,
   Map<int, Set<int>> eventCoverage,
@@ -214,20 +213,10 @@ Map<int, Map<String, Object>> _combinedRatings(
               appearances[id]!.where(awards.containsKey).length,
     }),
   };
-  const weights = {
-    'teamwork': .05,
-    'programming': .06,
-    'autonomous': .03,
-    'driving': .06,
-    'awards': .03,
-  };
   final ranks = <String, Map<int, int>>{};
-  for (final key in ['strength', 'openskill', ...signals.keys]) {
-    final values = (switch (key) {
-      'strength' => base,
-      'openskill' => openSkill,
-      _ => signals[key]!,
-    }).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+  for (final key in ['openskill', ...signals.keys]) {
+    final values = (key == 'openskill' ? base : signals[key]!).entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     ranks[key] = {};
     for (var i = 0; i < values.length; i++) {
       ranks[key]![values[i].key] =
@@ -237,27 +226,14 @@ Map<int, Map<String, Object>> _combinedRatings(
     }
   }
   final normalized = _percentiles(base);
+  // Solar score is the team's OpenSkill percentile (0–100). Results from a
+  // single event are pulled toward the middle, since a run through one field
+  // (often a small local) says less than results across several events.
   double score(int id) {
     final eventCount = eventCoverage[id]?.length ?? 0;
-    final baseline = normalized[id]!;
-    var adjustment = 0.0;
-    for (final weight in weights.entries) {
-      final signal = signals[weight.key]![id];
-      if (signal == null) continue;
-      final samples = switch (weight.key) {
-        'teamwork' => teamwork[id]?.length ?? 0,
-        'autonomous' => programming[id]?.length ?? 0,
-        'awards' => appearances[id]?.where(awards.containsKey).length ?? 0,
-        _ => 3,
-      };
-      adjustment +=
-          weight.value * samples / (samples + 2) * (signal - baseline);
-    }
-    // A single event provides less evidence than repeat performance across fields.
     return 100 *
         (.5 +
-            (baseline + adjustment - .5) *
-                (.82 + .18 * eventCount / (eventCount + 2)));
+            (normalized[id]! - .5) * (.7 + .3 * eventCount / (eventCount + 1)));
   }
 
   return {
@@ -525,23 +501,10 @@ Future<Map<String, Object>> _openSkillLeaderboard(
       divisionTotals[id] = (offense + opr, defense + dpr, count + 1);
     }
   }
-  // Solar ranks by score-based season strength (attack + defence, minus one
-  // standard deviation so thin evidence can't top the list); OpenSkill's
-  // win/loss rating can't tell a weak local from a strong field.
-  final seasonRatings = SolarSeasonForecast.teamRatings(index.values);
-  final unseen = -math.sqrt(
-    SolarSeasonForecast.priorVariance * (1 + SolarSeasonForecast.defenceShare),
-  );
+  // Solar ranks by OpenSkill: every team's rating learned from all of its
+  // season matches, against everyone it played.
   final combined = _combinedRatings(
     season,
-    {
-      for (final entry in analysis.ratings.entries)
-        if (entry.value.matches > 0)
-          entry.key: switch (seasonRatings[entry.key]) {
-            final r? => r.attack + r.defence - r.uncertainty,
-            null => unseen,
-          },
-    },
     {
       for (final entry in analysis.ratings.entries)
         if (entry.value.matches > 0) entry.key: entry.value.rating,
@@ -559,12 +522,6 @@ Future<Map<String, Object>> _openSkillLeaderboard(
               'teamNumber': numbers[entry.key],
               ...?metadata[entry.key],
               'skill': entry.value.toJson(),
-              if (seasonRatings[entry.key] case final r?) ...{
-                'strength': r.attack + r.defence,
-                'attack': r.attack,
-                'defence': r.defence,
-                'strengthUncertainty': r.uncertainty,
-              },
               ...?combined[entry.key],
               'eventsPlayed': eventCoverage[entry.key]?.length ?? 0,
               if (points[entry.key] case final p?) ...{
@@ -584,10 +541,31 @@ Future<Map<String, Object>> _openSkillLeaderboard(
             ? comparison
             : '${a['teamNumber']}'.compareTo('${b['teamNumber']}');
       });
-  return {
+  final board = <String, Object>{
     'rows': [
       for (var i = 0; i < rows.length; i++) {...rows[i], 'rank': i + 1},
     ],
     'updating': _openSkillSeasonJobs.containsKey(season),
   };
+  // Never swap a full ranking for one built from a half-loaded index (as
+  // happens while the season reloads): keep the last full one until the new
+  // one covers at least as much of the season.
+  final key = '$season-$grade';
+  final served =
+      _servedLeaderboards[key] ??
+      await _readSiteSnapshot(
+        'leaderboard-v3-$season-${grade.replaceAll(' ', '-')}',
+      );
+  if (served != null &&
+      rows.length < .9 * ((served['rows'] as List?)?.length ?? 0)) {
+    return Map<String, Object>.from({
+      for (final entry in served.entries)
+        if (entry.value != null) entry.key: entry.value,
+      'updating': true,
+    });
+  }
+  _servedLeaderboards[key] = board;
+  return board;
 }
+
+final _servedLeaderboards = <String, Map<String, dynamic>>{};

@@ -202,7 +202,7 @@ export default {
     const headers = {Accept: 'application/json'};
     if (env.SOLAR_ORIGIN_TOKEN) headers['X-Solar-Origin-Token'] = env.SOLAR_ORIGIN_TOKEN;
 
-    const cacheNamespace = url.pathname === '/api/openskill' ? '/solar-ratings-v3' : '/solar-cache-v2';
+    const cacheNamespace = url.pathname === '/api/openskill' ? '/solar-ratings-v4' : '/solar-cache-v2';
     const cacheUrl = new URL(cacheNamespace + target.pathname, url.origin);
     cacheUrl.search = target.search;
     const cacheKey = new Request(cacheUrl);
