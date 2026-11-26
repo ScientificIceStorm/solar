@@ -252,18 +252,18 @@ Future<List<MatchSummary>> _seasonTeamMatches(
       .toList();
 }
 
-/// Scored matches from [event]'s season to rate its teams with: the season
-/// index, plus each team's saved match history when [savedTeams] is set or
-/// the index doesn't know most of them yet (e.g. right after a restart).
+/// Scored matches from [season] to rate the teams in [matches] with: the
+/// season index, plus each team's saved match history when [savedTeams] is
+/// set or the index doesn't know most of them yet (e.g. right after a
+/// restart). Matches from [exceptEvent] don't count as already known.
 Future<List<MatchSummary>> _seasonHistory(
-  EventSummary event,
+  int season,
   List<MatchSummary> matches, {
+  int? exceptEvent,
   bool savedTeams = false,
 }) async {
-  final history = <MatchSummary>[
-    ...?_openSkillSeasonMatches[event.seasonId]?.values,
-  ];
-  if (event.seasonId <= 0) return history;
+  final history = <MatchSummary>[...?_openSkillSeasonMatches[season]?.values];
+  if (season <= 0) return history;
   final teamIds = {
     for (final match in matches)
       for (final alliance in match.alliances)
@@ -272,25 +272,63 @@ Future<List<MatchSummary>> _seasonHistory(
   };
   final known = {
     for (final match in history)
-      if (match.event.id != event.id)
+      if (match.event.id != exceptEvent)
         for (final alliance in match.alliances)
           for (final team in alliance.teams) team.id,
   };
-  if (!savedTeams &&
-      known.intersection(teamIds).length * 2 >= teamIds.length) {
+  if (!savedTeams && known.intersection(teamIds).length * 2 >= teamIds.length) {
     return history;
   }
   await _mapWithConcurrency(teamIds.toList(), 4, (team, _) async {
-    final saved = await _readSiteSnapshot(
-      'team-matches-$team-${event.seasonId}',
-    );
+    final saved = await _readSiteSnapshot('team-matches-$team-$season');
     history.addAll(
-      (saved?['matches'] as List? ?? [])
-          .whereType<Map<String, dynamic>>()
-          .map(MatchSummary.fromJson),
+      (saved?['matches'] as List? ?? []).whereType<Map<String, dynamic>>().map(
+        MatchSummary.fromJson,
+      ),
     );
   });
   return history;
+}
+
+/// [profile] with each match's forecast from the season model (see
+/// SolarSeasonForecast), rated against everyone in the season rather than
+/// only this team's own matches.
+Future<Map<String, dynamic>> _withSeasonOdds(
+  int season,
+  String number,
+  Map<String, dynamic> profile, {
+  required bool live,
+}) async {
+  final rows = (profile['matches'] as List? ?? [])
+      .whereType<Map<String, dynamic>>()
+      .toList();
+  if (rows.isEmpty) return profile;
+  Map<String, dynamic> odds;
+  try {
+    odds = await _siteSnapshot(
+      'team-odds-v1-$season-$number',
+      live ? const Duration(minutes: 1) : const Duration(hours: 3),
+      () async {
+        final matches = rows.map(MatchSummary.fromJson).toList();
+        final forecast = SolarSeasonForecast.forMatches(
+          await _seasonHistory(season, matches),
+          matches,
+        );
+        return {
+          for (final entry in forecast.entries) '${entry.key}': entry.value,
+        };
+      },
+    ).timeout(const Duration(seconds: 4));
+  } on Object {
+    return profile;
+  }
+  return {
+    ...profile,
+    'matches': [
+      for (final row in rows)
+        {...row, 'forecast': odds['${row['id']}'] ?? row['forecast']},
+    ],
+  };
 }
 
 Future<Map<String, Object?>> _previousEventOdds(
@@ -596,9 +634,10 @@ Future<void> _handleRequest(
       // When RobotEvents had no standings (or the request failed) the saved
       // snapshot is retried within a minute instead of being kept all day.
       final savedDivision = await _readSiteSnapshot(divisionKey);
-      final standingsPending = const {'previous', 'missing'}.contains(
-        savedDivision?['standingsSource'],
-      );
+      final standingsPending = const {
+        'previous',
+        'missing',
+      }.contains(savedDivision?['standingsSource']);
       final snapshotLoad = _siteSnapshot(
         divisionKey,
         active
@@ -652,7 +691,9 @@ Future<void> _handleRequest(
           var rows = standings.map((row) => row.toJson()).toList();
           String? source;
           if (rows.isEmpty) {
-            final previous = (await _readSiteSnapshot(divisionKey))?['standings'];
+            final previous = (await _readSiteSnapshot(
+              divisionKey,
+            ))?['standings'];
             if (previous is List && previous.isNotEmpty) {
               rows = previous.whereType<Map<String, dynamic>>().toList();
               source = 'previous';
@@ -665,7 +706,11 @@ Future<void> _handleRequest(
             }
           }
           final seasonOdds = SolarSeasonForecast.forMatches(
-            await _seasonHistory(event, matches),
+            await _seasonHistory(
+              event.seasonId,
+              matches,
+              exceptEvent: event.id,
+            ),
             matches,
           );
           return <String, Object?>{
@@ -701,7 +746,7 @@ Future<void> _handleRequest(
           (data['matches'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       if (request.uri.queryParameters['streams'] == '1' && division != null) {
         final streams = await _siteSnapshot(
-          'streams-v5-${event.id}-${division.id}',
+          'streams-v6-${event.id}-${division.id}',
           active ? const Duration(minutes: 2) : const Duration(hours: 2),
           () async => {
             'rows': await solarMatchStreams(
@@ -709,7 +754,11 @@ Future<void> _handleRequest(
               division,
               rows.map(MatchSummary.fromJson),
               () async =>
-                  ((await _eventInformation(event.sku, event: event))['webcasts'] as List)
+                  ((await _eventInformation(
+                            event.sku,
+                            event: event,
+                          ))['webcasts']
+                          as List)
                       .cast<String>(),
             ),
           },
@@ -724,7 +773,12 @@ Future<void> _handleRequest(
             final matches = rows.map(MatchSummary.fromJson).toList();
             final previous = await _previousEventOdds(api, event, matches);
             final season = SolarSeasonForecast.forMatches(
-              await _seasonHistory(event, matches, savedTeams: true),
+              await _seasonHistory(
+                event.seasonId,
+                matches,
+                exceptEvent: event.id,
+                savedTeams: true,
+              ),
               matches,
             );
             return {
@@ -773,7 +827,7 @@ Future<void> _handleRequest(
       }
       if (path == '/api/openskill') {
         final board = await _siteSnapshot(
-          'leaderboard-v2-$season-${grade.replaceAll(' ', '-')}',
+          'leaderboard-v3-$season-${grade.replaceAll(' ', '-')}',
           const Duration(minutes: 5),
           () => _openSkillLeaderboard(api, season, grade),
         );
@@ -899,7 +953,7 @@ Future<void> _handleRequest(
       }
       if (savedProfile?['team'] != null && !liveHint) {
         return _writeJson(request.response, {
-          ...savedProfile!,
+          ...await _withSeasonOdds(season, number, savedProfile!, live: false),
           'active': false,
         }, maxAge: const Duration(seconds: 30));
       }
@@ -995,7 +1049,12 @@ Future<void> _handleRequest(
       }
       return _writeJson(
         request.response,
-        {...data, 'active': live},
+        {
+          ...data['partial'] == true
+              ? data
+              : await _withSeasonOdds(season, number, data, live: live),
+          'active': live,
+        },
         maxAge: data['partial'] == true
             ? null
             : live

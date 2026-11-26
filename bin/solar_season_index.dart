@@ -146,6 +146,7 @@ Map<int, double> _percentiles(Map<int, double> values) {
 Map<int, Map<String, Object>> _combinedRatings(
   int season,
   Map<int, double> base,
+  Map<int, double> openSkill,
   Map<Object?, Map<String, dynamic>> skills,
   Map<int, String> numbers,
   Map<int, Set<int>> eventCoverage,
@@ -214,16 +215,19 @@ Map<int, Map<String, Object>> _combinedRatings(
     }),
   };
   const weights = {
-    'teamwork': .12,
+    'teamwork': .05,
     'programming': .06,
-    'autonomous': .05,
+    'autonomous': .03,
     'driving': .06,
     'awards': .03,
   };
   final ranks = <String, Map<int, int>>{};
-  for (final key in ['openskill', ...signals.keys]) {
-    final values = (key == 'openskill' ? base : signals[key]!).entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+  for (final key in ['strength', 'openskill', ...signals.keys]) {
+    final values = (switch (key) {
+      'strength' => base,
+      'openskill' => openSkill,
+      _ => signals[key]!,
+    }).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     ranks[key] = {};
     for (var i = 0; i < values.length; i++) {
       ranks[key]![values[i].key] =
@@ -292,7 +296,7 @@ Future<void> _seedOpenSkillIndex(
       if (file is! File) continue;
       final name = file.uri.pathSegments.last;
       final divisionEvent = RegExp(
-        r'^(?:division-v[34]|rated-matches)-(\d+)-\d+\.json$',
+        r'^(?:division-v[345]|rated-matches)-(\d+)-\d+\.json$',
       ).firstMatch(name);
       final teamHistory =
           name.startsWith('team-matches-') && name.endsWith('-$season.json');
@@ -521,8 +525,23 @@ Future<Map<String, Object>> _openSkillLeaderboard(
       divisionTotals[id] = (offense + opr, defense + dpr, count + 1);
     }
   }
+  // Solar ranks by score-based season strength (attack + defence, minus one
+  // standard deviation so thin evidence can't top the list); OpenSkill's
+  // win/loss rating can't tell a weak local from a strong field.
+  final seasonRatings = SolarSeasonForecast.teamRatings(index.values);
+  final unseen = -math.sqrt(
+    SolarSeasonForecast.priorVariance * (1 + SolarSeasonForecast.defenceShare),
+  );
   final combined = _combinedRatings(
     season,
+    {
+      for (final entry in analysis.ratings.entries)
+        if (entry.value.matches > 0)
+          entry.key: switch (seasonRatings[entry.key]) {
+            final r? => r.attack + r.defence - r.uncertainty,
+            null => unseen,
+          },
+    },
     {
       for (final entry in analysis.ratings.entries)
         if (entry.value.matches > 0) entry.key: entry.value.rating,
@@ -540,6 +559,12 @@ Future<Map<String, Object>> _openSkillLeaderboard(
               'teamNumber': numbers[entry.key],
               ...?metadata[entry.key],
               'skill': entry.value.toJson(),
+              if (seasonRatings[entry.key] case final r?) ...{
+                'strength': r.attack + r.defence,
+                'attack': r.attack,
+                'defence': r.defence,
+                'strengthUncertainty': r.uncertainty,
+              },
               ...?combined[entry.key],
               'eventsPlayed': eventCoverage[entry.key]?.length ?? 0,
               if (points[entry.key] case final p?) ...{

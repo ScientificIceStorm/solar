@@ -39,6 +39,92 @@ String? _videoId(Uri link) {
   return id != null && _youtubeId.hasMatch(id) ? id : null;
 }
 
+/// YouTube refuses page reads from datacenter hosts such as Railway's, so on
+/// the server pages are read through the site's worker (see `youtubeRelay`
+/// in site/_worker.js), falling back to a direct read.
+final _youtubeRelay =
+    Platform.environment['SOLAR_YOUTUBE_RELAY'] ??
+    (Platform.environment['RAILWAY_ENVIRONMENT'] != null
+        ? 'https://solarscout-enz.pages.dev/api/youtube-relay'
+        : null);
+
+Future<String?> _youtubePage(http.Client client, Uri page) async {
+  final token = Platform.environment['SOLAR_ORIGIN_TOKEN']?.trim() ?? '';
+  final relay = Uri.tryParse(_youtubeRelay ?? '');
+  if (relay != null && relay.hasAuthority && token.isNotEmpty) {
+    try {
+      final response = await client
+          .get(
+            relay.replace(queryParameters: {'url': page.toString()}),
+            headers: {'X-Solar-Origin-Token': token},
+          )
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200 && response.body.contains('ytInitial')) {
+        return response.body;
+      }
+    } on Exception {
+      // Try reading the page directly.
+    }
+  }
+  try {
+    final response = await client
+        .get(page, headers: const {'Accept-Language': 'en-US,en;q=0.9'})
+        .timeout(const Duration(seconds: 6));
+    return response.statusCode == 200 ? response.body : null;
+  } on Exception {
+    return null;
+  }
+}
+
+/// A channel's recent uploads (live streams included) through the YouTube
+/// Data API, when the server has a key.
+Future<List<String>?> _channelVideosFromApi(
+  http.Client client,
+  List<String> channel,
+) async {
+  final key = Platform.environment['YOUTUBE_API_KEY'];
+  if (key == null || key.isEmpty) return null;
+  final filter = switch (channel) {
+    [final handle] when handle.startsWith('@') => {'forHandle': handle},
+    ['channel', final id] => {'id': id},
+    ['user', final name] => {'forUsername': name},
+    _ => null,
+  };
+  if (filter == null) return null;
+  try {
+    final channels = await _json(
+      client,
+      Uri.https('www.googleapis.com', '/youtube/v3/channels', {
+        ...filter,
+        'part': 'contentDetails',
+        'key': key,
+      }),
+    );
+    final item = channels is Map ? _maps(channels['items']).firstOrNull : null;
+    final details = item?['contentDetails'];
+    final playlists = details is Map ? details['relatedPlaylists'] : null;
+    final uploads = playlists is Map ? playlists['uploads'] : null;
+    if (uploads is! String) return null;
+    final items = await _json(
+      client,
+      Uri.https('www.googleapis.com', '/youtube/v3/playlistItems', {
+        'playlistId': uploads,
+        'part': 'contentDetails',
+        'maxResults': '15',
+        'key': key,
+      }),
+    );
+    if (items is! Map) return null;
+    return _maps(items['items'])
+        .map((item) => item['contentDetails']?['videoId'])
+        .whereType<String>()
+        .where(_youtubeId.hasMatch)
+        .toList();
+  } on Exception {
+    return null;
+  }
+}
+
 Future<List<String>> _channelVideos(http.Client client, Uri link) async {
   if (!_youtubeHosts.contains(link.host)) return [];
   final parts = link.pathSegments;
@@ -50,18 +136,19 @@ Future<List<String>> _channelVideos(http.Client client, Uri link) async {
       ? parts.take(2).toList()
       : <String>[];
   if (channel.isEmpty) return [];
+  final fromApi = await _channelVideosFromApi(client, channel);
+  if (fromApi != null && fromApi.isNotEmpty) return fromApi.take(10).toList();
   try {
-    final response = await client
-        .get(
-          Uri(
-            scheme: 'https',
-            host: 'www.youtube.com',
-            pathSegments: [...channel, 'streams'],
-          ),
-        )
-        .timeout(const Duration(seconds: 5));
-    if (response.statusCode != 200) return [];
-    final data = response.body.replaceAllMapped(
+    final body = await _youtubePage(
+      client,
+      Uri(
+        scheme: 'https',
+        host: 'www.youtube.com',
+        pathSegments: [...channel, 'streams'],
+      ),
+    );
+    if (body == null) return [];
+    final data = body.replaceAllMapped(
       RegExp(r'\\x([a-fA-F0-9]{2})'),
       (match) => String.fromCharCode(int.parse(match[1]!, radix: 16)),
     );
@@ -107,13 +194,14 @@ Future<_Stream?> _youtubeStream(http.Client client, String id) async {
         // Continue with the public player metadata.
       }
     }
-    final response = await client
-        .get(Uri.https('www.youtube.com', '/watch', {'v': id}))
-        .timeout(const Duration(seconds: 6));
-    if (response.statusCode != 200) return null;
+    final body = await _youtubePage(
+      client,
+      Uri.https('www.youtube.com', '/watch', {'v': id}),
+    );
+    if (body == null) return null;
     final details = RegExp(
       r'"liveBroadcastDetails"\s*:\s*(\{[^}]+\})',
-    ).firstMatch(response.body)?.group(1);
+    ).firstMatch(body)?.group(1);
     if (details == null) return null;
     final timing = jsonDecode(details) as Map<String, dynamic>;
     final start = DateTime.tryParse(timing['startTimestamp']?.toString() ?? '');

@@ -135,6 +135,35 @@ async function contributions(request, env, url) {
     'Cache-Control': 'no-store'}});
 }
 
+// YouTube blocks page reads from Solar's API host, so the API reads a match's
+// broadcast timing through here. Only the API (holding the origin token) may
+// call it, and only for a video's watch page or a channel's stream list.
+const youtubePage = /^\/(?:watch|@[\w.-]{1,100}\/streams|(?:channel|c|user)\/[\w.-]{1,100}\/streams)$/;
+async function youtubeRelay(request, env, url) {
+  const token = env.SOLAR_ORIGIN_TOKEN;
+  if (!token) return error('Not allowed.', 401);
+  const a = new TextEncoder().encode(request.headers.get('X-Solar-Origin-Token') || '');
+  const b = new TextEncoder().encode(token);
+  let same = a.length === b.length ? 0 : 1;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) same |= a[i] ^ b[i];
+  if (same) return error('Not allowed.', 401);
+  let target;
+  try { target = new URL(url.searchParams.get('url') || ''); } catch { return error('Invalid page.', 400); }
+  const video = target.searchParams.get('v');
+  if (target.protocol !== 'https:' || target.host !== 'www.youtube.com' || !youtubePage.test(target.pathname) ||
+      (target.pathname === '/watch' ? !/^[\w-]{11}$/.test(video || '') || [...target.searchParams].length !== 1
+        : target.search)) {
+    return error('Invalid page.', 400);
+  }
+  const page = await fetch(target, {headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cookie': 'CONSENT=YES+1; SOCS=CAI',
+  }, redirect: 'follow'});
+  return new Response(page.body, {status: page.status,
+    headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}});
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -145,6 +174,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
+    if (url.pathname === '/api/youtube-relay') return youtubeRelay(request, env, url);
     if (url.pathname === '/api/scoutvision/contribute') return contribute(request, env, ctx);
     if (url.pathname === '/api/scoutvision/contributions' || url.pathname.startsWith('/api/scoutvision/contributions/')) {
       return contributions(request, env, url);

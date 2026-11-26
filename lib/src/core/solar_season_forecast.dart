@@ -60,14 +60,13 @@ class SolarSeasonForecast {
     final state = _Ratings();
     final targets = matches.toList()..sort(_byTime);
     final targetKeys = {
-      for (final match in targets) (match.event.id, match.division.id, match.id),
+      for (final match in targets)
+        (match.event.id, match.division.id, match.id),
     };
     final learning = <MatchSummary>[
       for (final match in history)
         if (_time(match) != null &&
-            !targetKeys.contains(
-              (match.event.id, match.division.id, match.id),
-            ))
+            !targetKeys.contains((match.event.id, match.division.id, match.id)))
           match,
       for (final match in targets)
         if (_time(match) != null) match,
@@ -87,6 +86,35 @@ class SolarSeasonForecast {
     return result;
   }
 
+  /// Every team's season rating from all scored [matches]: [attack] (points
+  /// it adds to its alliance's score), [defence] (points it takes off the
+  /// opponents') and [uncertainty] (one standard deviation of attack +
+  /// defence after its latest match: larger for teams with little evidence).
+  /// Because ratings are carried across events through shared teams and
+  /// opponents, beating strong fields counts for more than beating weak ones.
+  static Map<int, ({double attack, double defence, double uncertainty})>
+  teamRatings(Iterable<MatchSummary> matches) {
+    final state = _Ratings();
+    final ordered = [
+      for (final match in matches)
+        if (_time(match) != null) match,
+    ]..sort(_byTime);
+    for (final match in ordered) {
+      state.learn(match);
+    }
+    return {
+      for (final team in state.lastSeen.keys)
+        team: (
+          attack: state.attack[team] ?? 0,
+          defence: state.defence[team] ?? 0,
+          uncertainty: math.sqrt(
+            (state.attackVariance[team] ?? _Ratings._prior) +
+                (state.defenceVariance[team] ?? _Ratings._defencePrior),
+          ),
+        ),
+    };
+  }
+
   static DateTime? _time(MatchSummary match) =>
       match.started ?? match.scheduled;
 
@@ -102,8 +130,7 @@ class SolarSeasonForecast {
 typedef _Sides = ({List<int> red, List<int> blue, int redScore, int blueScore});
 
 class _Ratings {
-  static const _noise2 =
-      SolarSeasonForecast.noise * SolarSeasonForecast.noise;
+  static const _noise2 = SolarSeasonForecast.noise * SolarSeasonForecast.noise;
   static const _prior = SolarSeasonForecast.priorVariance;
   static const _defencePrior =
       SolarSeasonForecast.priorVariance * SolarSeasonForecast.defenceShare;
@@ -123,8 +150,14 @@ class _Ratings {
         .firstOrNull;
     final red = side('red'), blue = side('blue');
     if (red == null || blue == null) return null;
-    final redIds = [for (final team in red.teams) if (team.id > 0) team.id];
-    final blueIds = [for (final team in blue.teams) if (team.id > 0) team.id];
+    final redIds = [
+      for (final team in red.teams)
+        if (team.id > 0) team.id,
+    ];
+    final blueIds = [
+      for (final team in blue.teams)
+        if (team.id > 0) team.id,
+    ];
     if (redIds.isEmpty || blueIds.isEmpty) return null;
     return (
       red: redIds,
