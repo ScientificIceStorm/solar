@@ -314,7 +314,7 @@ Future<Map<String, dynamic>> _withSeasonOdds(
   if (rows.isEmpty) return profile;
   Map<String, dynamic> odds;
   try {
-    final key = 'team-odds-v1-$season-$number';
+    final key = 'team-odds-v2-$season-$number';
     final saved = await _readSiteSnapshot(key);
     odds = await _siteSnapshot(
       key,
@@ -645,7 +645,7 @@ Future<void> _handleRequest(
       final detailsOnly =
           request.uri.queryParameters['streams'] == '1' ||
           request.uri.queryParameters['history'] == '1';
-      final divisionKey = 'division-v5-${event.id}-${division?.id}';
+      final divisionKey = 'division-v6-${event.id}-${division?.id}';
       // When RobotEvents had no standings (or the request failed) the saved
       // snapshot is retried within a minute instead of being kept all day.
       final savedDivision = await _readSiteSnapshot(divisionKey);
@@ -785,7 +785,7 @@ Future<void> _handleRequest(
         return _writeJson(request.response, streams['rows'] as Map);
       }
       if (request.uri.queryParameters['history'] == '1' && division != null) {
-        final oddsKey = 'odds-season-v1-${event.id}-${division.id}';
+        final oddsKey = 'odds-season-v2-${event.id}-${division.id}';
         final savedOdds = await _readSiteSnapshot(oddsKey);
         final odds = await _siteSnapshot(
           oddsKey,

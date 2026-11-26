@@ -296,7 +296,7 @@ Future<void> _seedOpenSkillIndex(
       if (file is! File) continue;
       final name = file.uri.pathSegments.last;
       final divisionEvent = RegExp(
-        r'^(?:division-v[345]|rated-matches)-(\d+)-\d+\.json$',
+        r'^(?:division-v[3456]|rated-matches)-(\d+)-\d+\.json$',
       ).firstMatch(name);
       final teamHistory =
           name.startsWith('team-matches-') && name.endsWith('-$season.json');
