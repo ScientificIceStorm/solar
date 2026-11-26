@@ -40,18 +40,25 @@ String? _videoId(Uri link) {
 }
 
 /// YouTube refuses page reads from datacenter hosts such as Railway's, so on
-/// the server pages are read through the site's worker (see `youtubeRelay`
-/// in site/_worker.js), falling back to a direct read.
+/// the server a channel's stream list is read through the site's worker (see
+/// `youtubeRelay` in site/_worker.js), falling back to a direct read. Watch
+/// pages are refused there too: broadcast timing on the server needs
+/// YOUTUBE_API_KEY (see [_youtubeStream]).
 final _youtubeRelay =
     Platform.environment['SOLAR_YOUTUBE_RELAY'] ??
-    (Platform.environment['RAILWAY_ENVIRONMENT'] != null
+    (Platform.environment['RAILWAY_ENVIRONMENT'] != null ||
+            Platform.environment['RAILWAY_ENVIRONMENT_NAME'] != null
         ? 'https://solarscout-enz.pages.dev/api/youtube-relay'
         : null);
 
-Future<String?> _youtubePage(http.Client client, Uri page) async {
+Future<String?> _youtubePage(
+  http.Client client,
+  Uri page, {
+  bool relayed = false,
+}) async {
   final token = Platform.environment['SOLAR_ORIGIN_TOKEN']?.trim() ?? '';
   final relay = Uri.tryParse(_youtubeRelay ?? '');
-  if (relay != null && relay.hasAuthority && token.isNotEmpty) {
+  if (relayed && relay != null && relay.hasAuthority && token.isNotEmpty) {
     try {
       final response = await client
           .get(
@@ -146,6 +153,7 @@ Future<List<String>> _channelVideos(http.Client client, Uri link) async {
         host: 'www.youtube.com',
         pathSegments: [...channel, 'streams'],
       ),
+      relayed: true,
     );
     if (body == null) return [];
     final data = body.replaceAllMapped(

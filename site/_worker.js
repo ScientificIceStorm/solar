@@ -135,10 +135,11 @@ async function contributions(request, env, url) {
     'Cache-Control': 'no-store'}});
 }
 
-// YouTube blocks page reads from Solar's API host, so the API reads a match's
-// broadcast timing through here. Only the API (holding the origin token) may
-// call it, and only for a video's watch page or a channel's stream list.
-const youtubePage = /^\/(?:watch|@[\w.-]{1,100}\/streams|(?:channel|c|user)\/[\w.-]{1,100}\/streams)$/;
+// YouTube blocks page reads from Solar's API host, so the API lists an event
+// channel's broadcasts through here. Only the API (holding the origin token)
+// may call it, and only for a channel's public stream list. (Broadcast timing
+// comes from the YouTube Data API: YouTube refuses watch pages here too.)
+const youtubePage = /^\/(?:@[\w.-]{1,100}\/streams|(?:channel|c|user)\/[\w.-]{1,100}\/streams)$/;
 async function youtubeRelay(request, env, url) {
   const token = env.SOLAR_ORIGIN_TOKEN;
   if (!token) return error('Not allowed.', 401);
@@ -149,10 +150,8 @@ async function youtubeRelay(request, env, url) {
   if (same) return error('Not allowed.', 401);
   let target;
   try { target = new URL(url.searchParams.get('url') || ''); } catch { return error('Invalid page.', 400); }
-  const video = target.searchParams.get('v');
   if (target.protocol !== 'https:' || target.host !== 'www.youtube.com' || !youtubePage.test(target.pathname) ||
-      (target.pathname === '/watch' ? !/^[\w-]{11}$/.test(video || '') || [...target.searchParams].length !== 1
-        : target.search)) {
+      target.search) {
     return error('Invalid page.', 400);
   }
   const page = await fetch(target, {headers: {

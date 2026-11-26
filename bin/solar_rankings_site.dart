@@ -252,6 +252,13 @@ Future<List<MatchSummary>> _seasonTeamMatches(
       .toList();
 }
 
+/// Until the season index has finished its first load after a restart, odds
+/// rest on partial history: they are marked provisional and refreshed within
+/// a minute instead of being kept for hours.
+bool _seasonLoading(int season) => _openSkillSeasonRefresh[season] == null;
+
+const _provisional = '_provisional';
+
 /// Scored matches from [season] to rate the teams in [matches] with: the
 /// season index, plus each team's saved match history when [savedTeams] is
 /// set or the index doesn't know most of them yet (e.g. right after a
@@ -276,7 +283,9 @@ Future<List<MatchSummary>> _seasonHistory(
         for (final alliance in match.alliances)
           for (final team in alliance.teams) team.id,
   };
-  if (!savedTeams && known.intersection(teamIds).length * 2 >= teamIds.length) {
+  if (!savedTeams &&
+      !_seasonLoading(season) &&
+      known.intersection(teamIds).length * 2 >= teamIds.length) {
     return history;
   }
   await _mapWithConcurrency(teamIds.toList(), 4, (team, _) async {
@@ -305,10 +314,15 @@ Future<Map<String, dynamic>> _withSeasonOdds(
   if (rows.isEmpty) return profile;
   Map<String, dynamic> odds;
   try {
+    final key = 'team-odds-v1-$season-$number';
+    final saved = await _readSiteSnapshot(key);
     odds = await _siteSnapshot(
-      'team-odds-v1-$season-$number',
-      live ? const Duration(minutes: 1) : const Duration(hours: 3),
+      key,
+      live || saved?[_provisional] == true
+          ? const Duration(minutes: 1)
+          : const Duration(hours: 3),
       () async {
+        final loading = _seasonLoading(season);
         final matches = rows.map(MatchSummary.fromJson).toList();
         final forecast = SolarSeasonForecast.forMatches(
           await _seasonHistory(season, matches),
@@ -316,6 +330,7 @@ Future<Map<String, dynamic>> _withSeasonOdds(
         );
         return {
           for (final entry in forecast.entries) '${entry.key}': entry.value,
+          if (loading) _provisional: true,
         };
       },
     ).timeout(const Duration(seconds: 4));
@@ -634,10 +649,12 @@ Future<void> _handleRequest(
       // When RobotEvents had no standings (or the request failed) the saved
       // snapshot is retried within a minute instead of being kept all day.
       final savedDivision = await _readSiteSnapshot(divisionKey);
-      final standingsPending = const {
-        'previous',
-        'missing',
-      }.contains(savedDivision?['standingsSource']);
+      final standingsPending =
+          const {
+            'previous',
+            'missing',
+          }.contains(savedDivision?['standingsSource']) ||
+          savedDivision?[_provisional] == true;
       final snapshotLoad = _siteSnapshot(
         divisionKey,
         active
@@ -705,6 +722,7 @@ Future<void> _handleRequest(
               source = 'missing';
             }
           }
+          final oddsLoading = _seasonLoading(event.seasonId);
           final seasonOdds = SolarSeasonForecast.forMatches(
             await _seasonHistory(
               event.seasonId,
@@ -718,6 +736,7 @@ Future<void> _handleRequest(
             'division': division.toJson(),
             'active': active,
             'standingsSource': ?source,
+            if (oddsLoading) _provisional: true,
             'standings': rows
                 .map(
                   (row) => {
@@ -766,10 +785,17 @@ Future<void> _handleRequest(
         return _writeJson(request.response, streams['rows'] as Map);
       }
       if (request.uri.queryParameters['history'] == '1' && division != null) {
+        final oddsKey = 'odds-season-v1-${event.id}-${division.id}';
+        final savedOdds = await _readSiteSnapshot(oddsKey);
         final odds = await _siteSnapshot(
-          'odds-season-v1-${event.id}-${division.id}',
-          active ? const Duration(minutes: 2) : const Duration(hours: 6),
+          oddsKey,
+          savedOdds?[_provisional] == true
+              ? const Duration(minutes: 1)
+              : active
+              ? const Duration(minutes: 2)
+              : const Duration(hours: 6),
           () async {
+            final loading = _seasonLoading(event.seasonId);
             final matches = rows.map(MatchSummary.fromJson).toList();
             final previous = await _previousEventOdds(api, event, matches);
             final season = SolarSeasonForecast.forMatches(
@@ -784,6 +810,7 @@ Future<void> _handleRequest(
             return {
               ...previous,
               for (final entry in season.entries) '${entry.key}': entry.value,
+              if (loading) _provisional: true,
             };
           },
         );
