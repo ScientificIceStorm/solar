@@ -336,7 +336,6 @@ function render() {
     return;
   }
   if (isTeams) {
-    if (ratingIndexUpdating) status('More season results are being indexed. Reload later to see the next ranking snapshot.', loadRows);
     if (view === 'insights') {
       renderInsights(visible, filtered);
       return;
