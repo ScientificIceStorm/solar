@@ -1,11 +1,11 @@
-import {access} from "./storage.js?v=load9";
-import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load9";
-import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load9";
-import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load9";
-import {originalScoringReplay} from "./scoring-model.js?v=load9";
-import {setupScoring} from "./scoring-studio.js?v=load9";
-import {setupScoringCheck} from "./scoring-check.js?v=load9";
-import {clipId, setSharing, share, sharingAvailable, sharingOn} from "./share.js?v=load9";
+import {access} from "./storage.js?v=load10";
+import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load10";
+import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load10";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load10";
+import {originalScoringReplay} from "./scoring-model.js?v=load10";
+import {setupScoring} from "./scoring-studio.js?v=load10";
+import {setupScoringCheck} from "./scoring-check.js?v=load10";
+import {clipId, setSharing, share, sharingAvailable, sharingOn} from "./share.js?v=load10";
 
 const $ = id => document.getElementById(id);
 const video = $("source-video");

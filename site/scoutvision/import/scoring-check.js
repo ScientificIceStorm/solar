@@ -3,11 +3,11 @@
 // (the same labels Teach scoring makes), so scoring is trained from every match people check,
 // and the replay can be rebuilt with what was learned.
 
-import {access} from "./storage.js?v=load9";
-import {analyze, seekFrame} from "./tracking.js?v=load9";
-import {goals} from "./scoring.js?v=load9";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load9";
-import {clipId, share, sharingOn} from "./share.js?v=load9";
+import {access} from "./storage.js?v=load10";
+import {analyze, seekFrame} from "./tracking.js?v=load10";
+import {goals} from "./scoring.js?v=load10";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=load10";
+import {clipId, share, sharingOn} from "./share.js?v=load10";
 
 const ROUNDS = 7;
 const WALL_GOALS = {far:["far-neutral", "far-blue"], left:["left-neutral", "left-red"],

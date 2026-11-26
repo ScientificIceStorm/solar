@@ -1,16 +1,17 @@
 const assets = "/scoutvision/assets/";
 const scriptLoads = new Map();
 
-// "override" is the multi-event model (Highlander + Mall of America + Smoky). The older
+// "override" is the multi-event model (Highlander, Mall of America, Smoky, Great Planes and
+// Maker Faire OC; v2 adds 506 frames from 18 match clips, labelled by RF-DETR). The older
 // single-event models stay selectable for comparison but cannot be fine-tuned.
 export const detectorNames = {
-  override: "Override robots · 3 events",
+  override: "Override robots · 5 events",
   speedway: "Speedway RF-DETR Large",
   "speedway-yolo": "Speedway YOLO",
   highlander: "Highlander YOLO",
 };
 const yoloAssets = {
-  override:{manifest:"override-multi-640-v1"},
+  override:{manifest:"override-multi-640-v2"},
   highlander:{prefix:"highlander-yolo-v2", size:480, parts:2},
   "speedway-yolo":{prefix:"speedway-yolo-480-v1", size:480, parts:2},
 };
@@ -195,7 +196,7 @@ const context = inferenceCanvas.getContext("2d", {willReadFrequently: true});
  */
 export async function detect(frame, minimum = .20, choice = defaultDetector, options = {}) {
   if (choice === "speedway") {
-    const {detectSpeedway} = await import("./speedway.js?v=load9");
+    const {detectSpeedway} = await import("./speedway.js?v=load10");
     return detectSpeedway(frame, minimum);
   }
   const {ort, session, name, manifest} = await detector(choice);
