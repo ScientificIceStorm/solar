@@ -34,7 +34,7 @@
 <div class="sv-foot"><a href="/">← Solar</a></div>
 </aside>
 <main class="sv-main">
-<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Your video stays in this browser; if you turn on sharing, only the frames you check and your answers are sent to improve ScoutVision.</p><p class="hint">Build 2026-11-26 · load10</p></div></header>
+<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Finished analyses are published on Solar so anyone can open them from the event and team pages: the robot paths, goal states, teams and scores, never your video file. Untick <b>Publish to Solar</b> to keep one match private. If you turn on sharing, the frames you check and your answers are also sent to improve ScoutVision. See the <a href="/privacy">privacy policy</a> and <a href="/terms">terms</a>.</p><p class="hint">Build 2026-11-26 · load10</p></div></header>
 <div class="studio-mode" role="group" aria-label="Studio mode"><button class="sv-secondary" id="mode-analyze" aria-pressed="true" type="button" disabled>Analyze a match</button><button class="sv-secondary" id="mode-review" aria-pressed="false" type="button" disabled>Review &amp; train</button></div>
 <noscript><p>The Match studio requires JavaScript for video analysis and training.</p></noscript>
 <div class="studio-grid">
@@ -70,6 +70,7 @@
 </div>
 <div id="set-times" class="tool-row" hidden><button type="button" class="sv-secondary" data-time="start">Use video time for auton</button><button type="button" class="sv-secondary" data-time="driver">Driver</button><button type="button" class="sv-secondary" data-time="end">End</button></div>
 <label class="studio-field">Red alliance wall in camera view <select id="red-wall"><option value="left">Left</option><option value="right">Right</option><option value="far">Far (top)</option><option value="near">Near (bottom)</option></select></label>
+<label class="studio-field"><span><input type="checkbox" id="publish-match" checked> Publish to Solar</span> <span class="hint">The replay, teams and scores, not the video. Needs the event link above.</span></label>
 <div class="tool-row"><button class="sv-primary" type="submit" id="analyze" disabled>Build 3D replay</button><button class="sv-secondary" type="button" id="stop" hidden>Cancel</button></div>
 <progress id="progress" max="100" hidden aria-label="Replay analysis progress"></progress>
 <p id="run-status" class="result-status" role="status"></p>

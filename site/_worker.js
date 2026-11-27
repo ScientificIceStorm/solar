@@ -4,7 +4,7 @@ const routes = {
   '/api/events': ['seasonId'],
   '/api/webcasts': ['seasonId'],
   '/api/openskill': ['seasonId', 'gradeLevel'],
-  '/api/team': ['seasonId', 'number', 'summary', 'upcoming'],
+  '/api/team': ['seasonId', 'number', 'summary', 'upcoming', 'history'],
   '/api/event': ['sku', 'division', 'information', 'roster', 'streams', 'history', 'scouting', 'seasonId'],
 };
 
@@ -135,6 +135,162 @@ async function contributions(request, env, url) {
     'Cache-Control': 'no-store'}});
 }
 
+// ---------------------------------------------------------------------------------------
+// Published match analyses. Every match analysed in the ScoutVision Match studio (unless the
+// person unticks "Publish to Solar") and every match imported on the owner's PC is stored in
+// the KV namespace bound as MATCHES: the replay data (robot paths, goal states, plays) and
+// who played, never a video file. Event and team pages list them; replays open from here.
+//   match:<id>                full record            event:<SKU>:<id> / team:<NUMBER>:<id> /
+//   recent:<descending time>:<id>   empty values whose metadata is the match summary
+// ---------------------------------------------------------------------------------------
+const MATCH_BODY = 4_000_000;
+const SKU_PATTERN = /^(?:RE|VE)-[A-Z0-9]+-\d{2}-\d{2,6}$/;
+const TEAM_PATTERN = /^[A-Z0-9]{1,8}$/;
+const MATCH_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const VIDEO_HOSTS = new Set(['www.youtube.com', 'youtube.com', 'youtu.be', 'www.youtube-nocookie.com',
+  'player.vimeo.com', 'vimeo.com']);
+const score = value => Array.isArray(value) && value.length === 2 &&
+  value.every(n => Number.isInteger(n) && n >= 0 && n <= 999) ? value : null;
+
+function sameToken(given, token) {
+  const a = new TextEncoder().encode(given || ''), b = new TextEncoder().encode(token || '');
+  let same = a.length === b.length && b.length ? 0 : 1;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) same |= a[i] ^ b[i];
+  return !same;
+}
+
+async function originJson(env, path) {
+  const origin = new URL(env.SOLAR_API_ORIGIN);
+  const headers = {Accept: 'application/json'};
+  if (env.SOLAR_ORIGIN_TOKEN) headers['X-Solar-Origin-Token'] = env.SOLAR_ORIGIN_TOKEN;
+  const response = await fetch(new URL(path, origin), {headers, signal: AbortSignal.timeout(20000)});
+  return response.ok ? response.json() : null;
+}
+
+function cleanReplay(replay) {
+  if (!replay || typeof replay !== 'object') return null;
+  const {fps, duration, tracks, states, plays, goals} = replay;
+  if (!(fps > 0 && fps <= 120) || !(duration > 0 && duration <= 600)) return null;
+  if (!tracks || typeof tracks !== 'object' || Object.keys(tracks).length > 4) return null;
+  for (const rows of Object.values(tracks)) {
+    if (!Array.isArray(rows) || rows.length > fps * 600 + 10) return null;
+    if (!rows.every(row => Array.isArray(row) && row.length <= 4 && row.every(v => typeof v === 'number' && Number.isFinite(v)))) return null;
+  }
+  if (!Array.isArray(states) || states.length > 40000 || !Array.isArray(plays) || plays.length > 4000 ||
+      !Array.isArray(goals) || goals.length > 9) return null;
+  return {...replay, videoFile: '', matchMetadata: undefined};
+}
+
+async function publishMatch(request, env) {
+  if (Number(request.headers.get('Content-Length') || 0) > MATCH_BODY) return error('This analysis is too large.', 413);
+  if (await tooMany(request)) return error('Too many uploads. Try again in an hour.', 429);
+  let body;
+  try {
+    const raw = await request.text();
+    if (raw.length > MATCH_BODY) return error('This analysis is too large.', 413);
+    body = JSON.parse(raw);
+  } catch { return error('Invalid analysis.', 400); }
+  const meta = body?.meta || {};
+  const sku = text(meta.sku, 40).toUpperCase();
+  const division = Number.isInteger(meta.division) ? meta.division : Number(meta.division) || 1;
+  const teams = Array.isArray(meta.teams) ? meta.teams.slice(0, 4).map(row => ({
+    team: text(row?.team, 9).toUpperCase(), alliance: row?.alliance === 'blue' ? 'blue' : 'red'})) : [];
+  const replay = cleanReplay(body?.replay);
+  if (body?.version !== 1 || !SKU_PATTERN.test(sku) || teams.length !== 4 || !replay ||
+      !teams.every(row => TEAM_PATTERN.test(row.team)) ||
+      teams.filter(row => row.alliance === 'red').length !== 2) {
+    return error('Invalid analysis.', 400);
+  }
+  // Only real events and the teams registered at them; the official result comes from RobotEvents.
+  let event;
+  try { event = await originJson(env, `/api/event?sku=${encodeURIComponent(sku)}&division=${division}`); } catch {}
+  if (!event?.event) return error('Solar could not find that event.', 400);
+  let roster = [];
+  try { roster = (await originJson(env, `/api/event?sku=${encodeURIComponent(sku)}&roster=1`)) || []; } catch {}
+  const registered = new Set((Array.isArray(roster) ? roster : []).map(team => String(team.number).toUpperCase()));
+  if (registered.size && !teams.every(row => registered.has(row.team))) {
+    return error('Those teams are not all registered for this event.', 400);
+  }
+  const played = Number.isInteger(meta.matchId) ? (event.matches || []).find(match => match.id === meta.matchId) : null;
+  const sides = played ? Object.fromEntries(played.alliances.map(side => [side.color, side])) : null;
+  const sameTeams = sides && ['red', 'blue'].every(color =>
+    sides[color]?.teams.map(team => team.number.toUpperCase()).sort().join() ===
+    teams.filter(row => row.alliance === color).map(row => row.team).sort().join());
+  let video = null;
+  try {
+    const link = new URL(text(meta.video, 300));
+    if (link.protocol === 'https:' && VIDEO_HOSTS.has(link.hostname)) video = link.href;
+  } catch {}
+  const id = crypto.randomUUID();
+  const at = new Date().toISOString();
+  const record = {
+    version: 1, id, publishedAt: at,
+    meta: {
+      sku, division, eventName: text(event.event.name, 160), seasonId: event.event.seasonId || null,
+      matchId: sameTeams ? played.id : null,
+      round: sameTeams ? played.name : text(meta.round, 60),
+      teams, teamsConfirmed: meta.teamsConfirmed !== false,
+      official: sameTeams ? [sides.red.score, sides.blue.score] : score(meta.finalScore),
+      reading: score(meta.reading), source: meta.source === 'vexvision' ? 'vexvision' : 'studio', video,
+    },
+    replay,
+  };
+  const m = record.meta;
+  const summary = {id, sku, ev: m.eventName.slice(0, 70), r: m.round, mid: m.matchId,
+    t: teams.map(row => row.team).join(','), o: m.official, rd: m.reading, c: m.teamsConfirmed, at, s: m.source};
+  await env.MATCHES.put(`match:${id}`, JSON.stringify(record));
+  const descending = String(10 ** 13 - Date.now()).padStart(14, '0');
+  await Promise.all([
+    env.MATCHES.put(`event:${sku}:${id}`, '', {metadata: summary}),
+    env.MATCHES.put(`recent:${descending}:${id}`, '', {metadata: summary}),
+    ...teams.map(row => env.MATCHES.put(`team:${row.team}:${id}`, '', {metadata: summary})),
+  ]);
+  return Response.json({ok: true, id, url: `/scoutvision/replay/?match=${id}`, matched: Boolean(sameTeams)},
+    {headers: {'Cache-Control': 'no-store'}});
+}
+
+async function matches(request, env, url, ctx) {
+  if (!env.MATCHES) return error('Published matches are not set up yet.', 503);
+  const rest = url.pathname.slice('/api/scoutvision/matches'.length).replace(/^\//, '');
+  if (!rest && request.method === 'POST') return publishMatch(request, env);
+  if (rest && request.method === 'DELETE') {
+    if (!MATCH_ID.test(rest)) return error('Not found.', 404);
+    if (!sameToken((request.headers.get('Authorization') || '').replace(/^Bearer /, ''), env.SCOUTVISION_ADMIN_TOKEN)) {
+      return error('Not allowed.', 401);
+    }
+    const record = await env.MATCHES.get(`match:${rest}`, 'json');
+    if (!record) return error('Not found.', 404);
+    const keys = [`match:${rest}`, `event:${record.meta.sku}:${rest}`, ...record.meta.teams.map(row => `team:${row.team}:${rest}`)];
+    const recent = await env.MATCHES.list({prefix: 'recent:'});
+    keys.push(...recent.keys.filter(key => key.name.endsWith(':' + rest)).map(key => key.name));
+    await Promise.all(keys.map(key => env.MATCHES.delete(key)));
+    return Response.json({ok: true}, {headers: {'Cache-Control': 'no-store'}});
+  }
+  if (request.method !== 'GET') return error('Method not allowed.', 405);
+  const cache = globalThis.caches?.default;
+  const cacheKey = new Request(new URL('/solar-matches-v1' + url.pathname + url.search, url.origin));
+  const cached = cache ? await cache.match(cacheKey).catch(() => null) : null;
+  if (cached) return cached;
+  let response;
+  if (rest) {
+    if (!MATCH_ID.test(rest)) return error('Not found.', 404);
+    const record = await env.MATCHES.get(`match:${rest}`);
+    if (!record) return error('This analysis was not found.', 404);
+    response = new Response(record, {headers: {'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'public, max-age=300'}});
+  } else {
+    const sku = (url.searchParams.get('sku') || '').toUpperCase();
+    const team = (url.searchParams.get('team') || '').toUpperCase();
+    const prefix = SKU_PATTERN.test(sku) ? `event:${sku}:` : TEAM_PATTERN.test(team) ? `team:${team}:` : 'recent:';
+    const listing = await env.MATCHES.list({prefix, limit: 200});
+    const rows = listing.keys.map(key => key.metadata).filter(Boolean)
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    response = Response.json({matches: rows}, {headers: {'Cache-Control': 'public, max-age=60'}});
+  }
+  if (cache) ctx.waitUntil(cache.put(cacheKey, response.clone()).catch(() => {}));
+  return response;
+}
+
 // YouTube blocks page reads from Solar's API host, so the API lists an event
 // channel's broadcasts through here. Only the API (holding the origin token)
 // may call it, and only for a channel's public stream list. (Broadcast timing
@@ -175,6 +331,9 @@ export default {
 
     if (url.pathname === '/api/youtube-relay') return youtubeRelay(request, env, url);
     if (url.pathname === '/api/scoutvision/contribute') return contribute(request, env, ctx);
+    if (url.pathname === '/api/scoutvision/matches' || url.pathname.startsWith('/api/scoutvision/matches/')) {
+      return matches(request, env, url, ctx);
+    }
     if (url.pathname === '/api/scoutvision/contributions' || url.pathname.startsWith('/api/scoutvision/contributions/')) {
       return contributions(request, env, url);
     }

@@ -70,8 +70,10 @@ function switchView() {
   const route = location.hash.slice(1);
   const detail = location.pathname.match(/^\/(team|event)\/([a-z0-9-]+)$/i);
   const map = !detail && route === 'map';
+  const account = !detail && route === 'account';
   $('mapView').hidden = !map;
-  ui.home.hidden = Boolean(detail) || map || Object.hasOwn(views, route);
+  $('accountView').hidden = !account;
+  ui.home.hidden = Boolean(detail) || map || account || Object.hasOwn(views, route);
   ui.browse.hidden = Boolean(detail) || !Object.hasOwn(views, route);
   ui.detail.hidden = !detail;
   if (!detail) {
@@ -88,6 +90,11 @@ function switchView() {
     if (detail[1] === 'event' || seasonsReady || /^\d+$/.test(new URLSearchParams(location.search).get('season') || '')) {
       loadDetail(detail[1], detail[2]);
     }
+    return;
+  }
+  if (account) {
+    syncNav();
+    window.solarAccount?.show();
     return;
   }
   if (map) {
@@ -508,6 +515,33 @@ function score(match) {
     shown(blue) + '</span></span>';
 }
 
+// Published ScoutVision analyses (3D replays) by RobotEvents match id, loaded per event or team.
+const analysisLinks = new Map();
+async function loadAnalyses(query) {
+  try {
+    const response = await fetch('/api/scoutvision/matches?' + new URLSearchParams(query), {signal: AbortSignal.timeout(15000)});
+    if (!response.ok) return false;
+    let added = false;
+    for (const row of (await response.json()).matches || []) {
+      if (Number.isInteger(row.mid) && !analysisLinks.has(row.mid)) { analysisLinks.set(row.mid, row.id); added = true; }
+    }
+    return added;
+  } catch { return false; }
+}
+function markAnalyses(root) {
+  for (const row of root.querySelectorAll('tr[data-match]')) {
+    const id = analysisLinks.get(Number(row.dataset.match));
+    const label = row.querySelector('.match-label');
+    if (!id || !label || label.querySelector('.analysis-link')) continue;
+    const link = document.createElement('a');
+    link.className = 'analysis-link';
+    link.href = '/scoutvision/replay/?match=' + encodeURIComponent(id);
+    link.textContent = '3D';
+    link.title = 'ScoutVision 3D analysis: who scored, toggles, cycle times';
+    label.prepend(link);
+  }
+}
+
 function replayButton(match) {
   if (!match.replay) {
     return match.webcast ? '<span class="webcast-fallback" title="Full event webcast">' +
@@ -886,6 +920,7 @@ function renderEvent(data, loadExtras) {
         if (content.isConnected && section === 'awards') renderSection();
       });
   };
+  loadAnalyses({sku: event.sku}).then((added) => { if (added) markAnalyses(content); });
   const renderSection = (animate = false) => {
     const webcastLinks = section === 'matches' ? eventWebcastLinks(event, information) : [];
     const matchRows = section === 'matches' && information?.webcasts?.length ?
@@ -901,6 +936,7 @@ function renderEvent(data, loadExtras) {
       (animate ? 'event-section-enter' : '') + '">' +
       (data.partial && ['standings', 'matches', 'bracket'].includes(section) ?
         '<p class="status" role="status">Showing saved results while full event data loads.</p>' : '') + html + '</div>';
+    markAnalyses(content);
   };
   const loadRoster = () => {
     if (rosterLoading || roster) return;
@@ -1098,8 +1134,8 @@ function renderInsights(visible, filtered) {
     insightColumns.map(([key, name]) => '<option value="' + key + '"' +
       (key === insightMetric ? ' selected' : '') + '>' + name + '</option>').join('') +
     '</select></label></div>' +
-    comparisonBars(label + (compared.length ? ' · selected teams' : ' · top six in this view'), (compared.length ? compared : filtered.slice(0, 6)).map((row) =>
-      ({label: row.teamNumber, value: insightValue(row, insightMetric)}))) +
+    (compared.length ? comparisonBars(label + ' · selected teams', compared.map((row) =>
+      ({label: row.teamNumber, value: insightValue(row, insightMetric)}))) : '') +
     table([['Compare'], ['Rank'], ['Team'], ['Record'], ...insightColumns.map(([, name]) => [name, 'numeric'])],
       visible.map((row) => '<tr data-row-link><td><input type="checkbox" data-compare="' + escape(row.teamNumber) +
         '" aria-label="Compare ' + escape(row.teamNumber) + '"' + (comparedTeams.has(row.teamNumber) ? ' checked' :
@@ -1279,6 +1315,7 @@ function renderTeam(data, season, {partial = false, failed = false} = {}) {
           if (!label) continue;
           label.querySelector('.play-match,.webcast-fallback')?.remove();
           label.insertAdjacentHTML('afterbegin', replayButton(match));
+          markAnalyses(entry.target);
         }
       };
       api('event', {sku: card.sku, information: 1}).then(({webcasts}) => {
@@ -1301,6 +1338,7 @@ function renderTeam(data, season, {partial = false, failed = false} = {}) {
   for (const card of eventCards) {
     if (card.sku && card.played.length) teamReplayObserver.observe($(card.id));
   }
+  loadAnalyses({team: team.number}).then(() => { if (requestId === detailId) markAnalyses(ui.detail); });
   $('teamSeason').addEventListener('change', (event) => {
     const selected = event.target.value;
     history.replaceState(null, '', teamPath(team.number, selected));

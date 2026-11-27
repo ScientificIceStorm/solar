@@ -5,11 +5,17 @@
   const google = document.getElementById('profileGoogle');
   const logout = document.getElementById('profileLogout');
   const status = document.getElementById('profileStatus');
-  let connection;
+  const teamForm = document.getElementById('profileTeamForm');
+  const teamInput = document.getElementById('profileTeam');
+  let connection, current = null;
+  const listeners = new Set();
   function showSession(session) {
+    current = session;
     form.hidden = google.hidden = Boolean(session);
-    logout.hidden = !session;
+    logout.hidden = teamForm.hidden = !session;
     status.textContent = session?.user.email || '';
+    teamInput.value = session?.user.user_metadata?.team || '';
+    listeners.forEach((listener) => listener(session));
   }
   function connect() {
     return connection ??= (async () => {
@@ -19,6 +25,8 @@
       const {createClient} = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/+esm');
       const client = createClient(url, key, {auth: {flowType:'pkce'}});
       client.auth.onAuthStateChange((_, session) => showSession(session));
+      const {data} = await client.auth.getSession();
+      showSession(data.session);
       return client.auth;
     })().catch((error) => {
       connection = undefined;
@@ -62,5 +70,23 @@
     if (data) form.reset();
     if (signup && data && !data.session) status.textContent = 'Check your email to confirm your account.';
   };
+  // The team you follow is kept on your account (Supabase user data), not in a separate table.
+  teamForm.onsubmit = async (event) => {
+    event.preventDefault();
+    const team = teamInput.value.trim().toUpperCase();
+    if (!/^\d{1,6}[A-Z]{0,2}$/.test(team)) { status.textContent = 'Enter a VEX team number like 98601B.'; return; }
+    const data = await run((auth) => auth.updateUser({data: {team}}));
+    if (data) {
+      status.textContent = 'Saved. Your dashboard follows ' + team + '.';
+      if (location.hash === '#account') window.solarAccount?.show();
+    }
+  };
+  window.solarProfile = {
+    connect,
+    get session() { return current; },
+    onChange(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    open,
+  };
   if (new URLSearchParams(location.search).get('profile') === '1') open(true);
+  if (location.hash === '#account') connect().catch(() => {});
 })();

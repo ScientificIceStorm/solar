@@ -962,6 +962,32 @@ Future<void> _handleRequest(
               ? null
               : {'id': indexedTeam.id, 'number': number}) ??
           await lookup();
+      if (query['history'] == '1') {
+        // The team's OpenSkill rating and rank after each event it played (account dashboard).
+        final team = await identity();
+        final teamId = team is Map && team['id'] is int ? team['id'] as int : indexedTeam?.id;
+        // Ranks against a nearly empty season would mislead; say so and let the page retry.
+        // (The shipped season snapshot fills the index within seconds of a restart; the full
+        // crawl that ends _seasonLoading can take hours and only adds recent results.)
+        if (_seasonLoading(season) && (_openSkillSeasonMatches[season]?.length ?? 0) < 2000) {
+          return _writeJson(request.response, {'events': [], 'loading': true}, maxAge: Duration.zero);
+        }
+        // The team's own saved matches too: right after a restart the season index
+        // may not hold them yet.
+        final known = <(int, int, int), MatchSummary>{
+          for (final match in indexedMatches) (match.event.id, match.division.id, match.id): match,
+        };
+        _rememberMatches(known, savedProfile?['matches']);
+        final teamMatches = known.values.toList();
+        final data = await _siteSnapshot(
+          'team-history-v2-$season-$number-${_openSkillSeasonMatches[season]?.length ?? 0}-${teamMatches.length}',
+          const Duration(hours: 1),
+          () async => {
+            'events': _ratingHistory(season, teamMatches, teamId, eventsById),
+          },
+        );
+        return _writeJson(request.response, data, maxAge: const Duration(minutes: 10));
+      }
       if (query['upcoming'] == '1') {
         final data = await _siteSnapshot(
           'team-registrations-$season-$number',
@@ -1141,12 +1167,19 @@ Future<void> _handleRequest(
       r'^/(event/(?:RE|VE)-[A-Z0-9-]+|team/[A-Z0-9]+)$',
       caseSensitive: false,
     ).hasMatch(path);
-    final assetPath = path == '/' || isDetailPage ? '/index.html' : path;
+    final assetPath = path == '/' || isDetailPage
+        ? '/index.html'
+        : const {'/privacy': '/privacy.html', '/terms': '/terms.html'}[path] ?? path;
     if (!const {
       '/index.html',
       '/styles.css',
       '/app.js',
       '/map.js',
+      '/profile.js',
+      '/account.js',
+      '/home-robot.js',
+      '/privacy.html',
+      '/terms.html',
       '/california-counties.json',
       '/solar-photo.jpg',
       '/manrope.woff2',
@@ -1187,6 +1220,61 @@ Future<Map<String, dynamic>?> _lookupTeam(SolarApi api, String number) async {
     },
   );
   return snapshot['team'] as Map<String, dynamic>?;
+}
+
+/// A team's OpenSkill rating after each event it played this season: the season model
+/// re-run with only the results posted by the end of that event, so each point is what
+/// Solar knew then. Rank is by conservative rating among teams rated at that time.
+List<Map<String, Object?>> _ratingHistory(
+  int season,
+  List<MatchSummary> teamMatches,
+  int? teamId,
+  Map<int, EventSummary> events,
+) {
+  if (teamId == null) return const [];
+  final all = {
+    for (final match in [...?_openSkillSeasonMatches[season]?.values, ...teamMatches])
+      (match.event.id, match.division.id, match.id): match,
+  }.values.toList();
+  final ends = <int, DateTime>{};
+  for (final match in teamMatches) {
+    final time = match.started ?? match.scheduled;
+    if (time == null) continue;
+    final current = ends[match.event.id];
+    if (current == null || time.isAfter(current)) ends[match.event.id] = time;
+  }
+  final ordered = ends.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+  final rows = <Map<String, Object?>>[];
+  for (final entry in ordered) {
+    final analysis = SolarMatchAnalysis(
+      all,
+      now: entry.value.add(const Duration(hours: 2)),
+      openSkill: true,
+    );
+    final rating = analysis.ratings[teamId];
+    final rated = [
+      for (final other in analysis.ratings.values)
+        if (other.matches > 0) other.rating,
+    ]..sort((a, b) => b.compareTo(a));
+    final event = events[entry.key];
+    rows.add({
+      'eventId': entry.key,
+      'sku': event?.sku,
+      'name': event?.name,
+      'date': entry.value.toIso8601String(),
+      'mean': rating?.mean,
+      'uncertainty': rating == null ? null : math.sqrt(rating.variance),
+      'rating': rating?.rating,
+      'rank': rating == null || rating.matches == 0
+          ? null
+          : rated.indexWhere((value) => value <= rating.rating) + 1,
+      'rated': rated.length,
+      'wins': rating?.wins,
+      'losses': rating?.losses,
+      'draws': rating?.draws,
+    });
+  }
+  return rows;
 }
 
 /// Match id → replay link shipped in the deployment's seed folder for

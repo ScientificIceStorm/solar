@@ -292,7 +292,8 @@ $("scheduled-match").onchange=()=>{
   alliances.forEach((side,i)=>{
     for (let j=0;j<2;j++) $("team-"+(2*i+j)).value=side?.teams?.[j]?.number || "";
   });
-  officialMatch={round:row.name, event:$("event").value, names:names().join()};
+  officialMatch={round:row.name, event:$("event").value, names:names().join(), matchId:row.id,
+    sku:$("event-link").value.match(/(?:RE-V5RC|VE-V5)-\d{2}-\d+/i)?.[0]?.toUpperCase(), division:Number($("division").value) || 1};
   officialFinal=row.completed && alliances.every(side=>Number.isInteger(side?.score))?alliances.map(side=>side.score):null;
   drawMarks();
 };
@@ -348,6 +349,25 @@ $("match-form").onsubmit=async event=>{
     link.href="/scoutvision/replay/?id="+id;
     link.textContent="Open 3D replay →";
     $("run-status").replaceChildren(link, document.createTextNode(" · Check the scoring below to make it more accurate."));
+    // Publish to Solar (the replay data, teams and scores; never the video) unless unticked.
+    const sku=$("event-link").value.match(/(?:RE-V5RC|VE-V5)-\d{2}-\d+/i)?.[0]?.toUpperCase();
+    if ($("publish-match")?.checked && sku) {
+      const official=officialMatch?.sku===sku && officialMatch.round===meta.round && officialMatch.names===names().join()?officialMatch:null;
+      fetch("/api/scoutvision/matches",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:1,
+        meta:{sku,division:official?.division || Number($("division").value) || 1,matchId:official?.matchId ?? null,
+          round:meta.round,teams:meta.teams,finalScore:meta.final,teamsConfirmed:true,source:"studio"},replay:data})})
+        .then(async response=>{
+          const result=await response.json().catch(()=>({}));
+          if (!response.ok) throw new Error(result.error || "Publishing failed.");
+          const published=document.createElement("a");
+          published.href=result.url;
+          published.textContent="Published on Solar ↗";
+          $("run-status").append(" · ",published);
+        })
+        .catch(error=>$("run-status").append(" · Not published: "+error.message));
+    } else if ($("publish-match")?.checked) {
+      $("run-status").append(" · Not published: add the event link to publish it on Solar.");
+    }
     scoringCheck.open(id).catch(error=>status("check-status",error.message));
   } catch(error) {
     status("run-status",current.signal.aborted?"Analysis canceled.":error.name==="QuotaExceededError"?

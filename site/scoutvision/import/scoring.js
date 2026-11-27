@@ -60,7 +60,23 @@ function countStack(read, anchor, boxes, width, height, priorHeight) {
   return supported[Math.floor((supported.length-1)/2)];
 }
 
-function readBands(read, {x,y,unit,base}, slope, boxes, width, height, priorHeight) {
+// How far an alliance goal's own coloured base reaches up the stack ray, in samples, measured on
+// the opening frame when the goal is empty. A red pin on a red base reads as one long red band;
+// only the part beyond the empty base is a pin (before, the base was either counted as a pin or
+// swallowed a real one).
+function baseRun(read, {x,y,unit,base,slope}) {
+  if (base > 1) return 0;
+  let run = 0;
+  for (let i=0; i<=14; i++) {
+    const vertical = i*.55*unit + unit*1.55, centerX = x + slope*vertical, centerY = y - vertical;
+    const sample = [-.9,-.45,0,.45,.9].map(d => read(centerX+d*unit,centerY));
+    if (sample.filter(c=>c===base).length < 3) break;
+    run = i + 1;
+  }
+  return run;
+}
+
+function readBands(read, {x,y,unit,base,baseRun:emptyBase=3}, slope, boxes, width, height, priorHeight) {
   const stack = [];
   let previous = -1, length=0, lastBand=0, lastEnd=-5;
   for (let i=0; i<=65; i++) {
@@ -77,7 +93,7 @@ function readBands(read, {x,y,unit,base}, slope, boxes, width, height, priorHeig
     const value = [0,1,2].find(color => sample.filter(c=>c===color).length >= 3) ?? -1;
     if (value !== previous) {
       if (previous >= 0 && length >= 2 && length <= 16 &&
-          !(base < 2 && lastBand === 0 && previous === base && i < 4)) {
+          !(base < 2 && lastBand === 0 && stack.length === 0 && previous === base && i - length <= 1 && i <= emptyBase + 1)) {
         if (previous!==stack.at(-1) || i-length-lastEnd>=2) stack.push(previous);
         lastBand=i; lastEnd=i;
       }
@@ -192,8 +208,10 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
     const mark = findMark(initial, estimate, base === 3 ? 2 : base, Math.max(16,Math.min(43,unit*11)),
       (x,y)=>nearColumn(x) && (base!==3 || aboveBase(x,y)));
     if (!mark) return null;
-    return {x:mark[0], y:mark[1]+(base === 3 ? unit*2.35 : 0), unit, base,
+    const anchor={x:mark[0], y:mark[1]+(base === 3 ? unit*2.35 : 0), unit, base,
       slope:(mark[0]-middle)/(width*3.6)};
+    anchor.baseRun=baseRun(initial,anchor);
+    return anchor;
   });
   const decoder = referenceReader(model,project,width,height,goals,bases);
   // Bar-colour toggle reading, used whenever the camera-specific reader has no answer. The
@@ -236,6 +254,61 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
     const actor=candidates[0].gap<18 && candidates[1].gap-candidates[0].gap>8 ? candidates[0].team : null;
     plays.push({frame, actionFrame:frame, window:[Math.max(0,frame-fps),frame],
       actor, actorEvidence:actor ? "track" : null, points:next, ...details});
+  }
+
+  // A goal changes while a robot covers it, so the reader only sees the new stack once the robot
+  // drives off: the change lands seconds late and next to whichever robot is nearest then. With
+  // the whole match tracked, credit each change to the robot that spent the most time at that goal
+  // (or toggle) since it was last seen, and grow the stack pin by pin across that stretch.
+  function settleWindows(tracks, fps) {
+    const step=Math.max(1,Math.round(fps/5)), wallIndex=Object.fromEntries(walls.map((wall,i)=>[wall,i]));
+    const owner=(state,wall)=>state[3]?.[wallIndex[wall]]?.[0];
+    for (const play of plays) {
+      if (play.checked || play.seenBefore==null) continue;
+      const point=play.kind==="toggle" ? wallPoints[play.wall] : goals.find(goal=>goal.id===play.goals[0])?.point;
+      if (!point) continue;
+      const to=play.frame, from=Math.max(play.seenBefore, to-(play.kind==="toggle"?4:10)*fps);
+      if (to-from<step) continue;
+      const near=play.kind==="toggle" ? 20 : 18;
+      const time=teams.map(entry=>{
+        let inside=0, closest=Infinity, closestAt=null;
+        for (let f=from;f<=to;f+=step) {
+          const p=tracks[entry.team]?.[f];
+          if (!p?.[2]) continue;
+          const d=gap(point,p);
+          if (d<=near) inside+=step;
+          if (d<closest) { closest=d; closestAt=f; }
+        }
+        return {team:entry.team,inside,closest,closestAt};
+      }).sort((a,b)=>b.inside-a.inside || a.closest-b.closest);
+      const [first,second]=time;
+      if (first && first.inside>=fps*.4 && first.inside-(second?.inside||0)>=fps*.4) {
+        play.actor=first.team; play.actorEvidence="track";
+        play.actionFrame=first.closestAt ?? Math.round((from+to)/2);
+      } else if (first && first.closest<=12 && (second?.closest ?? Infinity)-first.closest>=8) {
+        play.actor=first.team; play.actorEvidence="track"; play.actionFrame=first.closestAt;
+      }
+      play.window=[from,to];
+      // Grow an added-on-top stack across the stretch instead of popping in when the robot leaves.
+      if (play.kind!=="stack" || !play.before || !play.after) continue;
+      const {before,after}=play, gi=goals.findIndex(goal=>goal.id===play.goals[0]);
+      if (after.length<=before.length || before.some((color,k)=>after[k]!==color)) continue;
+      const added=after.slice(before.length), start=play.actionFrame ?? from;
+      for (const state of states) {
+        if (state[0]<=start || state[0]>=to || !state[2]?.[gi]) continue;
+        const shown=Math.max(1,Math.round(added.length*(state[0]-start)/(to-start)));
+        const pins=added.slice(0,shown), row=state[2][gi], stack=[...before,...pins];
+        state[2][gi]=[...colorNames.map((_,c)=>stack.filter(color=>color===c).length),row[3],stack,row[5]];
+        const wall=play.goals[0].split("-")[0];
+        const gain=[0,0];
+        for (const color of pins) {
+          if (color<2) gain[color]+=5;
+          else if (owner(state,wall)===1) gain[0]+=10;
+          else if (owner(state,wall)===2) gain[1]+=10;
+        }
+        state[1]=[state[1][0]+gain[0],state[1][1]+gain[1]];
+      }
+    }
   }
 
   const checked=[...anchors].sort((a,b)=>a.frame-b.frame), hold=new Map();
@@ -288,6 +361,7 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
           const current=decoder.stack(goals[i].id,i,previous,boxes,geometric);
           const dropping=current !== null && current.length<previous.length;
           if (!stable(goals[i].id,current,dropping?5:3)) return;
+          const lastSeen=seen[i];
           if (current !== null) {
             if (frame % fps===0) calls[i]++;
             seen[i]=frame;
@@ -299,6 +373,7 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
           if (delta.some(Boolean)) change(frame,points,goals[i].point,positions,{
             title:`Goal ${i+1} ${delta.every(value=>value<=0)?"descore":"stack change"}`,
             kind:"stack", goals:[goals[i].id], wall:null, pinDelta:delta,
+            seenBefore:lastSeen, before:[...previous], after:[...current],
             detail:delta.flatMap((value,c)=>value ? [`${value>0?"+":""}${value} ${colorNames[c].toLowerCase()}`] : []).join(" · "),
           });
         });
@@ -307,12 +382,13 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
           const wall=walls[i];
           const next=decoder.toggle(wall,samples) ?? ownerFromColor(bandColor(read,bands[wall],boxes,width,height),flips[wall]);
           if (!stable(wall,next)) return;
+          const lastWallSeen=wallSeen[i];
           wallSeen[i]=frame;
           if (next===ownership[wall]) return;
           const previous=ownership[wall], points=score(stacks,ownership);
           ownership[wall]=next;
           change(frame,points,wallPoints[wall],positions,{title:`${titled(wall)} toggle changes`,kind:"toggle",
-            wall,goals:goals.filter(goal=>goal.id.startsWith(wall+"-")).map(goal=>goal.id),pinDelta:null,
+            wall,goals:goals.filter(goal=>goal.id.startsWith(wall+"-")).map(goal=>goal.id),pinDelta:null,seenBefore:lastWallSeen,
             detail:`${["Neutral","Red","Blue"][previous]} to ${["Neutral","Red","Blue"][next]}`});
         });
       }
@@ -326,6 +402,7 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
         seen.filter(at=>at!==null && frame-at>fps*2).length,wallSeen.filter(at=>at!==null).length]]);
     },
     finish(meta, tracks, fps, last, backend) {
+      settleWindows(tracks, fps);
       const autonomousEnd=Math.min(last,15*fps), driverStart=Math.round((meta.driver-meta.start)*fps);
       const everyHalfSecond=fps/2;
       const performance=Object.fromEntries(teams.map(entry=>{
