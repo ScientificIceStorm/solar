@@ -1,0 +1,38 @@
+{
+  "id": "speedway",
+  "name": "Speedway camera with original stack and toggle rules",
+  "size": [960, 540],
+  "corners": [[0.26458333333333334, 0.3351851851851852], [0.7447916666666666, 0.3611111111111111], [0.7770833333333333, 0.687037037037037], [0.09583333333333334, 0.6425925925925926]],
+  "goals": [{"id": "far-neutral", "base": [392, 210], "crop": [368, 131, 416, 214]}, {"id": "far-blue", "base": [556, 217], "crop": [532, 144, 580, 221]}, {"id": "left-neutral", "base": [294, 242], "crop": [270, 132, 318, 246]}, {"id": "left-red", "base": [247, 312], "crop": [223, 174, 271, 316]}, {"id": "midfield", "base": [451, 281], "crop": [427, 158, 475, 285]}, {"id": "right-blue", "base": [639, 252], "crop": [615, 151, 663, 256]}, {"id": "right-neutral", "base": [636, 329], "crop": [612, 183, 660, 333]}, {"id": "near-red", "base": [319, 353], "crop": [295, 195, 343, 357]}, {"id": "near-neutral", "base": [528, 364], "crop": [504, 203, 552, 368]}],
+  "columns": {
+    "far-neutral": {"x": 392, "mouth": 194, "roof": 131, "slope": -0.018, "width": 5, "base_patch": [388, 198, 397, 207], "base_color": "dark", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26},
+    "far-blue": {"x": 556, "mouth": 202, "roof": 144, "slope": 0.015, "width": 4, "base_patch": [551, 210, 561, 216], "base_color": "blue", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26, "empty_ok": true},
+    "left-neutral": {"x": 294, "mouth": 222, "roof": 132, "slope": -0.058, "width": 5, "base_patch": [288, 225, 302, 240], "base_color": "dark", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26},
+    "left-red": {"x": 247, "mouth": 292, "roof": 174, "slope": -0.025, "width": 5, "base_patch": [241, 302, 255, 311], "base_color": "red", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26, "empty_ok": true},
+    "midfield": {"x": 451, "mouth": 250, "roof": 158, "slope": 0, "width": 6, "base_patch": [444, 258, 459, 276], "base_color": "dark", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26},
+    "right-blue": {"x": 639, "mouth": 236, "roof": 151, "slope": 0.005, "width": 5, "base_patch": [634, 244, 645, 253], "base_color": "blue", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26, "empty_ok": true},
+    "right-neutral": {"x": 636, "mouth": 308, "roof": 183, "slope": 0.004, "width": 5, "base_patch": [631, 314, 645, 326], "base_color": "dark", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26},
+    "near-red": {"x": 319, "mouth": 336, "roof": 195, "slope": -0.033, "width": 4, "base_patch": [314, 344, 323, 352], "base_color": "red", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26, "empty_ok": true},
+    "near-neutral": {"x": 528, "mouth": 342, "roof": 203, "slope": 0, "width": 5, "base_patch": [521, 348, 535, 362], "base_color": "dark", "colors": ["red", "blue", "yellow"], "min_band": 3, "max_band": 23, "base_gap": 16, "max_gap": 19, "min_gap": 2, "base_min": 0.26}
+  },
+  "references": {
+    "far-neutral": [],
+    "far-blue": [],
+    "left-neutral": [],
+    "left-red": [],
+    "midfield": [],
+    "right-blue": [],
+    "right-neutral": [],
+    "near-red": [],
+    "near-neutral": []
+  },
+  "unreadableGoals": [],
+  "toggleFaces": {},
+  "insideFaces": {},
+  "yellowEdges": {},
+  "visibleFaces": {
+    "far": {"crop": [[449, 145], [516, 145], 2.25], "colors": {"red": "red", "blue": "blue", "yellow": "neutral"}},
+    "left": {"crop": [[158, 230], [187, 211], 2.6], "colors": {"red": "red", "blue": "blue", "yellow": "neutral"}},
+    "near": {"crop": [[432, 359], [463, 360], 2.1], "colors": {"red": "neutral", "blue": "red", "yellow": "blue"}}
+  }
+}

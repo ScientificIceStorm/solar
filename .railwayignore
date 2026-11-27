@@ -1,0 +1,14 @@
+# `railway up` uploads only what the Dockerfile builds from (see .dockerignore).
+# The ScoutVision models and videos are served by Cloudflare Pages, not this API,
+# and are far over Railway's upload limit.
+/*
+!/Dockerfile
+!/.dockerignore
+!/deploy/
+!/bin/
+!/lib/
+!/site/
+/site/scoutvision/
+**/solar.local.json
+**/.env*
+**/.dev.vars*

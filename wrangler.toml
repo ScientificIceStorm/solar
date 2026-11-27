@@ -1,0 +1,9 @@
+name = "solarscout"
+pages_build_output_dir = "./site"
+compatibility_date = "2025-11-09"
+
+# Match analyses published from the ScoutVision Match studio (see site/_worker.js,
+# /api/scoutvision/matches). Replay data only; video plays from the event's broadcast.
+[[kv_namespaces]]
+binding = "MATCHES"
+id = "978218690cc4488ba26c848a0ff149eb"

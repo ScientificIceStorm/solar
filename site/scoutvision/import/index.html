@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match studio · ScoutVision</title>
+<link rel="stylesheet" href="/scoutvision/dashboard.css">
+<link rel="stylesheet" href="/scoutvision/import/studio.css?v=load10">
+<script type="module" src="/scoutvision/import/studio.js?v=fitted2"></script><link rel="stylesheet" href="/scoutvision/solar-shell.css?v=solar1">
+<link rel="stylesheet" href="/scoutvision/solar-theme.css?v=solar1">
+<script src="/profile.js?v=account-2" defer></script>
+</head>
+<body class="sv-body">
+<header class="masthead">
+<a class="brand" href="/" aria-label="Solar home">solar<span class="brand-dot">.</span></a>
+<nav class="top-nav" aria-label="Explore Solar">
+<a href="/#skills">Skills</a><a href="/#teams">Teams</a><a href="/#insights">Insights</a><a href="/#events">Events</a><a href="/#map">Map</a>
+<a class="scoutvision-link" href="/scoutvision/" aria-current="page">ScoutVision <span class="scoutvision-beta">Beta</span></a>
+<button id="profileToggle" type="button" aria-expanded="false" aria-controls="profilePanel">Profile</button>
+<section id="profilePanel" hidden aria-label="Profile">
+<button type="button" id="profileGoogle">Continue with Google</button>
+<form id="profileForm">
+<label>Email<input name="email" type="email" autocomplete="email" required></label>
+<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit" value="login">Log in</button>
+<button type="submit" value="signup">Sign up</button>
+</form>
+<button type="button" id="profileLogout" hidden>Sign out</button>
+<p id="profileStatus" role="status"></p>
+</section>
+</nav>
+</header>
+<div class="sv-shell">
+<aside class="sv-sidebar">
+<a class="sv-brand" href="/scoutvision/"><span>ScoutVision<small>by SolarScout</small></span></a>
+<nav class="sv-nav" aria-label="ScoutVision"><a href="/scoutvision/">Overview</a><a href="/scoutvision/#analytics">Analytics</a><a href="/scoutvision/import/" aria-current="page">Match studio</a></nav>
+<div class="sv-foot"><a href="/">← Solar</a></div>
+</aside>
+<main class="sv-main">
+<header class="sv-hero"><div><h1>Match studio</h1><p>Analyze or label an Override match. Finished analyses are published on Solar so anyone can open them from the event and team pages: the robot paths, goal states, teams and scores, never your video file. Untick <b>Publish to Solar</b> to keep one match private. If you turn on sharing, the frames you check and your answers are also sent to improve ScoutVision. See the <a href="/privacy">privacy policy</a> and <a href="/terms">terms</a>.</p><p class="hint">Build 2026-11-26 · load10</p></div></header>
+<div class="studio-mode" role="group" aria-label="Studio mode"><button class="sv-secondary" id="mode-analyze" aria-pressed="true" type="button" disabled>Analyze a match</button><button class="sv-secondary" id="mode-review" aria-pressed="false" type="button" disabled>Review &amp; train</button></div>
+<noscript><p>The Match studio requires JavaScript for video analysis and training.</p></noscript>
+<div class="studio-grid">
+<div class="controls">
+<section class="sv-card">
+<label class="studio-field">Match video <input id="video-file" type="file" accept="video/*,.mp4,.webm,.mov" disabled></label>
+<p id="file-status" class="hint" role="status"></p>
+<video id="source-video" class="source-video" controls playsinline preload="metadata" hidden></video>
+<div class="tool-row" id="original-scoring" hidden><a class="sv-primary" id="open-original-replay">Open original scoring replay</a></div>
+<label class="studio-field">Robot detector <select id="detector-choice">
+  <option value="auto">Override robots · 3 events (recommended)</option>
+  <option value="speedway-yolo">Speedway · YOLO</option>
+  <option value="highlander">Highlander · YOLO</option>
+  <option value="speedway">Speedway · RF-DETR Large</option>
+</select></label>
+<p id="detector-status" class="hint"></p>
+<div id="share-option" hidden><label class="studio-check"><input id="share-data" type="checkbox"> Share the frames I check and my answers to improve ScoutVision for everyone</label>
+<p class="hint">Off by default. Only the single frames you check or review are sent, with your answers and the event and team numbers. Never the video.</p></div>
+<label class="studio-check" id="adapted-option" hidden><input id="adapted" type="checkbox" disabled checked> Use my training from this browser</label>
+</section>
+<form id="match-form" class="sv-card controls">
+<h2>Match details</h2>
+<div class="studio-metadata schedule-fields"><label class="studio-field">Solar or RobotEvents link <input id="event-link" placeholder="RE-V5RC-…"></label><button type="button" id="find-schedule" class="sv-secondary" disabled>Find schedule</button></div>
+<p id="schedule-status" class="hint" role="status"></p>
+<div id="schedule" class="studio-metadata" hidden><label class="studio-field">Division <select id="division"></select></label><label class="studio-field">Match <select id="scheduled-match"></select></label></div>
+<div class="studio-metadata"><label class="studio-field">Event name <input id="event" required maxlength="180"></label><label class="studio-field">Match label <input id="round" required maxlength="100" placeholder="Qualifier 17"></label></div>
+<div class="studio-metadata"><label class="studio-field">Red team 1 <input id="team-0" required maxlength="9"></label><label class="studio-field">Red team 2 <input id="team-1" required maxlength="9"></label>
+<label class="studio-field">Blue team 1 <input id="team-2" required maxlength="9"></label><label class="studio-field">Blue team 2 <input id="team-3" required maxlength="9"></label></div>
+<div class="studio-metadata studio-times">
+<label class="studio-field">Auton start (sec) <input id="start" type="number" value="0" min="0" step="any" required></label>
+<label class="studio-field">Driver start (sec) <input id="driver" type="number" value="15" min="0" step="any" required></label>
+<label class="studio-field">Match end (sec) <input id="end" type="number" value="120" min="0" step="any" required></label>
+</div>
+<div id="set-times" class="tool-row" hidden><button type="button" class="sv-secondary" data-time="start">Use video time for auton</button><button type="button" class="sv-secondary" data-time="driver">Driver</button><button type="button" class="sv-secondary" data-time="end">End</button></div>
+<label class="studio-field">Red alliance wall in camera view <select id="red-wall"><option value="left">Left</option><option value="right">Right</option><option value="far">Far (top)</option><option value="near">Near (bottom)</option></select></label>
+<label class="studio-field"><span><input type="checkbox" id="publish-match" checked> Publish to Solar</span> <span class="hint">The replay, teams and scores, not the video. Needs the event link above.</span></label>
+<div class="tool-row"><button class="sv-primary" type="submit" id="analyze" disabled>Build 3D replay</button><button class="sv-secondary" type="button" id="stop" hidden>Cancel</button></div>
+<progress id="progress" max="100" hidden aria-label="Replay analysis progress"></progress>
+<p id="run-status" class="result-status" role="status"></p>
+</form>
+<section id="training-card" class="sv-card" hidden>
+<h2>Train the robot detector</h2>
+<p class="hint">Save at least eight reviewed frames, six with visible robots, spread across the match. Frames where the model missed or mis-boxed a robot teach it the most. Training runs on your GPU in this browser, holds back every fourth frame (or your last video) to check itself, and is only saved if it beats the base model on those frames.</p>
+<div class="tool-row"><button class="sv-primary" type="button" id="train" disabled>Train</button><span id="label-total" class="hint">0 reviewed frames</span></div>
+<progress id="training-progress" max="100" hidden aria-label="Training progress"></progress>
+<p id="training-status" class="result-status" role="status"></p>
+<p id="training-saved" class="hint"></p>
+<div class="tool-row"><button class="sv-secondary" type="button" id="forget-training" hidden>Remove my training</button><button class="sv-secondary" type="button" id="export-labels" disabled>Download reviewed frames</button></div>
+<p class="hint">The download contains your reviewed frames and boxes, so they can be added to a full retraining of the base model.</p>
+</section>
+</div>
+<section class="sv-card workspace-card" id="mark-card">
+<h2>Calibrate the starting frame</h2>
+<p class="hint">Pick a fixed wide camera view. Click the four inside floor corners clockwise from top-left, then the base of each robot.</p>
+<div class="tool-row"><button type="button" class="sv-secondary" id="load-frame" disabled>Load starting frame</button><button type="button" class="sv-secondary" id="undo" disabled>Undo</button><button type="button" class="sv-secondary" id="reset-marks" disabled>Clear marks</button></div>
+<p id="mark-status" class="status" role="status"></p>
+<div class="empty-frame" id="mark-placeholder">Choose a video to mark its starting frame.</div>
+<canvas id="mark-preview" class="field-mark" aria-label="Starting frame. Click the field corners and robot positions as prompted." hidden></canvas>
+</section>
+<section class="sv-card workspace-card" id="review-card" hidden>
+<div class="review-top"><h2>Review robot boxes</h2><button type="button" class="sv-secondary" id="review-next" disabled>Next frame +3s</button></div>
+<p class="hint">Select a video position and detect the visible robots. Drag a new box around a missed robot, or click a box to select and remove it.</p>
+<div class="tool-row"><button type="button" class="sv-primary" id="test-frame" disabled>Test model on this frame</button><button type="button" class="sv-secondary" id="review-frame" disabled>Review current frame</button><button type="button" class="sv-secondary" id="remove-box" disabled>Remove selected</button><button type="button" class="sv-secondary" id="clear-boxes" disabled>Clear boxes</button></div>
+<canvas id="review-preview" class="field-mark" aria-label="Review frame. Drag to draw a robot box. Click a box to select it." hidden></canvas>
+<div class="tool-row"><button type="button" class="sv-primary" id="save-label" disabled>Save reviewed frame</button></div>
+<p id="review-status" class="status" role="status"></p>
+</section>
+<section class="sv-card workspace-card" id="scoring-card" hidden>
+<h2>Teach scoring</h2>
+<p class="hint">Uses the frame loaded above. Mark the four inside floor corners clockwise from top-left, check the numbered goal boxes, then enter the pins on each goal and who owns each toggle. Tick <em>Can't see</em> for anything blocked. Label frames from different moments, including before and after stacks change. Three frames is the minimum; ten or more is better.</p>
+<div class="tool-row"><label class="studio-field">Red alliance wall <select id="score-wall"><option value="left">Left</option><option value="right">Right</option><option value="far">Far (top)</option><option value="near">Near (bottom)</option></select></label><button type="button" class="sv-secondary" id="score-reset" disabled>Re-mark corners</button></div>
+<p id="score-mark-status" class="status" role="status"></p>
+<canvas id="score-preview" class="field-mark" aria-label="Scoring frame. Click the four field corners." hidden></canvas>
+<div id="score-form" class="score-grid"></div>
+<div class="tool-row"><button type="button" class="sv-primary" id="save-scoring" disabled>Save scoring labels</button><button type="button" class="sv-secondary" id="train-scoring" disabled>Train scoring</button><span id="scoring-total" class="hint"></span></div>
+<progress id="scoring-progress" max="100" hidden aria-label="Scoring training progress"></progress>
+<p id="scoring-status" class="result-status" role="status"></p>
+</section>
+</div>
+<section id="check-card" class="sv-card studio-lower" hidden>
+<div class="review-top"><h2 id="check-title">Check the scoring</h2><span id="check-when" class="hint"></span></div>
+<p class="hint">Seven quick checks per match. Each shows a couple of goals and all four toggles at one moment, filled in with what the replay read. Fix any pin count or toggle that's wrong, or tick <em>Can't see</em> if it's blocked. Your answers teach ScoutVision this camera, then you can rebuild the replay with them.</p>
+<div id="check-goals" class="check-grid"></div>
+<div id="check-toggles" class="check-grid"></div>
+<div class="tool-row"><button type="button" class="sv-primary" id="check-save" disabled>Save and next</button><button type="button" class="sv-secondary" id="check-skip" disabled>Skip this one</button><button type="button" class="sv-secondary" id="check-finish" disabled>Finish and learn</button><button type="button" class="sv-secondary" id="check-close">Close</button></div>
+<progress id="check-progress" max="100" hidden aria-label="Scoring check progress"></progress>
+<p id="check-status" class="result-status" role="status"></p>
+<div class="tool-row" id="check-after" hidden><button type="button" class="sv-primary" id="check-rebuild">Rebuild replay with your answers</button></div>
+</section>
+<section id="imported-matches" class="sv-card studio-lower"><h2>Imported matches</h2><ul id="library" class="library"></ul><p id="library-status" class="hint"></p></section>
+</main></div></body></html>
