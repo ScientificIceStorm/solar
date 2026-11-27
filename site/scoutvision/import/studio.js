@@ -1,10 +1,10 @@
 import {access} from "./storage.js?v=load10";
 import {canFineTune, defaultDetector, detect, detectorNames, isYolo, onLoadingStatus} from "./detector.js?v=load10";
 import {forgetHead, loadHead, trainDetector} from "./finetune.js?v=load10";
-import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=load10";
+import {analyze, robotPlacement, seekFrame} from "./tracking.js?v=fitted2";
 import {originalScoringReplay} from "./scoring-model.js?v=load10";
-import {setupScoring} from "./scoring-studio.js?v=load10";
-import {setupScoringCheck} from "./scoring-check.js?v=load10";
+import {setupScoring} from "./scoring-studio.js?v=fitted2";
+import {setupScoringCheck} from "./scoring-check.js?v=fitted2";
 import {clipId, setSharing, share, sharingAvailable, sharingOn} from "./share.js?v=load10";
 
 const $ = id => document.getElementById(id);

@@ -30,6 +30,246 @@ function pixels(canvas, luminance = false) {
   };
 }
 
+// ---- Fitted reader -------------------------------------------------------------------------
+// Ported from vexvision's tools/final_score_fit.py, where these settings were fitted to official
+// final scores on 18 broadcast matches from three venues (error per alliance on matches it never
+// saw: about 16 points, down from 46). It reads each stack up a ray from the goal's lip to 64 in,
+// seven samples across, aimed along the lean that runs through the most strongly coloured pixels
+// (a wide or oblique lens bends verticals well away from what the floor homography predicts), and
+// finds toggle strips of any colour along the walls. Used on cameras without taught references and
+// on FITTED_OVER_TAUGHT ones (?reader=fitted uses it on every camera); ?reader=classic switches it off.
+const readerQuery = globalThis.location?.search || "";
+// Taught cameras the fitted reader beats on official scores: Highlander Summit R16 #2-1 read
+// 128-80 fitted against 52-86 taught (official 168-93); the fit's own matches include this venue.
+const FITTED_OVER_TAUGHT = new Set(["Highlander Summit"]);
+export const readerSettings = {fitted: !/[?&]reader=classic\b/.test(readerQuery),
+  overTaught: /[?&]reader=fitted\b/.test(readerQuery)};
+const FIT = {sat:35, val:83, redLo:18, redHi:166, blueLo:75, blueHi:130, yellowLo:16, yellowHi:39,
+  band:.7, bandMin:1, bandMax:15, gapFirst:9, gapNext:18, baseMin:.5, toggleMin:.4, toggleMargin:.25};
+const LIP = id => id === "midfield" ? 8.77 : id.endsWith("neutral") ? 5.77 : 3.25;
+const LATERAL = [-1.15,-.77,-.38,0,.38,.77,1.15], TOP = 64;
+// Leans tried either side of the camera's vertical (radians), and the heights (in) whose pixels vote.
+const LEANS = Array.from({length:29},(_,i)=>-.35+.025*i);
+const LEAN_HEIGHTS = Array.from({length:76},(_,i)=>2+i*.5);
+
+// Colour class of a pixel as the fitted reader sees it: 0 red, 1 blue, 2 yellow, -1 none, with
+// OpenCV's HSV scale (hue 0-179) so the fitted thresholds carry over unchanged. `dark` is the
+// neutral goals' black-base test.
+function fittedPixels(canvas) {
+  const {width, height} = canvas;
+  const data = canvas.getContext("2d").getImageData(0,0,width,height).data;
+  const at = (x,y) => {
+    x = Math.round(x); y = Math.round(y);
+    return x < 0 || x >= width || y < 0 || y >= height ? -1 : (y*width+x)*4;
+  };
+  return {
+    color(x,y) {
+      const i = at(x,y);
+      if (i < 0) return -1;
+      const r=data[i], g=data[i+1], b=data[i+2], v=Math.max(r,g,b), m=Math.min(r,g,b);
+      const sat = v ? (v-m)*255/v : 0;
+      if (sat <= FIT.sat || v <= FIT.val) return -1;
+      let hue = v===m ? 0 : v===r ? 60*(g-b)/(v-m) : v===g ? 120+60*(b-r)/(v-m) : 240+60*(r-g)/(v-m);
+      hue = (hue < 0 ? hue+360 : hue) / 2;
+      if (hue < FIT.redLo || hue > FIT.redHi) return 0;
+      if (hue > FIT.blueLo && hue < FIT.blueHi) return 1;
+      if (hue > FIT.yellowLo && hue < FIT.yellowHi) return 2;
+      return -1;
+    },
+    dark(x,y) { const i = at(x,y); return i >= 0 && Math.max(data[i],data[i+1],data[i+2]) < 100; },
+    // Strongly coloured (OpenCV saturation > 90, value > 80): what the lean search follows.
+    strong(x,y) {
+      const i = at(x,y);
+      if (i < 0) return false;
+      const v=Math.max(data[i],data[i+1],data[i+2]), m=Math.min(data[i],data[i+1],data[i+2]);
+      return v > 80 && (v-m)*255/v > 90;
+    },
+    inside(x,y) { return at(x,y) >= 0; },
+  };
+}
+
+// The 3x3 floor homography (field inches to pixels) through four points of `image`.
+function floorMatrix(image) {
+  const field=[[0,0],[144,0],[144,144],[0,144]], pixels=field.map(image);
+  const rows=field.flatMap(([x,y],i)=>{const [u,v]=pixels[i];
+    return [[x,y,1,0,0,0,-x*u,-y*u,u],[0,0,0,x,y,1,-x*v,-y*v,v]];});
+  for (let i=0;i<8;i++) {
+    let pivot=i;
+    for (let r=i+1;r<8;r++) if (Math.abs(rows[r][i])>Math.abs(rows[pivot][i])) pivot=r;
+    [rows[i],rows[pivot]]=[rows[pivot],rows[i]];
+    const d=rows[i][i];
+    if (Math.abs(d)<1e-12) return null;
+    rows[i]=rows[i].map(v=>v/d);
+    for (let r=0;r<8;r++) if (r!==i) { const f=rows[r][i]; rows[r]=rows[r].map((v,c)=>v-f*rows[i][c]); }
+  }
+  const [a,b,c,d,e,f,g,h]=rows.map(row=>row[8]);
+  return [[a,b,c],[d,e,f],[g,h,1]];
+}
+
+// Field inches (x, y, z up) to pixels from the floor homography alone: square pixels, centred
+// principal point, focal length from the homography's orthogonality constraints (as
+// vexvision.field.camera_from_homography).
+function cameraFromFloor(H, width, height) {
+  const cx=width/2, cy=height/2, col=k=>[H[0][k],H[1][k],H[2][k]];
+  const [h1,h2,h3]=[col(0),col(1),col(2)];
+  const centred=h=>[h[0]-cx*h[2],h[1]-cy*h[2],h[2]];
+  const a=centred(h1), b=centred(h2);
+  const r0=[a[0]*b[0]+a[1]*b[1],a[2]*b[2]], r1=[a[0]**2+a[1]**2-b[0]**2-b[1]**2,a[2]**2-b[2]**2];
+  const u=-(r0[0]*r0[1]+r1[0]*r1[1])/Math.max(1e-12,r0[0]**2+r1[0]**2);
+  const focal=u>0 ? Math.min(6*width,Math.max(.35*width,1/Math.sqrt(u))) : width;
+  const Ki=v=>[(v[0]-cx*v[2])/focal,(v[1]-cy*v[2])/focal,v[2]];
+  const q1=Ki(h1), q2=Ki(h2), n=Math.hypot(...q1)/2+Math.hypot(...q2)/2;
+  const r1v=q1.map(v=>v/n), r2v=q2.map(v=>v/n);
+  const r3=[r1v[1]*r2v[2]-r1v[2]*r2v[1], r1v[2]*r2v[0]-r1v[0]*r2v[2], r1v[0]*r2v[1]-r1v[1]*r2v[0]];
+  let up=[focal*r3[0]+cx*r3[2], focal*r3[1]+cy*r3[2], r3[2]].map(v=>v*n);
+  const P=(x,y,z,dir)=>{const v=[0,1,2].map(k=>h1[k]*x+h2[k]*y+dir[k]*z+h3[k]); return [v[0]/v[2],v[1]/v[2]];};
+  if (P(72,72,10,up)[1] > P(72,72,0,up)[1]) up=up.map(v=>-v);       // +z must move up the image
+  return ([x,y,z=0])=>P(x,y,z,up);
+}
+
+function fittedGoal(project, goal, mark, initial) {
+  const [x,y]=goal.point, lip=LIP(goal.id), base=goal.id.endsWith("-red") ? 0 : goal.id.endsWith("-blue") ? 1 : 3;
+  const a=project([x,y,lip]), b=project([x,y,lip+10]);
+  const vertical=Math.hypot(b[0]-a[0],b[1]-a[1])/10;
+  if (!(vertical>.05)) return null;
+  const c=project([x+1,y,lip]), across=Math.hypot(c[0]-a[0],c[1]-a[1]);
+  // The marker found on the opening frame corrects where the goal sits across the image.
+  const start=[a[0]+(mark ? mark.x-project([x,y,0])[0] : 0), a[1]];
+  const model=Math.atan2(b[0]-a[0],-(b[1]-a[1]));           // 0 = straight up the image
+  const geometry={base, start, vertical, across, initial, model, lean:new Float64Array(LEANS.length), leanReads:0, aim:-1};
+  aimGoal(geometry, model);
+  return geometry;
+}
+
+// Lay the reading rays along `angle`.
+function aimGoal(geometry, angle) {
+  const {start, vertical, across, base, initial}=geometry;
+  const up=[Math.sin(angle),-Math.cos(angle)], side=[-up[1],up[0]];
+  const at=(h,o)=>[start[0]+up[0]*vertical*h+side[0]*across*o, start[1]+up[1]*vertical*h+side[1]*across*o];
+  geometry.rows=[];
+  for (let h=base===3 ? 0 : 2; h<TOP; h+=.5) geometry.rows.push(LATERAL.map(o=>at(h,o)));
+  geometry.basePoints=[-2.3,-1.4,-.6].flatMap(h=>LATERAL.map(o=>at(h,o)));
+  // Whatever already shows the base colour low on the ray at the start is the goal itself.
+  geometry.opening=base<2 ? geometry.rows.slice(0,6).map(row=>row.map(([px,py])=>initial.color(px,py)===base)) : null;
+}
+
+// The fitted reader chose each goal's lean from the strongly coloured pixels over the last ten
+// seconds of the match. Live, each uncovered read votes into a running average that, after the
+// first ten seconds of reads, keeps about the last ten; the rays follow the best lean once it
+// carries real evidence (pins stacked there), and the camera's vertical until then.
+function steerGoal(geometry, px) {
+  const {start, vertical, model, lean}=geometry;
+  const weight=geometry.leanReads<20 ? 1/(geometry.leanReads+1) : .05;
+  geometry.leanReads++;
+  LEANS.forEach((offset,k)=>{
+    const d=[Math.sin(model+offset),-Math.cos(model+offset)];
+    let inside=0, strong=0;
+    for (const h of LEAN_HEIGHTS) {
+      const x=start[0]+d[0]*vertical*h, y=start[1]+d[1]*vertical*h;
+      if (!px.inside(x,y)) continue;
+      inside++;
+      if (px.strong(x,y)) strong++;
+    }
+    lean[k]+=weight*((inside>=LEAN_HEIGHTS.length*.5 ? strong/inside : 0)-lean[k]);
+  });
+  let best=0;
+  for (let k=1;k<LEANS.length;k++) if (lean[k]>lean[best]) best=k;
+  const chosen=lean[best]>=.12 ? best : -1, now=geometry.aim;
+  // A small margin keeps the aim from flickering between two neighbouring leans.
+  if (chosen===now || (chosen>=0 && now>=0 && lean[chosen]-lean[now]<.01)) return;
+  geometry.aim=chosen;
+  aimGoal(geometry, chosen<0 ? model : model+LEANS[chosen]);
+}
+
+function readFitted(geometry, px, boxes, width, height) {
+  const [sx,sy]=geometry.start;
+  const covered=boxes.some(box=>{const x1=box.x*width, y1=box.y*height, x2=(box.x+box.w)*width, y2=(box.y+box.h)*height;
+    return x1-3<=sx && sx<=x2+3 && y1<=sy && sy<=y2+6;});
+  if (covered) return null;
+  steerGoal(geometry, px);
+  const inside=geometry.basePoints.filter(([x,y])=>px.inside(x,y));
+  if (inside.length<12) return null;
+  const baseShare=inside.filter(([x,y])=>geometry.base===3 ? px.dark(x,y) : px.color(x,y)===geometry.base).length/inside.length;
+  if (baseShare<FIT.baseMin) return null;
+  const strengths=geometry.rows.map((row,r)=>[0,1,2].map(color=>row.filter(([x,y],k)=>px.color(x,y)===color &&
+    !(geometry.opening && r<6 && color===geometry.base && geometry.opening[r][k])).length/row.length));
+  const layers=[];
+  for (let color=0;color<3;color++) {
+    const raw=strengths.map(s=>+(s[color]>FIT.band));
+    // 1-D close with a 3-long element, as OpenCV does it (dilate padded with 0, erode with 1).
+    const dil=j=>(raw[j-1]||0)|(raw[j]||0)|(raw[j+1]||0);
+    const closed=raw.map((v,i)=>(i>0 ? dil(i-1) : 1)&dil(i)&(i<raw.length-1 ? dil(i+1) : 1));
+    let start=-1;
+    closed.concat(0).forEach((v,i)=>{
+      if (v && start<0) start=i;
+      if (!v && start>=0) { if (i-start>=FIT.bandMin && i-start<=FIT.bandMax) layers.push([start,i,color]); start=-1; }
+    });
+  }
+  layers.sort((a,b)=>a[0]-b[0] || a[1]-b[1] || a[2]-b[2]);
+  const levels=[];
+  let previous=-2;
+  for (const [start,stop,color] of layers) {
+    if (start-previous>(levels.length ? FIT.gapNext : FIT.gapFirst)) break;
+    if (start>=previous) { levels.push(color); previous=stop; }
+  }
+  return levels;
+}
+
+// Toggle strips: the coloured bar along the top of each wall nearest where the camera puts the
+// wall's middle, searched wider than the yellow-only finder and accepting any toggle colour.
+function findToggleStrips(px, project, width, height) {
+  const step=2, w=Math.floor(width/step), h=Math.floor(height/step), mask=new Uint8Array(w*h), label=new Int32Array(w*h);
+  for (let y=0;y<h;y++) for (let x=0;x<Math.floor(w*.855);x++) mask[y*w+x]=px.color(x*step,y*step)>=0 ? 1 : 0;
+  const strips=[];
+  let next=0;
+  for (let i=0;i<w*h;i++) {
+    if (!mask[i] || label[i]) continue;
+    next++;
+    const queue=[i], points=[];
+    label[i]=next;
+    while (queue.length) {
+      const j=queue.pop(), x=j%w, y=(j-x)/w;
+      points.push([x*step,y*step]);
+      for (const k of [j-1,j+1,j-w,j+w]) {
+        if (k<0 || k>=w*h || label[k] || !mask[k] || Math.abs((k%w)-x)>1) continue;
+        label[k]=next; queue.push(k);
+      }
+    }
+    if (points.length*step*step<60) continue;
+    const mx=points.reduce((s,p)=>s+p[0],0)/points.length, my=points.reduce((s,p)=>s+p[1],0)/points.length;
+    let sxx=0, syy=0, sxy=0;
+    for (const [x,y] of points) { sxx+=(x-mx)**2; syy+=(y-my)**2; sxy+=(x-mx)*(y-my); }
+    sxx/=points.length; syy/=points.length; sxy/=points.length;
+    const tr=sxx+syy, det=sxx*syy-sxy*sxy, l1=tr/2+Math.sqrt(Math.max(0,tr*tr/4-det)), l2=tr/2-Math.sqrt(Math.max(0,tr*tr/4-det));
+    if (l1<Math.max(10,l2*4)) continue;
+    const axis=Math.abs(sxy)>1e-9 ? [l1-syy,sxy] : sxx>=syy ? [1,0] : [0,1], norm=Math.hypot(...axis), dir=[axis[0]/norm,axis[1]/norm];
+    const along=points.map(([x,y])=>(x-mx)*dir[0]+(y-my)*dir[1]), size=Math.max(...along)-Math.min(...along);
+    if (size<width*.025) continue;
+    strips.push({center:[mx,my],dir,size});
+  }
+  return Object.fromEntries(walls.map(wall=>{
+    const [x,y]=wallPoints[wall], along=wall==="far" || wall==="near" ? [10,0] : [0,10];
+    const a=project([x-along[0],y-along[1],10]), b=project([x+along[0],y+along[1],10]);
+    const center=[(a[0]+b[0])/2,(a[1]+b[1])/2], span=Math.hypot(b[0]-a[0],b[1]-a[1]), dir=[(b[0]-a[0])/(span||1),(b[1]-a[1])/(span||1)];
+    const options=strips.filter(s=>gap(s.center,center)<=width*.13 && Math.abs(dir[0]*s.dir[0]+dir[1]*s.dir[1])>=.6 &&
+      s.size>=.35*span && s.size<=3.5*span).sort((p,q)=>gap(p.center,center)-gap(q.center,center));
+    if (!options.length) return [wall,null];
+    const {center:c,dir:d,size}=options[0], n=[-d[1],d[0]], points=[];
+    for (let i=0;i<30;i++) { const t=-size*.34+size*.68*i/29; for (const o of [-3,-1,1,3]) points.push([c[0]+d[0]*t+n[0]*o, c[1]+d[1]*t+n[1]*o]); }
+    return [wall,points];
+  }));
+}
+
+function readToggleStrip(points, px, boxes, width, height) {
+  if (!points) return undefined;
+  const visible=points.filter(([x,y])=>!boxes.some(box=>x/width>=box.x && x/width<=box.x+box.w && y/height>=box.y && y/height<=box.y+box.h));
+  if (visible.length<12) return null;
+  const tally=[0,1,2].map(color=>visible.filter(([x,y])=>px.color(x,y)===color).length/visible.length);
+  const order=[0,1,2].sort((a,b)=>tally[b]-tally[a]);
+  if (tally[order[0]]<FIT.toggleMin || tally[order[0]]-tally[order[1]]<FIT.toggleMargin) return null;
+  return ["red","blue","yellow"][order[0]];
+}
+
 function findMark(read, guess, color, radius, eligible) {
   let best, bestScore = 0;
   for (let y=guess[1]-radius; y<=guess[1]+radius; y+=2) {
@@ -214,6 +454,13 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
     return anchor;
   });
   const decoder = referenceReader(model,project,width,height,goals,bases);
+  // Cameras without taught references use the fitted reader (see readerSettings).
+  const floor = readerSettings.fitted && (!decoder.calibrated || readerSettings.overTaught || FITTED_OVER_TAUGHT.has(decoder.label)) ?
+    floorMatrix(image) : null;
+  const camera3 = floor ? cameraFromFloor(floor,width,height) : null;
+  const initialFitted = camera3 ? fittedPixels(frame) : null;
+  const fittedGoals = camera3 ? goals.map((goal,i)=>fittedGoal(camera3,goal,bases[i],initialFitted)) : null;
+  const toggleStrips = camera3 ? findToggleStrips(initialFitted,camera3,width,height) : null;
   // Bar-colour toggle reading, used whenever the camera-specific reader has no answer. The
   // wall nearest the camera is seen from behind; check answers can correct that per wall.
   const bands = Object.fromEntries(walls.map(wall => [wall, wallBand(image, wall)]));
@@ -353,12 +600,17 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
       applyChecks(frame, positions);
       if (frame && cameraClear) {
         const read=pixels(canvas);
+        const fittedRead=fittedGoals ? fittedPixels(canvas) : null;
         decoder.use(canvas,boxes);
         bases.forEach((base,i)=>{
           if (held(goals[i].id,frame)) return;
           const previous=stacks[i];
-          const geometric=decoder.calibrated ? null : countStack(read,base,boxes,width,height,previous.length);
-          const current=decoder.stack(goals[i].id,i,previous,boxes,geometric);
+          let current;
+          if (fittedGoals?.[i]) current=readFitted(fittedGoals[i],fittedRead,boxes,width,height);
+          else {
+            const geometric=decoder.calibrated ? null : countStack(read,base,boxes,width,height,previous.length);
+            current=decoder.stack(goals[i].id,i,previous,boxes,geometric);
+          }
           const dropping=current !== null && current.length<previous.length;
           if (!stable(goals[i].id,current,dropping?5:3)) return;
           const lastSeen=seen[i];
@@ -380,7 +632,10 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
         toggles.forEach((samples,i)=>{
           if (held(walls[i],frame)) return;
           const wall=walls[i];
-          const next=decoder.toggle(wall,samples) ?? ownerFromColor(bandColor(read,bands[wall],boxes,width,height),flips[wall]);
+          const strip=toggleStrips?.[wall];
+          const stripColor=strip ? readToggleStrip(strip,fittedRead,boxes,width,height) : undefined;
+          const next=stripColor!==undefined ? (stripColor===null ? null : stripColor==="yellow" ? 0 : ownerFromColor(stripColor,flips[wall])) :
+            decoder.toggle(wall,samples) ?? ownerFromColor(bandColor(read,bands[wall],boxes,width,height),flips[wall]);
           if (!stable(wall,next)) return;
           const lastWallSeen=wallSeen[i];
           wallSeen[i]=frame;
@@ -440,7 +695,7 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
         event:"browser-import",title:meta.event,round:meta.round,fps,duration:(last+1)/fps,autonomousEnd,driverStart,
         driverEnd:last,finalFrame:last,finalScore:meta.final,videoOffset:meta.start,teams,goals,walls,tracks,states,plays,
         scoreBreakdown:{autonomousScore:states.filter(state=>state[0]<=autonomousEnd).at(-1)[1]},scoringReviewed:false,
-        scoringReference:decoder.label, scoringVersion:2,
+        scoringReference:fittedGoals ? "Fitted to official final scores" : decoder.label, scoringVersion:fittedGoals ? 3 : 2,
         goalAudit:{goals:9,clock_checks:checks,usable_clock_checks:usableChecks,
           goal_reads:Object.fromEntries(goals.map((goal,i)=>[goal.id,calls[i]])),gpu:backend},
         performance,

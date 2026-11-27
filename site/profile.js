@@ -12,9 +12,13 @@
   function showSession(session) {
     current = session;
     form.hidden = google.hidden = Boolean(session);
-    logout.hidden = teamForm.hidden = !session;
+    logout.hidden = !session;
     status.textContent = session?.user.email || '';
-    teamInput.value = session?.user.user_metadata?.team || '';
+    // Only the main site's panel has the team form; ScoutVision pages share the sign-in alone.
+    if (teamForm) {
+      teamForm.hidden = !session;
+      teamInput.value = session?.user.user_metadata?.team || '';
+    }
     listeners.forEach((listener) => listener(session));
   }
   function connect() {
@@ -71,7 +75,7 @@
     if (signup && data && !data.session) status.textContent = 'Check your email to confirm your account.';
   };
   // The team you follow is kept on your account (Supabase user data), not in a separate table.
-  teamForm.onsubmit = async (event) => {
+  if (teamForm) teamForm.onsubmit = async (event) => {
     event.preventDefault();
     const team = teamInput.value.trim().toUpperCase();
     if (!/^\d{1,6}[A-Z]{0,2}$/.test(team)) { status.textContent = 'Enter a VEX team number like 98601B.'; return; }
