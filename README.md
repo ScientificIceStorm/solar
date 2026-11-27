@@ -1,143 +1,35 @@
-# solar_v6
+# SolarScout
 
-Solar v6 is scaffolded as a Flutter app, but the current work is focused on the
-API backbone first. There is no product UI yet; the main way to exercise the
-code is the CLI runner in `bin/solar_api_cli.dart`.
+Explore VEX V5 Robotics Competition results and scout teams on [skyloft.tech](https://skyloft.tech/).
 
-## What Is Included
+## Rankings and scouting
 
-- A typed RobotEvents client with paginated requests
-- A world-skills client for the public season skills endpoint
-- A RoboServer client for the local OpenSkill and loader endpoints from Solar v5
-- A small command runner so you can test calls from the terminal right away
-- Sample OpenSkill prediction payloads and smoke tests for parsing/query building
+- **World Skills leaderboards** with combined, driver, and autonomous scores. Filter by season, grade level, region, or team.
+- **Team rankings** based on season OpenSkill ratings. Search by team number, name, or school.
+- **Season Insights** with sortable team stats and side-by-side charts for up to four teams. Compare results, scoring averages, Skills, awards, and available OPR, DPR, and CCWM estimates.
+- **Team profiles** with season ratings, records, Skills results, event history, match scores, win estimates, and upcoming competitions.
+- **Team scouting reports** for individual events, including division standings, performance ratings, Skills, awards, match results, and score charts.
 
-## Config
+## Events and matches
 
-The project intentionally does not carry over any embedded API keys from prior
-Swift versions.
+- **Searchable event calendar** organized by week, with season and region filters and a shortcut to this week.
+- **Interactive U.S. event map** with zoom, city and event search, and filters for upcoming and past events.
+- **Division pages** with team rosters, standings, match schedules, elimination brackets, awards, event details, and links to organizer information and webcasts when available.
+- **Match schedules and results** with assigned fields, alliance lineups, winning scores, disqualifications when reported, and estimated win probabilities.
+- **Match video shortcuts** that open available broadcasts at the match time. Play replays inline, change playback speed, or open the video in a new tab.
 
-Configuration is resolved in this order:
+## Accounts
 
-1. Dart defines such as `--dart-define=ROBOEVENTS_API_KEY=...`
-2. Environment variables
-3. Optional `solar.local.json` in the project root
-4. Built-in development defaults
+- Sign up with email and password or continue with Google.
+- Save a VEX team to see its season ratings, Skills, event results, and trends on your account dashboard.
 
-Supported keys:
+## ScoutVision Beta
 
-```json
-{
-  "robotEventsApiKey": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiMzNkMTc3MWU2YzU3MGUzNWMzMzlkYmQxNTU4MTA3NGFiNzRlMmIwOGQ3Y2E5OGJmMjM4Y2NjZDQ5M2E2ZjcxNGQwZTIxNjdjZGIyM2I0OTUiLCJpYXQiOjE3NjczNzg2NjguOTU2MTkwMSwibmJmIjoxNzY3Mzc4NjY4Ljk1NjE5MTEsImV4cCI6MjcxNDA2MzQ2OC45NTAzNDQxLCJzdWIiOiIxNTAxNjciLCJzY29wZXMiOltdfQ.KdxeT2svi9XmouJ1QQiRbf9cEmmbaL04iGahh79P9cZM4xeUMvQi7veD4ypPWGX5Ay_qt0sPS1Aup83emLZ4-se09Prt7ua4IyKdHfOeFhbfJUrzJoSX09CJDpdAD2Q_HC8AILgkiRWJ7rB-nNHEgbWspbONHgoKw-3hBWl8ylm2NizK4dkAJ0GnGMLCxpAEWTlA4QTx-tEVgmNVz5TopZa-aYIjh-ZjpDoh3LkUT8qi-5ytGRRi_YRk2HhHh_gDWjcQtodYvb6pBbyhnj8hWLdE8LDMlngh7kWNMEVpF0oCj7BrVya6uLSnccq8Lr5JrHwI0NLEphiAuzKXIIb8Wk9_1WalowwHGqesvlJjsQJFk8j2wGiBD3CaNW1LyxlQGlx8ROkOqH5lZ2XhsXKMZ1qqyCZxQ-_Tg5bMmYRZlEJTro6OiMJlqbJykhCMUQcOzXqfPkDurQikqiaImk3z8EkWNP10Zi86JDTH3nlax7lmM4_BsI-UJz1OFaak3XlI-_U0eucc8JWtNFh8Rogsnf6XNlFNCHNfOaJxTO_-TL23tm9WzcQbStQeeawlvZyr8rYVZh7QMloKf1HvhVzBX5lnrUZGxEWvVTRhWSHucSnY3jQAqWd_Fkjwc2aAOaSU2TrpWraMvsXh315mC33YXIihK4qhjKAz7iFcqY0zbQw",
-  "robotEventsBaseUrl": "https://www.robotevents.com/api/v2",
-  "roboServerBaseUrl": "http://127.0.0.1:8080",
-  "worldSkillsBaseUrl": "https://www.robotevents.com/api",
-  "supabaseUrl": "https://your-project-ref.supabase.co",
-  "supabaseAnonKey": "sb_publishable_xxx_or_legacy_anon_key",
-  "supabaseRedirectUrl": "dev.minzhang.solarV6://login-callback"
-}
-```
+- **3D Override replays** with named robot tracks, trails, orbit and top-down views, timeline scrubbing, and synchronized broadcast footage where available.
+- **Scoring analysis** with estimates for goal stacks, placed and removed pin halves, toggle ownership, and key plays. Coverage indicators flag goals and robots the camera could not read reliably.
+- **Team analytics** for autonomous routes and scoring, goal visits, field use, travel distance, stacking and placement timing, and toggle control.
+- **Browser-based Match studio** for opening a video, looking up the event and match, marking starting positions, and building a replay. Save and rebuild analyses in the same browser.
+- **Review and training tools** for testing and correcting robot boxes, labeling goal stacks and toggle states, and teaching the scorer a camera view. Scoring checks after a build let you correct its readings and rebuild with your answers.
+- **Published analyses** linked from the ScoutVision catalog and relevant event and team pages. During submission, you can opt to share selected reviewed examples for training.
 
-Environment variable names:
-
-- `ROBOEVENTS_API_KEY`
-- `ROBOEVENTS_BASE_URL`
-- `ROBO_SERVER_BASE_URL`
-- `WORLD_SKILLS_BASE_URL`
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_KEY`
-- `SUPABASE_REDIRECT_URL`
-
-For mobile email auth and password recovery, add
-`dev.minzhang.solarV6://login-callback` to your Supabase project's redirect URLs.
-
-## CLI Usage
-
-Show commands:
-
-```bash
-dart run bin/solar_api_cli.dart --help
-```
-
-Inspect resolved config:
-
-```bash
-dart run bin/solar_api_cli.dart config
-```
-
-Fetch seasons from RobotEvents:
-
-```bash
-ROBOEVENTS_API_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiMzNkMTc3MWU2YzU3MGUzNWMzMzlkYmQxNTU4MTA3NGFiNzRlMmIwOGQ3Y2E5OGJmMjM4Y2NjZDQ5M2E2ZjcxNGQwZTIxNjdjZGIyM2I0OTUiLCJpYXQiOjE3NjczNzg2NjguOTU2MTkwMSwibmJmIjoxNzY3Mzc4NjY4Ljk1NjE5MTEsImV4cCI6MjcxNDA2MzQ2OC45NTAzNDQxLCJzdWIiOiIxNTAxNjciLCJzY29wZXMiOltdfQ.KdxeT2svi9XmouJ1QQiRbf9cEmmbaL04iGahh79P9cZM4xeUMvQi7veD4ypPWGX5Ay_qt0sPS1Aup83emLZ4-se09Prt7ua4IyKdHfOeFhbfJUrzJoSX09CJDpdAD2Q_HC8AILgkiRWJ7rB-nNHEgbWspbONHgoKw-3hBWl8ylm2NizK4dkAJ0GnGMLCxpAEWTlA4QTx-tEVgmNVz5TopZa-aYIjh-ZjpDoh3LkUT8qi-5ytGRRi_YRk2HhHh_gDWjcQtodYvb6pBbyhnj8hWLdE8LDMlngh7kWNMEVpF0oCj7BrVya6uLSnccq8Lr5JrHwI0NLEphiAuzKXIIb8Wk9_1WalowwHGqesvlJjsQJFk8j2wGiBD3CaNW1LyxlQGlx8ROkOqH5lZ2XhsXKMZ1qqyCZxQ-_Tg5bMmYRZlEJTro6OiMJlqbJykhCMUQcOzXqfPkDurQikqiaImk3z8EkWNP10Zi86JDTH3nlax7lmM4_BsI-UJz1OFaak3XlI-_U0eucc8JWtNFh8Rogsnf6XNlFNCHNfOaJxTO_-TL23tm9WzcQbStQeeawlvZyr8rYVZh7QMloKf1HvhVzBX5lnrUZGxEWvVTRhWSHucSnY3jQAqWd_Fkjwc2aAOaSU2TrpWraMvsXh315mC33YXIihK4qhjKAz7iFcqY0zbQw dart run bin/solar_api_cli.dart seasons
-```
-
-Look up a team:
-
-```bash
-ROBOEVENTS_API_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiMzNkMTc3MWU2YzU3MGUzNWMzMzlkYmQxNTU4MTA3NGFiNzRlMmIwOGQ3Y2E5OGJmMjM4Y2NjZDQ5M2E2ZjcxNGQwZTIxNjdjZGIyM2I0OTUiLCJpYXQiOjE3NjczNzg2NjguOTU2MTkwMSwibmJmIjoxNzY3Mzc4NjY4Ljk1NjE5MTEsImV4cCI6MjcxNDA2MzQ2OC45NTAzNDQxLCJzdWIiOiIxNTAxNjciLCJzY29wZXMiOltdfQ.KdxeT2svi9XmouJ1QQiRbf9cEmmbaL04iGahh79P9cZM4xeUMvQi7veD4ypPWGX5Ay_qt0sPS1Aup83emLZ4-se09Prt7ua4IyKdHfOeFhbfJUrzJoSX09CJDpdAD2Q_HC8AILgkiRWJ7rB-nNHEgbWspbONHgoKw-3hBWl8ylm2NizK4dkAJ0GnGMLCxpAEWTlA4QTx-tEVgmNVz5TopZa-aYIjh-ZjpDoh3LkUT8qi-5ytGRRi_YRk2HhHh_gDWjcQtodYvb6pBbyhnj8hWLdE8LDMlngh7kWNMEVpF0oCj7BrVya6uLSnccq8Lr5JrHwI0NLEphiAuzKXIIb8Wk9_1WalowwHGqesvlJjsQJFk8j2wGiBD3CaNW1LyxlQGlx8ROkOqH5lZ2XhsXKMZ1qqyCZxQ-_Tg5bMmYRZlEJTro6OiMJlqbJykhCMUQcOzXqfPkDurQikqiaImk3z8EkWNP10Zi86JDTH3nlax7lmM4_BsI-UJz1OFaak3XlI-_U0eucc8JWtNFh8Rogsnf6XNlFNCHNfOaJxTO_-TL23tm9WzcQbStQeeawlvZyr8rYVZh7QMloKf1HvhVzBX5lnrUZGxEWvVTRhWSHucSnY3jQAqWd_Fkjwc2aAOaSU2TrpWraMvsXh315mC33YXIihK4qhjKAz7iFcqY0zbQw dart run bin/solar_api_cli.dart team --number 24B
-```
-
-Fetch event teams:
-
-```bash
-ROBOEVENTS_API_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIzIiwianRpIjoiMzNkMTc3MWU2YzU3MGUzNWMzMzlkYmQxNTU4MTA3NGFiNzRlMmIwOGQ3Y2E5OGJmMjM4Y2NjZDQ5M2E2ZjcxNGQwZTIxNjdjZGIyM2I0OTUiLCJpYXQiOjE3NjczNzg2NjguOTU2MTkwMSwibmJmIjoxNzY3Mzc4NjY4Ljk1NjE5MTEsImV4cCI6MjcxNDA2MzQ2OC45NTAzNDQxLCJzdWIiOiIxNTAxNjciLCJzY29wZXMiOltdfQ.KdxeT2svi9XmouJ1QQiRbf9cEmmbaL04iGahh79P9cZM4xeUMvQi7veD4ypPWGX5Ay_qt0sPS1Aup83emLZ4-se09Prt7ua4IyKdHfOeFhbfJUrzJoSX09CJDpdAD2Q_HC8AILgkiRWJ7rB-nNHEgbWspbONHgoKw-3hBWl8ylm2NizK4dkAJ0GnGMLCxpAEWTlA4QTx-tEVgmNVz5TopZa-aYIjh-ZjpDoh3LkUT8qi-5ytGRRi_YRk2HhHh_gDWjcQtodYvb6pBbyhnj8hWLdE8LDMlngh7kWNMEVpF0oCj7BrVya6uLSnccq8Lr5JrHwI0NLEphiAuzKXIIb8Wk9_1WalowwHGqesvlJjsQJFk8j2wGiBD3CaNW1LyxlQGlx8ROkOqH5lZ2XhsXKMZ1qqyCZxQ-_Tg5bMmYRZlEJTro6OiMJlqbJykhCMUQcOzXqfPkDurQikqiaImk3z8EkWNP10Zi86JDTH3nlax7lmM4_BsI-UJz1OFaak3XlI-_U0eucc8JWtNFh8Rogsnf6XNlFNCHNfOaJxTO_-TL23tm9WzcQbStQeeawlvZyr8rYVZh7QMloKf1HvhVzBX5lnrUZGxEWvVTRhWSHucSnY3jQAqWd_Fkjwc2aAOaSU2TrpWraMvsXh315mC33YXIihK4qhjKAz7iFcqY0zbQw dart run bin/solar_api_cli.dart event-teams --event-id 12345
-```
-
-Fetch world skills:
-
-```bash
-dart run bin/solar_api_cli.dart world-skills --season 190 --grade-level "High School"
-```
-
-Check the local RoboServer:
-
-```bash
-dart run bin/solar_api_cli.dart health
-```
-
-Read the cached OpenSkill leaderboard from RoboServer:
-
-```bash
-dart run bin/solar_api_cli.dart openskill-cache --season 190 --grade-level "High School"
-```
-
-Post an OpenSkill prediction request:
-
-```bash
-dart run bin/solar_api_cli.dart openskill-predict --body-file samples/openskill_predict_request.json
-```
-
-If you test from an emulator or device, you may want to override
-`ROBO_SERVER_BASE_URL` to match the host your server is reachable on.
-
-## Validation
-
-Run the local checks with:
-
-```bash
-flutter test
-flutter analyze
-```
-
-## Local Website Preview
-
-To preview the rankings in a plain HTML/CSS/JS site on localhost:
-
-```bash
-dart run bin/solar_rankings_site.dart --port 8787
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8787
-```
-
-The site serves:
-
-- `/` for the HTML preview
-- `/api/seasons` for season filters
-- `/api/rankings?seasonId=197&gradeLevel=High%20School` for ranking data
-# solar
+[Explore ScoutVision](https://skyloft.tech/scoutvision/) · [Open Match studio](https://skyloft.tech/scoutvision/import/)
