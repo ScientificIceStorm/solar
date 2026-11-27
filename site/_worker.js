@@ -195,6 +195,8 @@ async function publishMatch(request, env) {
   const division = Number.isInteger(meta.division) ? meta.division : Number(meta.division) || 1;
   const teams = Array.isArray(meta.teams) ? meta.teams.slice(0, 4).map(row => ({
     team: text(row?.team, 9).toUpperCase(), alliance: row?.alliance === 'blue' ? 'blue' : 'red'})) : [];
+  // Red pair first, so listings (which keep only the team numbers) can show the alliances.
+  teams.sort((a, b) => (a.alliance === 'blue') - (b.alliance === 'blue'));
   const replay = cleanReplay(body?.replay);
   if (body?.version !== 1 || !SKU_PATTERN.test(sku) || teams.length !== 4 || !replay ||
       !teams.every(row => TEAM_PATTERN.test(row.team)) ||

@@ -1,24 +1,35 @@
-// Solar front page: a VEX V5 robot with a 6-bar lift, drawn side-on like a CAD sketch.
+// Solar front page: a VEX V5 robot with a 6-bar lift, side-on, drawn as halftone dots.
 //
 // A 6-bar is two parallelogram four-bars stacked on a floating middle bar. Stage 1 pivots on
 // the tower and swings up and forward; stage 2 is geared to it on the middle bar and swings the
 // opposite way, so the claw rises almost straight up over the robot while every vertical bar
 // stays vertical. Folded it fits inside the 18" start size; raised it reaches the 50" limit.
-// The lift cycles on its own; hovering the robot makes the lift follow the pointer.
+// The lift cycles on its own; the dots scatter away from the pointer and spring back.
 (() => {
   const canvas = document.getElementById("homeRobot");
   if (!canvas) return;
-  const W = 560, H = 360;
-  const g = canvas.getContext("2d");
+  const W = 560, H = 360, CELL = 5, MAX_R = 2.55;
+  const cols = Math.floor(W / CELL), rows = Math.floor(H / CELL);
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const g = canvas.getContext("2d");
+  // The robot is drawn at dot resolution: a pixel's alpha is how much of one dot's cell the
+  // robot covers there, and its colour is the colour of that part.
+  const shape = document.createElement("canvas");
+  shape.width = cols;
+  shape.height = rows;
+  const s = shape.getContext("2d", {willReadFrequently: true});
 
-  // Field units are inches; y up from the floor.
+  const dots = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x = (c + .5) * CELL, y = (r + .5) * CELL;
+    dots.push({hx: x, hy: y, x, y, vx: 0, vy: 0, size: 0, rgb: -1, fill: "#fff"});
+  }
+
+  // Robot units are inches, y up from the floor.
   const PX = 6.1, FLOOR = 342, ORIGIN = 238;
   const X = x => ORIGIN + x * PX, Y = y => FLOOR - y * PX;
   const L1 = 17, L2 = 15.5, TOWER = 3, LOW = 7.5, GAP = 3.6, MAX_ANGLE = 58 * Math.PI / 180;
-
-  const BAR = "#f3f6fd", EDGE = "#c9d3e6", HOLE = "rgba(20,45,100,.5)", GEAR = "#e0483f",
-    BRACE = "#3dbb6b", METAL = "#b9c3d4";
+  const WHITE = "#ffffff", GEAR = "#ff6f63", PIN = "#ffd23c", BATTERY = "#a9d2ff", LIMIT = "#ff8a80";
 
   let scale = 1;
   function resize() {
@@ -30,144 +41,117 @@
     g.setTransform(scale * ratio, 0, 0, scale * ratio, 0, 0);
   }
 
-  // A C-channel bar between two points (inches), with its row of holes.
-  function channel(ax, ay, bx, by, width = 1.05, color = BAR) {
-    const x1 = X(ax), y1 = Y(ay), x2 = X(bx), y2 = Y(by);
-    g.lineCap = "round";
-    g.strokeStyle = EDGE; g.lineWidth = width * PX + 1.6;
-    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
-    g.strokeStyle = color; g.lineWidth = width * PX;
-    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
-    const length = Math.hypot(bx - ax, by - ay), holes = Math.floor(length / .5);
-    g.fillStyle = HOLE;
-    for (let i = 1; i < holes; i++) {
-      const t = i / holes;
-      g.fillRect(x1 + (x2 - x1) * t - 1.1, y1 + (y2 - y1) * t - 1.1, 2.2, 2.2);
-    }
+  // Drawing into the dot mask, in inches.
+  function bar(ax, ay, bx, by, width = 1.3, alpha = 1, color = WHITE) {
+    s.globalAlpha = alpha;
+    s.strokeStyle = color;
+    s.lineWidth = width * PX;
+    s.beginPath(); s.moveTo(X(ax), Y(ay)); s.lineTo(X(bx), Y(by)); s.stroke();
   }
-  function pivot(x, y) {
-    g.fillStyle = "#4a5a78";
-    g.beginPath(); g.arc(X(x), Y(y), 2.4, 0, Math.PI * 2); g.fill();
-    g.fillStyle = BAR;
-    g.beginPath(); g.arc(X(x), Y(y), 1, 0, Math.PI * 2); g.fill();
+  function disc(x, y, radius, alpha = 1, color = WHITE) {
+    s.globalAlpha = alpha;
+    s.fillStyle = color;
+    s.beginPath(); s.arc(X(x), Y(y), radius * PX, 0, Math.PI * 2); s.fill();
   }
-  function gear(x, y, radius, turn, teeth = 24) {
-    const cx = X(x), cy = Y(y), r = radius * PX;
-    g.fillStyle = GEAR;
-    g.beginPath();
-    for (let i = 0; i < teeth * 2; i++) {
-      const a = turn + i * Math.PI / teeth, rr = i % 2 ? r : r * .9;
-      g.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
-    }
-    g.closePath(); g.fill();
-    g.strokeStyle = "rgba(90,10,10,.45)"; g.lineWidth = 1;
-    for (let i = 0; i < 6; i++) {
-      const a = turn + i * Math.PI / 3;
-      g.beginPath(); g.moveTo(cx + r * .22 * Math.cos(a), cy + r * .22 * Math.sin(a));
-      g.lineTo(cx + r * .7 * Math.cos(a), cy + r * .7 * Math.sin(a)); g.stroke();
-    }
-    g.fillStyle = "#7a1d18";
-    g.beginPath(); g.arc(cx, cy, r * .16, 0, Math.PI * 2); g.fill();
+  function hole(x, y, radius) {
+    s.globalCompositeOperation = "destination-out";
+    disc(x, y, radius, .75);
+    s.globalCompositeOperation = "source-over";
   }
-  function wheel(x, y, radius, spin) {
-    const cx = X(x), cy = Y(y), r = radius * PX;
-    g.fillStyle = "#3b4558"; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = METAL; g.lineWidth = 2;
-    g.beginPath(); g.arc(cx, cy, r * .72, 0, Math.PI * 2); g.stroke();
-    for (let i = 0; i < 5; i++) {
-      const a = spin + i * 2 * Math.PI / 5;
-      g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + r * .72 * Math.cos(a), cy + r * .72 * Math.sin(a)); g.stroke();
-    }
+  function gear(x, y, radius) {
+    disc(x, y, radius, .95, GEAR);
+    hole(x, y, radius * .32);
   }
 
   // The lift linkage for a stage-1 angle (radians above horizontal).
   function linkage(angle) {
-    const c = Math.cos(angle), s = Math.sin(angle);
-    const a0 = [TOWER, LOW], a1 = [TOWER, LOW + GAP];                 // tower pivots
-    const m0 = [a0[0] + L1 * c, a0[1] + L1 * s], m1 = [a1[0] + L1 * c, a1[1] + L1 * s];
-    const m2 = [m1[0], m1[1] + 1.2], m3 = [m1[0], m1[1] + 1.2 + GAP];   // stage-2 pivots on the middle bar
-    const e0 = [m2[0] - L2 * c, m2[1] + L2 * s], e1 = [m3[0] - L2 * c, m3[1] + L2 * s];
+    const c = Math.cos(angle), n = Math.sin(angle);
+    const a0 = [TOWER, LOW], a1 = [TOWER, LOW + GAP];                     // tower pivots
+    const m0 = [a0[0] + L1 * c, a0[1] + L1 * n], m1 = [a1[0] + L1 * c, a1[1] + L1 * n];
+    const m2 = [m1[0], m1[1] + 1.2], m3 = [m1[0], m1[1] + 1.2 + GAP];       // stage-2 pivots on the middle bar
+    const e0 = [m2[0] - L2 * c, m2[1] + L2 * n], e1 = [m3[0] - L2 * c, m3[1] + L2 * n];
     return {a0, a1, m0, m1, m2, m3, e0, e1};
   }
 
-  function drawRobot(lift, time) {
-    g.clearRect(0, 0, W, H);
+  function drawRobot(lift) {
+    s.setTransform(1 / CELL, 0, 0, 1 / CELL, 0, 0);
+    s.clearRect(0, 0, W, H);
+    s.globalCompositeOperation = "source-over";
+    s.lineCap = "round";
+    s.lineJoin = "round";
     const angle = lift * MAX_ANGLE;
     const {a0, a1, m0, m1, m2, m3, e0, e1} = linkage(angle);
 
-    // 50" height limit, as in a CAD check.
-    g.setLineDash([7, 6]); g.strokeStyle = "rgba(255,120,110,.75)"; g.lineWidth = 1.4;
-    g.beginPath(); g.moveTo(X(-14), Y(50)); g.lineTo(X(26), Y(50)); g.stroke();
-    g.setLineDash([]);
-    g.fillStyle = "rgba(255,150,140,.95)"; g.font = "600 11px Manrope, system-ui, sans-serif";
-    g.fillText('50" height limit', X(-14), Y(50) - 5);
+    // Floor and the 50" height limit.
+    bar(-16, -.3, 28, -.3, .45, .5);
+    for (let x = -14; x < 26; x += 2.6) bar(x, 50, x + 1.2, 50, .4, .8, LIMIT);
 
-    // Floor.
-    g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(X(-16), Y(0)); g.lineTo(X(28), Y(0)); g.stroke();
+    // Drivetrain: wheels under a sloped chassis, battery and a pneumatic cylinder.
+    for (const x of [0, 7.5, 15]) { disc(x, 1.9, 1.9, .6); disc(x, 1.9, .6); }
+    s.globalAlpha = .92;
+    s.fillStyle = WHITE;
+    s.beginPath();
+    s.moveTo(X(-2.5), Y(1.2)); s.lineTo(X(18), Y(1.2)); s.lineTo(X(18.5), Y(3.2));
+    s.quadraticCurveTo(X(14), Y(4.6), X(9), Y(5)); s.lineTo(X(-1.2), Y(5)); s.lineTo(X(-2.8), Y(3.4));
+    s.closePath(); s.fill();
+    for (const [x, y] of [[1, 3.2], [5, 3.4], [9, 3.3], [13, 3]]) hole(x, y, .42);
+    s.globalAlpha = .95;
+    s.fillStyle = BATTERY;
+    s.fillRect(X(-1), Y(7.4), 4.4 * PX, 2.3 * PX);
+    bar(-3, 8, 1.2, 8, .9, .8);
 
-    // Drivetrain: wheels, the sloped chassis, battery and a pneumatic cylinder.
-    const spin = still ? 0 : time * .4;
-    for (const x of [0, 7.5, 15]) wheel(x, 1.9, 1.9, spin);
-    g.fillStyle = "#e7ecf5"; g.strokeStyle = EDGE; g.lineWidth = 1.5;
-    g.beginPath();
-    g.moveTo(X(-2.5), Y(1.2)); g.lineTo(X(18), Y(1.2)); g.lineTo(X(18.5), Y(3.2));
-    g.quadraticCurveTo(X(14), Y(4.6), X(9), Y(5)); g.lineTo(X(-1.2), Y(5)); g.lineTo(X(-2.8), Y(3.4)); g.closePath();
-    g.fill(); g.stroke();
-    g.fillStyle = HOLE;
-    for (const [x, y] of [[1, 3.3], [5, 3.6], [9, 3.4], [13, 3.1]]) { g.beginPath(); g.arc(X(x), Y(y), 1.6, 0, Math.PI * 2); g.fill(); }
-    g.fillStyle = "#9cc6ee"; g.strokeStyle = "#6f9fcd";
-    g.beginPath(); g.roundRect(X(-1), Y(7.4), 4.4 * PX, 2.3 * PX, 4); g.fill(); g.stroke();
-    g.fillStyle = METAL; g.fillRect(X(-3), Y(8.6), 4.2 * PX, 1.2 * PX);
-    g.fillStyle = "#d4453d"; g.fillRect(X(1.2), Y(8.45), 3.3 * PX, .9 * PX);
+    // Intake arms down to the floor at the front and back.
+    bar(13, 4.6, 22.5, 13.5, 1.1, .9);
+    bar(-6.5, 13, 1.8, 4.6, 1.1, .9);
+    gear(17.5, 2.6, 1.1);
 
-    // Intake arms down to the floor, front and back.
-    channel(13, 4.6, 22.5, 13.5, .95);
-    channel(-6.5, 13, 1.8, 4.6, .95);
-    gear(17.5, 2.6, 1.15, -time * 2.4, 14);
+    // Tower with its brace and the lift's driven gear.
+    bar(TOWER, 4.6, TOWER, a1[1] + 1.6, 1.35);
+    bar(TOWER, 6.2, 9.5, 4.8, .9, .8);
+    gear(a0[0], a0[1], 2.1);
 
-    // Tower with a brace and the lift motor's gear.
-    channel(TOWER, 4.6, TOWER, a1[1] + 1.6, 1.1);
-    channel(TOWER, 6.2, 9.5, 4.8, .8);
-    gear(TOWER + 1.6, a0[1] - .2, 1.15, -angle * 3.2, 12);
-    gear(a0[0], a0[1], 2.1, angle * 1.5);
+    // Stage 1: tower up to the middle bar.
+    bar(a0[0], a0[1], m0[0], m0[1]);
+    bar(a1[0], a1[1], m1[0], m1[1]);
 
-    // Stage 1 (tower to middle bar), with braces along its arms.
-    channel(a0[0], a0[1], m0[0], m0[1]);
-    channel(a1[0], a1[1], m1[0], m1[1]);
-    const brace = (p, q, from, to) => {
-      const n = [-(q[1] - p[1]), q[0] - p[0]], len = Math.hypot(...n), off = .75 / len;
-      const at = t => [p[0] + (q[0] - p[0]) * t + n[0] * off, p[1] + (q[1] - p[1]) * t + n[1] * off];
-      const [s0, s1] = [at(from), at(to)];
-      channel(s0[0], s0[1], s1[0], s1[1], .55, BRACE);
-    };
-    brace(a1, m1, .35, .7);
+    // Middle bar, with the meshing gears that drive stage 2 the opposite way.
+    bar(m0[0], m0[1] - .3, m3[0], m3[1] + .5, 1.35);
+    gear(m1[0] + 1.75, m1[1] - .6, 1.6);
+    gear(m2[0] + 1.75, m3[1] - .5, 1.6);
 
-    // Middle bar with the two meshing gears that drive stage 2 the opposite way.
-    channel(m0[0], m0[1] - .3, m3[0], m3[1] + .5, 1.1);
-    gear(m1[0] + 1.75, m1[1] - .6, 1.75, -angle * 2.2);
-    gear(m2[0] + 1.75, m3[1] - .5, 1.75, angle * 2.2 + .13);
-
-    // Stage 2 (middle bar back over the robot to the end bar).
-    channel(m2[0], m2[1], e0[0], e0[1]);
-    channel(m3[0], m3[1], e1[0], e1[1]);
-    brace(e1, m3, .3, .65);
+    // Stage 2: middle bar back over the robot to the end bar.
+    bar(m2[0], m2[1], e0[0], e0[1]);
+    bar(m3[0], m3[1], e1[0], e1[1]);
 
     // End bar and claw, holding a pin.
-    channel(e0[0], e0[1] - .4, e1[0], e1[1] + 2.4, 1.1);
+    bar(e0[0], e0[1] - .4, e1[0], e1[1] + 2.4, 1.35);
     const top = e1[1] + 2.4;
-    channel(e1[0] - .2, top, e1[0] + 6.5, top, .9);
-    channel(e1[0] + 6.5, top, e1[0] + 6.5, top - 3.2, .8);
-    gear(e1[0] + 3.2, top - 1.7, .95, -time * 4, 12);
-    const px = X(e1[0] + 4.8), py = Y(top - 1.2);
-    g.fillStyle = "#ffd23c"; g.strokeStyle = "rgba(120,90,0,.45)";
-    g.beginPath(); g.moveTo(px - 7, py); g.lineTo(px + 7, py); g.lineTo(px + 2.5, py - 16); g.lineTo(px - 2.5, py - 16); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = "#e0483f"; g.fillRect(px - 8, py, 16, 4);
+    bar(e1[0] - .2, top, e1[0] + 6.5, top, 1.1);
+    bar(e1[0] + 6.5, top, e1[0] + 6.5, top - 3.2, 1);
+    const pin = [e1[0] + 4.3, top - 1.2];
+    s.globalAlpha = 1;
+    s.fillStyle = PIN;
+    s.beginPath();
+    s.moveTo(X(pin[0] - 1.15), Y(pin[1])); s.lineTo(X(pin[0] + 1.15), Y(pin[1]));
+    s.lineTo(X(pin[0] + .42), Y(pin[1] + 2.6)); s.lineTo(X(pin[0] - .42), Y(pin[1] + 2.6));
+    s.closePath(); s.fill();
 
-    for (const p of [a0, a1, m0, m1, m2, m3, e0, e1]) pivot(...p);
+    // Pivot holes through every joint of the linkage.
+    for (const p of [a0, a1, m0, m1, m2, m3, e0, e1]) hole(p[0], p[1], .38);
   }
 
-  // Auto cycle: rest folded, lift, hold, lower. Hovering takes over the lift height.
+  const pointer = {x: -1e4, y: -1e4, active: false};
+  function aim(event) {
+    const rect = canvas.getBoundingClientRect();
+    pointer.x = (event.clientX - rect.left) / scale;
+    pointer.y = (event.clientY - rect.top) / scale;
+    pointer.active = true;
+  }
+  canvas.addEventListener("pointermove", aim);
+  canvas.addEventListener("pointerdown", aim);
+  canvas.addEventListener("pointerleave", () => { pointer.active = false; });
+
+  // Rest folded, lift, hold at full height, lower.
   const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   function cycle(t) {
     const p = t % 7.2;
@@ -176,25 +160,64 @@
     if (p < 4.9) return 1;
     return 1 - ease((p - 4.9) / 2.3);
   }
-  let target = null, shown = 0, last = performance.now(), clock = 0;
-  canvas.addEventListener("pointermove", event => {
-    const box = canvas.getBoundingClientRect();
-    const height = (FLOOR - (event.clientY - box.top) / scale) / PX;      // inches above the floor
-    target = Math.max(0, Math.min(1, (height - 17) / 30));
-  });
-  canvas.addEventListener("pointerleave", () => { target = null; });
 
+  function paint(dt, settle) {
+    const cover = s.getImageData(0, 0, cols, rows).data;
+    g.clearRect(0, 0, W, H);
+    for (let i = 0; i < dots.length; i++) {
+      const dot = dots[i], k = i * 4, alpha = cover[k + 3] / 255;
+      const target = MAX_R * Math.sqrt(alpha);
+      dot.size = settle ? target : dot.size + (target - dot.size) * Math.min(1, dt * 14);
+      if (alpha > .05) {
+        const rgb = cover[k] << 16 | cover[k + 1] << 8 | cover[k + 2];
+        if (rgb !== dot.rgb) { dot.rgb = rgb; dot.fill = `rgb(${cover[k]},${cover[k + 1]},${cover[k + 2]})`; }
+      }
+      if (!settle) {
+        if (pointer.active) {
+          const ox = dot.x - pointer.x, oy = dot.y - pointer.y, d2 = ox * ox + oy * oy;
+          if (d2 < 4900 && d2 > .01) {
+            const d = Math.sqrt(d2), push = (1 - d / 70) * 2400 * dt;
+            dot.vx += ox / d * push;
+            dot.vy += oy / d * push;
+          }
+        }
+        // Spring home with damping.
+        dot.vx += (dot.hx - dot.x) * 26 * dt;
+        dot.vy += (dot.hy - dot.y) * 26 * dt;
+        dot.vx *= Math.pow(.02, dt);
+        dot.vy *= Math.pow(.02, dt);
+        dot.x += dot.vx * dt;
+        dot.y += dot.vy * dt;
+      }
+      if (dot.size < .3) continue;
+      g.globalAlpha = Math.min(1, .45 + dot.size / MAX_R);
+      g.fillStyle = dot.fill;
+      g.beginPath();
+      g.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    g.fillStyle = LIMIT;
+    g.font = "600 11px Manrope, system-ui, sans-serif";
+    g.fillText('50" height limit', X(-14), Y(50) - 8);
+  }
+
+  let visible = true, last = performance.now(), clock = 0;
+  new IntersectionObserver(entries => { visible = entries[0].isIntersecting; }).observe(canvas);
   function frame(now) {
+    requestAnimationFrame(frame);
+    if (!visible || !canvas.offsetParent) { last = now; return; }
     const dt = Math.min(.05, (now - last) / 1000);
     last = now;
     clock += dt;
-    const goal = target ?? cycle(clock);
-    shown += (goal - shown) * Math.min(1, dt * (target === null ? 30 : 7));
-    drawRobot(shown, clock);
-    requestAnimationFrame(frame);
+    drawRobot(cycle(clock));
+    paint(dt, false);
   }
+
   resize();
-  addEventListener("resize", () => { resize(); if (still) drawRobot(.62, 0); });
-  if (still) drawRobot(.62, 0);
+  const redraw = () => { resize(); if (still) { drawRobot(.62); paint(0, true); } };
+  addEventListener("resize", redraw);
+  new ResizeObserver(redraw).observe(canvas);
+  if (still) redraw();
   else requestAnimationFrame(frame);
 })();
