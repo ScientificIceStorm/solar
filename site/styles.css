@@ -790,7 +790,7 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 .final-score{display:inline-grid;grid-template-columns:3.3em .9em 3.3em;align-items:center;justify-items:center;gap:0;text-align:center}
 .final-score>span:not(.score-separator){display:block;width:100%;padding:3px 0;border-radius:999px;font-weight:650;font-variant-numeric:tabular-nums;
   box-shadow:inset 0 0 0 1px #8ea6ca55;color:#425574}
-.final-score .winner{padding:3px 0;font-weight:800;box-shadow:none;color:#fff}
+.final-score>span.winner{padding:3px 0;font-weight:800;box-shadow:none;color:#fff}
 .final-score .score-separator{opacity:.5}
 /* Full-event webcast: the play mark and its arrow both inside one pill. */
 .webcast-fallback a{display:inline-flex;align-items:center;justify-content:center;gap:3px;width:auto;height:22px;padding:0 8px 0 9px;border-radius:11px;font-size:9px;line-height:1}
@@ -801,7 +801,7 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 [data-theme=dark] .match-row.win:hover{background:#16a07b38}
 [data-theme=dark] .match-row.loss:hover{background:#d23b4f36}
 [data-theme=dark] .final-score>span:not(.score-separator){box-shadow:inset 0 0 0 1px #ffffff26;color:#c6d4ee}
-[data-theme=dark] .final-score .winner{color:#fff;box-shadow:none}
+[data-theme=dark] .final-score>span.winner{color:#fff;box-shadow:none}
 [data-theme=dark] .match-field{color:#93a5c6}
 
 /* Dark mode: tab groups look like light mode, just darker; no outline on each tab. */
