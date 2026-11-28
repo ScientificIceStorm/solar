@@ -321,6 +321,42 @@ async function youtubeRelay(request, env, url) {
     headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}});
 }
 
+// ---------------------------------------------------------------------------------------
+// Newsletter sign-ups from Vision UI and ScoutVision. Each address is one key in the MATCHES KV
+// namespace (newsletter:<address>) with when and where it signed up in the key's metadata, so the
+// owner's export (GET with the admin token) is a single listing. Nothing else is stored.
+// ---------------------------------------------------------------------------------------
+async function newsletter(request, env) {
+  if (!env.MATCHES) return error('Sign-ups are not set up yet.', 503);
+  if (request.method === 'GET') {
+    if (!sameToken((request.headers.get('Authorization') || '').replace(/^Bearer /, ''), env.SCOUTVISION_ADMIN_TOKEN)) {
+      return error('Not allowed.', 401);
+    }
+    const rows = [];
+    let cursor;
+    do {
+      const page = await env.MATCHES.list({prefix: 'newsletter:', cursor});
+      for (const key of page.keys) rows.push({email: key.name.slice(11), ...(key.metadata || {})});
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+    return Response.json({count: rows.length, rows}, {headers: {'Cache-Control': 'no-store'}});
+  }
+  if (request.method !== 'POST') return error('Method not allowed.', 405);
+  if (Number(request.headers.get('Content-Length') || 0) > 2000) return error('Invalid sign-up.', 413);
+  if (await tooMany(request)) return error('Too many tries. Try again in an hour.', 429);
+  let body;
+  try { body = JSON.parse(await request.text()); } catch { return error('Invalid sign-up.', 400); }
+  // A filled hidden field means a bot; answer like it worked and store nothing.
+  if (text(body?.website, 200)) return Response.json({ok: true}, {headers: {'Cache-Control': 'no-store'}});
+  const email = text(body?.email, 254).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return error('Enter a full email address, like you@example.com.', 400);
+  const key = 'newsletter:' + email;
+  if (await env.MATCHES.get(key) !== null) return Response.json({ok: true, already: true}, {headers: {'Cache-Control': 'no-store'}});
+  const source = ['vision-ui', 'scoutvision'].includes(body?.source) ? body.source : 'site';
+  await env.MATCHES.put(key, '', {metadata: {at: new Date().toISOString(), source}});
+  return Response.json({ok: true}, {headers: {'Cache-Control': 'no-store'}});
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -331,6 +367,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
+    if (url.pathname === '/api/newsletter') return newsletter(request, env);
     if (url.pathname === '/api/youtube-relay') return youtubeRelay(request, env, url);
     if (url.pathname === '/api/scoutvision/contribute') return contribute(request, env, ctx);
     if (url.pathname === '/api/scoutvision/matches' || url.pathname.startsWith('/api/scoutvision/matches/')) {

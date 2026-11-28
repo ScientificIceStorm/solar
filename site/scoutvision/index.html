@@ -77,6 +77,7 @@ body.sv-body .group-title a{color:#fff;font-size:.82rem;font-weight:650;text-dec
 <link rel="stylesheet" href="/scoutvision/intro/intro.css?v=5">
 <script src="/scoutvision/intro/intro.js?v=6" type="module"></script>
 <script src="/scoutvision/sv-nav.js?v=1" defer></script>
+<script src="/newsletter.js?v=1" defer></script>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('solarTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}</script>
 <link rel="stylesheet" href="/chrome.css?v=1">
 <script src="/theme.js?v=3" defer></script>
@@ -143,6 +144,17 @@ body.sv-body .group-title a{color:#fff;font-size:.82rem;font-weight:650;text-dec
     <a class="sv-menu-card" href="/scoutvision/import/"><span class="tag">Analyze</span><h3>Match studio</h3><p>Drop in your own match video and get a replay back, read right in your browser.</p><b>Analyze a match →</b></a>
     <a class="sv-menu-card" href="/scoutvision/import/?mode=train"><span class="tag">Teach</span><h3>Review &amp; train</h3><p>Check what the reader got wrong and correct it, so the next match reads better.</p><b>Review a match →</b></a>
   </div>
+<div class="sv-news">
+  <h2>Sign up for updates</h2>
+  <p>Get an email when ScoutVision and Vision UI ship something new.</p>
+  <form class="newsletter-form" data-source="scoutvision" novalidate>
+    <label class="visually-hidden" for="newsEmail">Email</label>
+    <input id="newsEmail" name="email" type="email" required autocomplete="email" placeholder="you@example.com">
+    <input class="news-trap" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button type="submit">Sign up</button>
+  </form>
+  <p class="newsletter-note" role="status">Only Solar news, a few emails at most. Unsubscribe anytime. <a href="/privacy#newsletter">Privacy</a></p>
+</div>
 </section>
 <script>
 fetch('/api/scoutvision/matches').then(r => r.ok ? r.json() : null).then(data => {

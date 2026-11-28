@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/styles.css?v=refresh-4">
   <script src="/profile.js?v=account-3" defer></script>
   <script src="/vision-ui/vision.js?v=5" defer></script>
+  <script src="/newsletter.js?v=1" defer></script>
   <style>
     :root{--ink:#eaf2ff;--quiet:#9fb0d0;--cyan:#3cc9f0;--orange:#f6a13a;--violet:#9b8cff;--green:#4ade80;--deep:#060b1c}
     html{overflow-x:clip;scroll-behavior:smooth}
@@ -60,7 +61,7 @@
     .steps li b{width:9px;height:9px;border-radius:2px;flex:none}
     .steps li.done{color:#c4d0ea}
     .steps li.now{background:#3cc9f01f;color:#fff;transform:translateX(6px);box-shadow:0 0 0 1px #3cc9f055 inset}
-    .stats{height:380vh}
+    .stat-play{height:380vh}
     .stats-device{display:grid}
     .stats-device img{grid-area:1/1;aspect-ratio:2/1;height:auto;opacity:0;transition:opacity .4s ease}
     .stats-device img.on{opacity:1}
@@ -107,19 +108,19 @@
     .button.ghost{background:#ffffff14;color:#fff;box-shadow:none;border:1px solid #ffffff33;margin-left:8px}
     .reveal{opacity:0;transform:translateY(46px) scale(.98);filter:blur(6px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1),filter .9s}
     .reveal.in{opacity:1;transform:none;filter:none}
-    .spec .reveal:nth-child(2){transition-delay:.06s}.spec .reveal:nth-child(3){transition-delay:.12s}.spec .reveal:nth-child(4){transition-delay:.18s}.spec .reveal:nth-child(5){transition-delay:.24s}
-    .vision footer{position:relative;z-index:2}
+    .spec .reveal:nth-child(2){transition-delay:.06s}.spec .reveal:nth-child(3){transition-delay:.12s}.spec .reveal:nth-child(4){transition-delay:.18s}.spec .reveal:nth-child(5){transition-delay:.24s}.spec .reveal:nth-child(6){transition-delay:.3s}
+    .vision footer{position:relative;z-index:2;display:block;text-align:center}
     @media(max-width:900px){
       .play{height:520vh}
       .play-sticky{grid-template-columns:1fr;align-content:center}
       .steps{display:none}
-      .stats .stat-tabs{display:flex;gap:6px;overflow-x:auto;margin-top:12px}
+      .stat-play .stat-tabs{display:flex;gap:6px;overflow-x:auto;margin-top:12px}
       .stat-tabs li{flex:none}
       .stat-tabs span{font-size:0}
       .stat-tabs strong{font-size:14px;margin:0}
       .stat-tabs button{padding:8px 12px;align-items:center}
       .stat-tabs b{margin:0}
-      .stats .play-sticky{align-content:center}
+      .stat-play .play-sticky{align-content:center}
       .gallery{grid-template-columns:1fr}
     }
     @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;filter:none}.hero h1{animation:none}#fluid{display:none}}
@@ -181,7 +182,7 @@
       </div>
     </section>
 
-    <section class="play stats" id="stats" aria-label="Robot stats on the brain">
+    <section class="play stat-play" id="stats" aria-label="Robot stats on the brain">
       <div class="play-sticky">
         <div class="play-main">
           <div class="play-copy reveal">
@@ -236,6 +237,7 @@
         <div class="reveal"><dt>Step through it</dt><dd>Pause, go back a step or jump ahead to test one move at a time, with the step's target, position and speed on screen.</dd></div>
         <div class="reveal"><dt>Stats</dt><dd>Drive and lift motor heat, current and speed, odometry, IMU and battery, with a red badge on any tab that needs a look.</dd></div>
         <div class="reveal"><dt>PID tuning</dt><dd>Tune the drive and turn controllers from the screen between runs, without re-uploading code.</dd></div>
+        <div class="reveal"><dt>Lightweight</dt><dd>Runs right on the V5 brain next to your robot code, light on CPU and memory, and it won’t leak memory however long the brain stays on.</dd></div>
       </dl>
     </section>
 
@@ -248,8 +250,14 @@
 
     <section class="outro" aria-labelledby="outro-title">
       <h2 class="reveal" id="outro-title">Vision UI</h2>
-      <p class="reveal">In development for VEX V5 Override.</p>
-      <div class="reveal"><a class="button" href="https://github.com/shreyasrawat/basilisk_override">View on GitHub ↗</a><a class="button ghost" href="/scoutvision/">Try ScoutVision</a></div>
+      <p class="reveal">Coming soon. Stay tuned for updates.</p>
+      <form class="newsletter-form reveal" data-source="vision-ui" novalidate>
+        <label class="visually-hidden" for="newsEmail">Email</label>
+        <input id="newsEmail" name="email" type="email" required autocomplete="email" placeholder="you@example.com">
+        <input class="news-trap" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button type="submit">Sign up for updates</button>
+      </form>
+      <p class="newsletter-note reveal" role="status">Only Solar news, a few emails at most. Unsubscribe anytime. <a href="/privacy#newsletter">Privacy</a></p>
     </section>
   </main>
   <footer><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · Made by <a href="/team/98601B">98601B</a></footer>

@@ -74,3 +74,24 @@
 [data-theme=dark] #profilePanel label{color:#b9c7e2}
 [data-theme=dark] #profilePanel a{color:#8cc2ff}
 [data-theme=dark] #profilePanel .profile-consent{color:#93a5c6}
+
+/* Newsletter sign-up (Vision UI, ScoutVision) */
+.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.newsletter-form{display:flex;gap:6px;width:min(460px,100%);margin:0 auto;padding:5px;border:1px solid #ffffff38;border-radius:999px;
+  background:#ffffff14;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 10px 30px #0619462e;transition:border-color .2s,box-shadow .2s}
+.newsletter-form:focus-within{border-color:#ffffff80;box-shadow:0 0 0 3px #ffffff1f,0 10px 30px #0619462e}
+.newsletter-form input[type=email]{flex:1;min-width:0;padding:10px 14px;border:0;background:none;color:#fff;font:500 15px Manrope,system-ui,sans-serif;outline:none}
+.newsletter-form input::placeholder{color:#d6e2f7a6}
+.newsletter-form button{flex:none;padding:10px 18px;border:0;border-radius:999px;background:#fff;color:#143a88;font:750 14px Manrope,system-ui,sans-serif;cursor:pointer;transition:transform .16s,opacity .2s}
+.newsletter-form button:hover{background:#eaf2ff}
+.newsletter-form button:active{transform:scale(.96)}
+.newsletter-form.sending button{opacity:.6}
+.newsletter-form.done{border-color:#7cf2c899}
+.news-trap{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.newsletter-note{margin:12px auto 0;max-width:460px;color:#c9d6ee;font-size:13px;text-align:center}
+.newsletter-note a{color:#fff}
+.newsletter-note[data-tone=ok]{color:#7cf2c8}
+.newsletter-note[data-tone=error]{color:#ffb3bd}
+.sv-news{grid-column:1/-1;width:min(560px,100%);margin:40px auto 0;text-align:center;color:#fff}
+.sv-news h2{margin:0 0 6px;font-size:clamp(26px,3.2vw,36px);letter-spacing:-.04em;text-shadow:0 2px 18px #0819368a}
+.sv-news>p{margin:0 0 16px;color:#eef4ffe6;text-shadow:0 1px 10px #08193680}
