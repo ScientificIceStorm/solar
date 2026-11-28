@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#103cbb">
   <meta name="description" content="Browse VEX V5 teams, events and official World Skills rankings.">
   <title>Solar · VEX Robotics</title>
-  <link rel="stylesheet" href="/styles.css?v=refresh-8">
+  <link rel="stylesheet" href="/styles.css?v=refresh-10">
   <link rel="stylesheet" href="/chrome.css?v=4">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('solarTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}</script>
   <script src="/theme.js?v=3" defer></script>
   <script src="/map.js?v=mapbox-5" defer></script>
-  <script src="/app.js?v=refresh-6" defer></script>
+  <script src="/app.js?v=refresh-8" defer></script>
   <script src="/profile.js?v=account-3" defer></script>
   <script src="/account.js?v=dash-3" defer></script>
-  <style>html{overflow-x:clip}.home{position:relative;align-content:end;justify-items:center}.home-search{z-index:1}</style>
+  <style>html{overflow-x:clip}.home{position:relative}.home-search{z-index:1}</style>
 </head>
 <body>
   <header class="masthead">
@@ -78,7 +78,7 @@
       </div>
       <div class="browse-body">
         <p id="status" class="status" role="status">Loading seasons…</p>
-        <div id="results"></div>
+        <div id="results" tabindex="0" role="region" aria-labelledby="title"></div>
         <div class="table-footer" id="pagination" hidden>
           <span id="range"></span>
           <div><button id="previous" type="button">← Previous</button><button id="next" type="button">Next →</button></div>
