@@ -1182,7 +1182,7 @@ Future<void> _handleRequest(
       '/terms.html',
       '/california-counties.json',
       '/solar-photo.jpg',
-      '/solar-aurora.webp',
+      '/solar-aurora.jpg',
       '/manrope.woff2',
     }.contains(assetPath)) {
       return _writeError(request.response, HttpStatus.notFound, 'Not found.');

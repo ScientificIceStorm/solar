@@ -110,9 +110,10 @@
   // 20 s for a team's upcoming events) never holds up the rest of the dashboard.
   function slot(className, title, load, id) {
     const card = el('section', {class: 'account-card ' + className}, el(className.includes('next-up') || className.includes('favorites') ? 'h2' : 'h3', {text: title}),
-      el('p', {class: 'account-empty', text: 'Loading…'}));
+      el('div', {class: 'account-skeleton', role: 'status', 'aria-label': 'Loading'},
+        el('span', {class: 'sk', style: 'width:72%'}), el('span', {class: 'sk', style: 'width:54%'}), el('span', {class: 'sk', style: 'width:63%'})));
     Promise.resolve().then(load).then((node) => { if (id === request) card.replaceWith(node); })
-      .catch(() => { if (id === request) card.lastChild.textContent = 'Couldn’t load this right now. Reload the page to try again.'; });
+      .catch(() => { if (id === request) card.lastChild.replaceWith(el('p', {class: 'account-empty', text: 'Couldn’t load this right now. Reload the page to try again.'})); });
     return card;
   }
 

@@ -55,6 +55,27 @@ async function fetchApi(path, query) {
   return data;
 }
 
+// Shimmering placeholder rows while a list loads, shaped like the table that's coming.
+const skeletonColumns = {
+  skills: ['Rank', 'Team', 'Name', 'Region', 'Skills', 'Driver', 'Autonomous', 'Set at'],
+  teams: ['Rank', 'Team', 'Name', 'Region', 'Solar score', 'OpenSkill', 'Rated'],
+  insights: ['Rank', 'Team', 'Name', 'Region', 'Solar score', 'OpenSkill', 'Rated'],
+  events: ['Event', 'Location', 'Dates'],
+};
+function skeletonTable(columns, rows = 9) {
+  const widths = [28, 52, 140, 96, 44, 50, 60, 150];
+  const cell = (k, r) => '<td><span class="sk" style="width:' + Math.round(widths[k % widths.length] * (0.75 + ((r * 7 + k * 3) % 5) / 10)) + 'px"></span></td>';
+  return '<div class="table-wrap skeleton" role="status" aria-label="Loading"><table><thead><tr>' +
+    columns.map((label) => '<th scope="col">' + escape(label) + '</th>').join('') + '</tr></thead><tbody>' +
+    Array.from({length: rows}, (_, r) => '<tr>' + columns.map((_, k) => cell(k, r)).join('') + '</tr>').join('') +
+    '</tbody></table></div>';
+}
+function showListSkeleton() {
+  ui.status.textContent = '';
+  ui.pagination.hidden = true;
+  ui.results.innerHTML = skeletonTable(skeletonColumns[view] || skeletonColumns.skills);
+}
+
 function status(message, retry) {
   ui.status.textContent = message;
   if (retry) {
@@ -136,6 +157,7 @@ function switchView() {
 
 async function initialize() {
   status('Loading seasons…');
+  if (Object.hasOwn(views, location.hash.slice(1))) showListSkeleton();
   try {
     const data = await api('seasons');
     const year = new Date().getFullYear();
@@ -382,6 +404,7 @@ function render() {
   if (!visible.length) {
     $('eventSearchFallback').hidden = !isEvents;
     ui.results.replaceChildren();
+    if (loading && !listError) { showListSkeleton(); return; }
     if (listError) status(listError, loadRows);
     else status(loading ? 'Loading ' + (isEvents ? 'events' : isTeams ? 'OpenSkill rankings' : 'Skills results') + '…' :
       isTeams && ratingIndexUpdating ? 'Indexing season matches…' :
@@ -778,6 +801,14 @@ function bracket(matches, season) {
     }).join('')).join('') + '</div></div>';
 }
 function detailError(message, retry) {
+  if (!retry && /^Loading /.test(message)) {
+    // Page placeholder: a title bar, a row of stat tiles and a table, all shimmering.
+    ui.detail.innerHTML = '<div class="detail-intro skeleton-intro" role="status" aria-label="' + escape(message) + '">' +
+      '<span class="sk sk-light" style="width:180px"></span><span class="sk sk-light sk-title"></span></div>' +
+      '<section class="panel skeleton-panel"><div class="stats">' + '<span><i class="sk"></i><i class="sk sk-big"></i></span>'.repeat(4) + '</div>' +
+      skeletonTable(['', '', '', '', ''], 6) + '</section>';
+    return;
+  }
   ui.detail.innerHTML = '<section class="panel"><p class="status" role="status">' +
     escape(message) + (retry ? ' <button type="button">Retry</button>' : '') + '</p></section>';
   if (retry) ui.detail.querySelector('button').addEventListener('click', retry);
@@ -1311,7 +1342,7 @@ function openTeamEvent(team, event, season, initialMatches = [], divisionId) {
       eventLink(event.sku, 'Open event') + '</p><div class="stats">' +
       metric('Scored matches', scores.length) + metric('Avg alliance points', average(scores.map((entry) => entry.value))) +
       metric('Avg opponent points', average(opponents)) + '</div>' + tiles.join('') +
-      (detailPending ? '<p role="status">Loading official event statistics…</p>' : !tiles.length ?
+      (detailPending ? skeletonTable(['', '', '', ''], 3) : !tiles.length ?
         '<p>Official team standings are unavailable.</p>' : '') +
       '<h3>Robot Skills and awards</h3>' +
       (supplements ? '<div class="stats">' + (skills.length ? skills.map((row) =>
@@ -1397,9 +1428,10 @@ function renderTeam(data, season, {partial = false, failed = false} = {}) {
       '<div class="split-content">' + eventCards.map((event) =>
         '<section class="panel team-event-card" tabindex="-1" id="' + event.id + '">' +
         event.html + '</section>').join('') + '</div></div>' :
+      (partial && !failed ? '<section class="panel">' + skeletonTable(['Match', 'Red', 'Blue', 'Score'], 5) + '</section>' :
       '<section class="panel"><p class="status" role="status">' + (failed ?
         'Season results are temporarily unavailable. <button type="button" id="retryTeamResults">Retry</button>' :
-        partial ? 'Loading season matches…' : 'No match history for this season yet.') + '</p></section>');
+        'No match history for this season yet.') + '</p></section>'));
   renderTeamUpcoming($('teamUpcomingList'), events, false, true);
   populateTeamSeasons($('teamSeason'), season);
   $('retryTeamResults')?.addEventListener('click', () => loadDetail('team', team.number));

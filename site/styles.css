@@ -517,7 +517,7 @@ button:active:not(:disabled),.jump-list a:active,.map-events a:active{transform:
 /* The wallpaper sits on the root so overscrolling past either end shows it, not a blue band. */
 :root{background:#0f2350 url("/solar-photo.jpg") center/cover fixed no-repeat;overscroll-behavior-y:none}
 body{background:linear-gradient(160deg,#06194066,#12326233) fixed}
-:root[data-theme=dark]{background:#050b1c url("/solar-aurora.webp") center/cover fixed no-repeat;color-scheme:dark}
+:root[data-theme=dark]{background:#06122a url("/solar-aurora.jpg") center 40%/cover fixed no-repeat;color-scheme:dark}
 :root[data-theme=dark] body{background:linear-gradient(180deg,#02061280,#0207144d 40%,#020714a6) fixed}
 .theme-shift,.theme-shift *{transition:background-color .4s ease,color .4s ease,border-color .4s ease!important}
 
@@ -549,10 +549,15 @@ th{background:#dfe9fa99}
 td,th{border-bottom-color:#d3deef8c}
 tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 
-/* The filter bar stays under the nav while the list scrolls, styled like the nav. */
-#browsePanel:not(.calendar-mode){overflow:clip}
-#browsePanel:not(.calendar-mode)>.toolbar{position:sticky;top:calc(var(--mast-h,84px) - 4px);z-index:4;margin:10px;padding:8px;border:1px solid #f0f5ff99;border-radius:24px;
-  background:#edf4ffa8;-webkit-backdrop-filter:blur(18px) saturate(145%);backdrop-filter:blur(18px) saturate(145%);box-shadow:0 6px 20px #071d4424}
+/* Lists: the filter bar floats on its own above a separate glass card for the table. */
+#browsePanel{background:none;border:0;border-radius:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;overflow:visible;min-height:0}
+#browsePanel>.toolbar{position:sticky;top:calc(var(--mast-h,84px) + 2px);z-index:4;margin:0 0 14px;padding:8px;border:1px solid #f0f5ff99;border-radius:22px;
+  background:#edf4ffb8;-webkit-backdrop-filter:blur(18px) saturate(145%);backdrop-filter:blur(18px) saturate(145%);box-shadow:0 8px 24px #071d4426}
+#browsePanel.calendar-mode>.toolbar{position:static}
+.browse-body{min-height:135px;overflow:clip;border:1px solid #ffffffa8;border-radius:17px;background:#f4f7ffc2;box-shadow:0 16px 44px #061f7428;
+  -webkit-backdrop-filter:blur(22px) saturate(150%);backdrop-filter:blur(22px) saturate(150%)}
+.calendar-mode .browse-body{min-height:0;overflow:visible;border:0;border-radius:0;background:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.calendar-mode .browse-body>.status{background:#f0f5fff0;border:1px solid #fff8;border-radius:13px;margin-bottom:20px}
 .toolbar form{background:#ffffffd9}
 .toolbar .count{padding-right:6px}
 
@@ -642,7 +647,8 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 [data-theme=dark] input,[data-theme=dark] select,[data-theme=dark] button{color:#e4ecff}
 [data-theme=dark] select,[data-theme=dark] button{background:#0f1d3d;border-color:#ffffff26}
 [data-theme=dark] button:hover:not(:disabled){background:#1a2b55}
-[data-theme=dark] #browsePanel:not(.calendar-mode)>.toolbar,[data-theme=dark] .calendar-mode>.toolbar,[data-theme=dark] .calendar-mode>.status{background:#0b1630c4;border-color:#ffffff1f}
+[data-theme=dark] #browsePanel>.toolbar,[data-theme=dark] .calendar-mode .browse-body>.status{background:#0b1630c4;border-color:#ffffff1f}
+[data-theme=dark] #browsePanel:not(.calendar-mode) .browse-body{background:#0a1430b0;border-color:#ffffff1f;box-shadow:0 18px 50px #0009}
 [data-theme=dark] .toolbar form{background:#0f1d3dd9;border-color:#ffffff26}
 [data-theme=dark] #previous::before,[data-theme=dark] #next::before,[data-theme=dark] #replayEarlier::before,[data-theme=dark] #replayLater::before{background:#2a4a8f}
 [data-theme=dark] .toolbar svg,[data-theme=dark] .home-search svg{stroke:#9fb2d4}
@@ -718,8 +724,47 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 [data-theme=dark] .legal p,[data-theme=dark] .legal li{color:#cbd7ee}
 [data-theme=dark] .legal-date{color:#93a5c6}
 [data-theme=dark] .legal a{color:#8cc2ff}
-@media(max-width:760px){#browsePanel:not(.calendar-mode)>.toolbar{position:static;margin:8px}}
+@media(max-width:760px){#browsePanel>.toolbar{position:static}}
 /* Page-to-page crossfade (Chrome and Safari; others just navigate). */
 @view-transition{navigation:auto}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.3s}
 @media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}
+
+/* ==== Loading skeletons ==== */
+.sk{display:block;height:10px;max-width:100%;border-radius:6px;background:linear-gradient(90deg,#d5deed 0%,#e8eef8 40%,#d5deed 80%);background-size:300% 100%;animation:sk-shimmer 1.4s ease-in-out infinite}
+.skeleton table{pointer-events:none}
+.skeleton td{height:43px}
+.skeleton tbody tr:hover{background:none}
+.skeleton-intro{display:grid;gap:14px;padding-block:40px 24px}
+.sk-light{background-image:linear-gradient(90deg,#ffffff38 0%,#ffffff70 40%,#ffffff38 80%);height:12px}
+.sk-title{width:min(520px,80%);height:38px;border-radius:10px}
+.skeleton-panel .stats{padding:14px}
+.skeleton-panel .stats span{min-width:130px;gap:8px}
+.skeleton-panel .stats .sk{width:60%}
+.skeleton-panel .stats .sk-big{width:85%;height:18px}
+.account-skeleton{display:grid;gap:10px;padding:6px 0}
+@keyframes sk-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+[data-theme=dark] .sk{background-image:linear-gradient(90deg,#ffffff0f 0%,#ffffff24 40%,#ffffff0f 80%)}
+@media(prefers-reduced-motion:reduce){.sk{animation:none}}
+
+/* ==== Dark mode: no bright patches ==== */
+[data-theme=dark] .scout-report-link,[data-theme=dark] .team-link,[data-theme=dark] .event-link{background:transparent;border:0}
+[data-theme=dark] .scout-report-link:hover{background:transparent}
+[data-theme=dark] .upcoming-list a{border-top-color:#ffffff14}
+[data-theme=dark] .upcoming-list a:hover,[data-theme=dark] .week-card tbody tr:hover,[data-theme=dark] .match-row:hover,[data-theme=dark] .info-nav button:hover,[data-theme=dark] .info-nav button[aria-current=true]{background:#ffffff12;color:inherit}
+[data-theme=dark] .upcoming-list small{color:#93a5c6}
+[data-theme=dark] .upcoming-list a>span:last-child{color:#8cc2ff}
+[data-theme=dark] .legal-nav a[aria-current=page],[data-theme=dark] nav a:hover{background:#ffffff1f;color:#fff}
+[data-theme=dark] .favorite-button.small{background:#0f1d3d;border-color:#ffffff26}
+[data-theme=dark] .bracket article{background:#0f1d3d;border-color:#ffffff1f}
+[data-theme=dark] .bracket article>div{background:#ffffff0a}
+[data-theme=dark] .result-dot{background:#ffffff1a;color:#c6d4ee}
+[data-theme=dark] .win .result-dot{background:#12a07a40;color:#9ff0d2}
+[data-theme=dark] .loss .result-dot{background:#d03a5a40;color:#ffb3c2}
+[data-theme=dark] .tie .result-dot{background:#d0b03a40;color:#f5e2a3}
+[data-theme=dark] .map-zoom button,[data-theme=dark] .map-source{background:#0b1630d9;border-color:#ffffff24;color:#d3def5}
+[data-theme=dark] .map-regions button[aria-pressed=true]{background:#ffffff14}
+[data-theme=dark] .jump-list a{background:transparent}
+[data-theme=dark] .dq-tag{background:#5c3a10;color:#ffd9a3}
+[data-theme=dark] .team-picker input{background:#0f1d3d;border-color:#ffffff26;color:#e4ecff}
+[data-theme=dark] .account-welcome .account-link.plain{color:#8cc2ff}
