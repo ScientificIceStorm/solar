@@ -112,6 +112,31 @@
   addEventListener("resize", onScroll);
   onScroll();
 
+  // ---- Stats tab: scroll (or tap a tab) to flip through the brain's five stats pages -------
+  const stats = $("stats"), statShots = [...document.querySelectorAll("#statsDevice img")], statTabs = [...document.querySelectorAll("#statTabs li")];
+  let statShown = 0;
+  const showStat = (index) => {
+    if (index === statShown) return;
+    statShown = index;
+    statShots.forEach((img, k) => img.classList.toggle("on", k === index));
+    statTabs.forEach((li, k) => li.classList.toggle("now", k === index));
+  };
+  const onStatsScroll = () => {
+    const area = stats.getBoundingClientRect();
+    const progress = clamp(-area.top / (area.height - innerHeight));
+    showStat(Math.min(statShots.length - 1, Math.floor(progress * statShots.length)));
+  };
+  addEventListener("scroll", onStatsScroll, {passive: true});
+  addEventListener("resize", onStatsScroll);
+  document.getElementById("statTabs").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-tab]");
+    if (!button) return;
+    const index = Number(button.dataset.tab), span = stats.offsetHeight - innerHeight;
+    scrollTo({top: stats.offsetTop + span * (index + .5) / statShots.length, behavior: still ? "auto" : "smooth"});
+    showStat(index);
+  });
+  onStatsScroll();
+
   if (still) { drawFluid(0); return; }
   const loop = time => { drawFluid(time); requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
