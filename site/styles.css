@@ -49,8 +49,9 @@ footer{display:flex;justify-content:space-between;gap:10px;padding:18px 0 25px;c
 footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{opacity:.65;margin:0 5px}
 @media(max-width:760px){.masthead{grid-template-columns:auto auto;justify-content:space-between;padding:16px}.program{display:none}nav a{padding:7px 12px}main{width:calc(100% - 28px)}.intro{padding-top:46px}.toolbar{gap:6px}.toolbar form{flex-basis:100%}select{max-width:47%}td,th{padding-inline:10px}.hide-small{display:none}footer{font-size:10px}}
 
-.home{min-height:calc(100svh - 95px);display:grid;place-items:center}
-.home-search{position:relative;width:min(100%,550px);margin-bottom:9vh}
+/* The search sits in the upper part of the screen so its suggestions have room underneath. */
+.home{--home-top:clamp(20px,12vh,140px);min-height:calc(100svh - var(--mast-h,95px));display:flex;flex-direction:column;align-items:center;padding-top:var(--home-top)}
+.home-search{position:relative;width:min(100%,550px)}
 .home-search form{display:flex;align-items:center;gap:7px;padding:6px;background:#f4f7fff2;border:1px solid #fff;border-radius:30px;box-shadow:0 12px 35px #06162f46}
 .home-search input{font-size:15px;padding:10px 6px}
 .home-search svg{width:21px;height:21px;fill:none;stroke:#526280;stroke-width:1.7;margin-left:10px;flex:none}
@@ -85,7 +86,7 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
 .bracket article>div{display:flex;align-items:center;gap:5px;margin-top:5px;padding:4px;background:#f2f5fd;border-radius:4px}
 .bracket article>div>b{margin-left:auto}
 .bracket article p{margin:7px 3px 0}
-@media(max-width:760px){.detail-intro{padding-top:28px}.home-search{margin-bottom:10vh}.stats span{min-width:85px}.stats b{font-size:18px}}
+@media(max-width:760px){.detail-intro{padding-top:28px}.home{--home-top:clamp(12px,5vh,56px)}.stats span{min-width:85px}.stats b{font-size:18px}}
 @font-face{font-family:Manrope;src:url("/manrope.woff2") format("woff2");font-weight:400 800;font-style:normal;font-display:swap}
 :root{font-family:Manrope,system-ui,sans-serif;scroll-behavior:smooth}
 .masthead{position:sticky;top:0;z-index:5;pointer-events:none}
@@ -186,7 +187,8 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
 .home-search{border:1px solid #f6f9ff83;border-radius:24px;background:#eaf2ffad;backdrop-filter:blur(19px) saturate(135%);box-shadow:0 12px 35px #06162f46}
 .home-search form{background:transparent;border:0;box-shadow:none}
 .home-search form:focus-within{box-shadow:none}
-.home-search .suggestions{position:absolute;inset:100% -1px auto;max-height:min(320px,38vh);padding:5px;background:#eaf2fff2;border:1px solid #f6f9ff83;border-top-color:#b8c9e292;border-radius:0 0 21px 21px;box-shadow:0 13px 22px #06162f24;backdrop-filter:blur(18px)}
+.home-search .suggestions{position:absolute;inset:100% -1px auto;overscroll-behavior:contain;
+  max-height:max(110px,min(520px,calc(var(--visible-h,100dvh) - var(--mast-h,95px) - var(--home-top) - 84px)));padding:5px;background:#eaf2fff2;border:1px solid #f6f9ff83;border-top-color:#b8c9e292;border-radius:0 0 21px 21px;box-shadow:0 13px 22px #06162f24;backdrop-filter:blur(18px)}
 .home-search:has(.suggestions:not([hidden])){border-bottom-left-radius:0;border-bottom-right-radius:0}
 .home-search:focus-within,.toolbar form:focus-within{border-color:#eff6ff;box-shadow:0 0 0 2px #eff6ff60}
 .home-search input:focus,.toolbar input:focus{outline:none}
@@ -793,3 +795,83 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 [data-theme=dark] .detail-tabs button,[data-theme=dark] .detail-tabs button:hover:not(:disabled),[data-theme=dark] .info-nav button{background:transparent;border-color:transparent;box-shadow:none}
 [data-theme=dark] .detail-tabs button{color:#c6d4ee}
 [data-theme=dark] .detail-tabs button[aria-pressed=true],[data-theme=dark] .detail-tabs button:hover:not(:disabled){color:#fff}
+
+/* ==== Lists (Skills, Teams, Insights, Events): roomier spacing ==== */
+@media(min-width:761px){
+  #browsePanel>.toolbar{gap:12px;padding:12px;margin-bottom:18px;border-radius:26px}
+  #browsePanel th{padding:14px clamp(12px,1.4vw,22px)}
+  #browsePanel td{padding:12px clamp(12px,1.4vw,22px)}
+  /* Insights has 13 columns, so it gains height but not width. */
+  #browsePanel .insights-top~.table-wrap :is(th,td){padding-inline:12px}
+  #browsePanel .table-footer{padding:14px 22px}
+  .insights-top{padding:22px 24px;gap:18px}
+  .insights-top p{margin-top:6px;line-height:1.55}
+  #browsePanel .scout-chart{margin:4px 24px 24px;padding:18px 22px}
+  .jump-list{padding:12px}
+  .jump-list a{padding:10px 12px}
+  .jump-list a+a{margin-top:3px}
+}
+
+/* ==== Lists: the page stays put and only the data scrolls ====
+   app.js sets .list-view on these four pages. Small or short screens keep ordinary page scrolling,
+   because the header and filters would leave too little room for a scrolling table. */
+@media screen and (min-width:761px) and (min-height:600px){
+  body.list-view{display:flex;flex-direction:column;height:100vh;height:100dvh;min-height:0;overflow:hidden}
+  .list-view .masthead{flex:none;width:100%;padding-block:20px}
+  .list-view main{flex:1;min-height:0;display:flex;flex-direction:column}
+  .list-view #browse{flex:1;min-height:0;display:flex;flex-direction:column}
+  .list-view .intro{flex:none;padding:8px 0 18px}
+  .list-view .intro h1{font-size:clamp(34px,7vh,64px);line-height:1.05}
+  .list-view #browsePanel{flex:1;min-height:0;display:flex;flex-direction:column}
+  .list-view #browsePanel>.toolbar{flex:none;position:static}
+  .list-view .browse-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:clip}
+  .list-view #results{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#59719a90 transparent}
+  .list-view #results:focus-visible{outline-offset:-2px}
+  .list-view #browsePanel .table-footer{flex:none;border-top:1px solid #d3deef8c}
+  .list-view footer{flex:none;padding:14px 0 16px}
+  /* #results scrolls both ways, so the column headings can stick to its top edge. */
+  .list-view #browsePanel:not(.calendar-mode) .table-wrap{overflow:visible}
+  .list-view #browsePanel:not(.calendar-mode) th{position:sticky;top:0;z-index:2;background:#dfe9fa;box-shadow:0 1px 0 #c9d6ec}
+  .list-view .insights-top,.list-view #browsePanel .scout-chart{position:sticky;left:0}
+  [data-theme=dark] .list-view #browsePanel:not(.calendar-mode) th{background:#172341;box-shadow:0 1px 0 #ffffff1a}
+  [data-theme=dark] .list-view #browsePanel .table-footer{border-top-color:#ffffff14}
+
+  /* Events: the week list stays beside the weeks, and each column scrolls on its own. */
+  .list-view .calendar-mode .browse-body{overflow:visible}
+  .list-view .calendar-mode #results{display:flex;flex-direction:column;overflow:hidden}
+  .list-view .calendar-mode #results>.table-wrap{min-height:0}
+  .list-view .events-layout{flex:1;min-height:0;grid-template-rows:minmax(0,1fr);align-items:stretch}
+  .list-view .calendar-rail{position:static;min-height:0;display:flex;flex-direction:column;align-items:stretch}
+  .list-view .calendar-rail>.event-search-trigger{flex:none;align-self:flex-start}
+  .list-view .calendar-rail .jump-list{min-height:0;max-height:none}
+  .list-view .events-layout .split-content{display:flex;flex-direction:column;min-height:0;overflow:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;scrollbar-color:#59719a90 transparent;padding-right:8px;border-radius:17px}
+  .list-view .split-content>.week-card{flex:none;scroll-margin-top:0}
+}
+
+/* Laptop-height screens: tighten everything around the data so more rows fit. */
+@media screen and (min-width:761px) and (min-height:600px) and (max-height:760px){
+  .list-view .masthead{padding-block:12px}
+  .list-view .intro{padding:0 0 10px}
+  .list-view .intro h1{font-size:34px}
+  .list-view #browsePanel>.toolbar{padding:8px;margin-bottom:12px}
+  .list-view #browsePanel .table-footer{padding-block:8px}
+  .list-view footer{padding:9px 0 10px}
+}
+
+/* ==== Home search ==== */
+/* While suggestions are open, only their list scrolls. */
+html:has(body.home-view #suggestions:not([hidden])){overflow:hidden}
+/* Dark mode: a lit rim, a solid field and a bright button, so the search stands out from the night sky. */
+[data-theme=dark] .home-search{background:#16264ff2;border-color:#8db8ff;box-shadow:0 0 0 4px #5b8fff40,0 0 36px #5b8fff59,0 18px 44px #000a}
+[data-theme=dark] .home-search:focus-within{border-color:#c4dbff;box-shadow:0 0 0 4px #7aa8ff80,0 0 44px #5b8fff73,0 18px 44px #000a}
+[data-theme=dark] .home-search input{color:#fff}
+[data-theme=dark] .home-search input::placeholder{color:#c3d2ef;opacity:1}
+[data-theme=dark] .home-search svg{stroke:#d6e4ff}
+[data-theme=dark] .home-search form button{background:#3f6fe0;border-color:#3f6fe0;color:#fff}
+[data-theme=dark] .home-search form button:hover:not(:disabled){background:#5585f0}
+[data-theme=dark] .home-search .suggestions{background:#101e41fa;border-color:#8db8ff;border-top-color:#ffffff30}
+/* The focus ring and glow carry on down around the open list. */
+.home-search:focus-within .suggestions{box-shadow:0 0 0 2px #eff6ff60,0 13px 22px #06162f24;clip-path:inset(0 -60px -60px)}
+[data-theme=dark] .home-search .suggestions{box-shadow:0 0 0 4px #5b8fff40,0 0 36px #5b8fff59,0 18px 44px #000a;clip-path:inset(0 -60px -60px)}
+[data-theme=dark] .home-search:focus-within .suggestions{box-shadow:0 0 0 4px #7aa8ff80,0 0 44px #5b8fff73,0 18px 44px #000a}

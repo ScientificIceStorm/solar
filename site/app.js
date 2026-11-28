@@ -70,6 +70,10 @@ function skeletonTable(columns, rows = 9) {
     Array.from({length: rows}, (_, r) => '<tr>' + columns.map((_, k) => cell(k, r)).join('') + '</tr>').join('') +
     '</tbody></table></div>';
 }
+// A new list, filter or page starts at the top of the data.
+function scrollListToTop() {
+  ui.results.scrollTo(0, 0);
+}
 function showListSkeleton() {
   ui.status.textContent = '';
   ui.pagination.hidden = true;
@@ -99,6 +103,8 @@ function switchView() {
   ui.home.hidden = Boolean(detail) || map || account || Object.hasOwn(views, route);
   ui.browse.hidden = Boolean(detail) || !Object.hasOwn(views, route);
   ui.detail.hidden = !detail;
+  // List pages hold the header still and scroll only their data (see styles.css).
+  document.body.classList.toggle('list-view', !ui.browse.hidden);
   if (!detail) {
     detailId++;
     clearTimeout(eventRefreshTimer);
@@ -196,6 +202,7 @@ async function loadRows() {
   loading = true;
   ui.region.replaceChildren(new Option('All regions', ''));
   render();
+  scrollListToTop();
   try {
     const params = {seasonId: ui.season.value};
     if (view !== 'events') params.gradeLevel = ui.grade.value;
@@ -363,7 +370,7 @@ function renderCalendar(events) {
   $('eventSearchFallback').hidden = true;
   ui.results.innerHTML = '<div class="split-layout events-layout"><div class="calendar-rail">' +
     '<button type="button" class="event-search-trigger" data-event-search aria-haspopup="dialog">Search events</button>' +
-    jumpList('Events', links) + '</div><div class="split-content">' +
+    jumpList('Events', links) + '</div><div class="split-content" tabindex="0" role="region" aria-label="Event list">' +
     '<section class="panel week-card" tabindex="-1" id="events-this-week"><div class="section-heading"><div>' +
     '<h2>This week</h2><p>' + escape(weekName(now)) + '</p></div><span>' + eventCount(current.length) + '</span></div>' +
     (current.length ? eventTable(byWeek(current)[0][1]) : '<p class="status">No events this week.</p>') + '</section>' +
@@ -506,14 +513,15 @@ function switchViewSmoothly() {
 window.addEventListener('hashchange', switchViewSmoothly);
 ui.season.addEventListener('change', loadRows);
 ui.grade.addEventListener('change', loadRows);
-ui.region.addEventListener('change', () => { page = 0; render(); });
-ui.search.addEventListener('input', () => { if (seasonsReady) { page = 0; render(); } });
+ui.region.addEventListener('change', () => { page = 0; render(); scrollListToTop(); });
+ui.search.addEventListener('input', () => { if (seasonsReady) { page = 0; render(); scrollListToTop(); } });
 ui.searchForm.addEventListener('submit', (event) => { event.preventDefault(); if (view === 'teams') lookupTeam(); });
 ui.lookup.addEventListener('click', lookupTeam);
 // A new page starts at the top of the table rather than wherever the buttons were.
 const turnPage = (step) => {
   page += step;
   render();
+  scrollListToTop();
   const top = ui.browsePanel.getBoundingClientRect().top + scrollY - (document.querySelector('.masthead')?.offsetHeight || 0) - 8;
   if (scrollY > top) scrollTo({top, behavior: 'smooth'});
 };
@@ -604,6 +612,27 @@ ui.homeQuery.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Escape') ui.suggestions.hidden = true;
 });
+// Arrow keys step through the suggestions, scrolling their list rather than the page.
+ui.suggestions.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    ui.homeQuery.focus();
+    ui.suggestions.hidden = true;
+    return;
+  }
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  event.preventDefault();
+  const links = [...ui.suggestions.querySelectorAll('a')];
+  const next = links.indexOf(event.target) + (event.key === 'ArrowDown' ? 1 : -1);
+  if (next < 0) ui.homeQuery.focus();
+  else links[Math.min(next, links.length - 1)]?.focus();
+});
+// An on-screen keyboard covers part of the page; size the suggestions to what is still visible.
+const fitSuggestions = () => document.documentElement.style.setProperty('--visible-h',
+  Math.round(visualViewport.height * visualViewport.scale) + 'px');
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', fitSuggestions);
+  fitSuggestions();
+}
 
 const stages = [
   ['round128', 'Round of 128'], ['round64', 'Round of 64'], ['round32', 'Round of 32'],
@@ -1291,6 +1320,7 @@ function renderInsights(visible, filtered) {
     insightMetric = event.target.value;
     page = 0;
     render();
+    scrollListToTop();
     $('insightMetric')?.focus();
   };
   for (const checkbox of ui.results.querySelectorAll('[data-compare]')) checkbox.onchange = () => {
