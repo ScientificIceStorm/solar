@@ -13,3 +13,6 @@
 
 /scoutvision/replay/*
   Cache-Control: no-cache
+
+/vision-ui/
+  Cache-Control: no-cache

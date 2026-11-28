@@ -106,21 +106,27 @@
   const tile = (label, value, detail) => el('div', {class: 'account-tile'}, el('small', {text: label}),
     el('b', {text: value}), detail ? el('span', {text: detail}) : null);
 
+  // A card that says "Loading…" until its data arrives, so one slow request (RobotEvents can take
+  // 20 s for a team's upcoming events) never holds up the rest of the dashboard.
+  function slot(className, title, load, id) {
+    const card = el('section', {class: 'account-card ' + className}, el(className.includes('next-up') || className.includes('favorites') ? 'h2' : 'h3', {text: title}),
+      el('p', {class: 'account-empty', text: 'Loading…'}));
+    Promise.resolve().then(load).then((node) => { if (id === request) card.replaceWith(node); })
+      .catch(() => { if (id === request) card.lastChild.textContent = 'Couldn’t load this right now. Reload the page to try again.'; });
+    return card;
+  }
+
   async function render(team) {
     const id = ++request;
+    root.replaceChildren(el('p', {class: 'account-empty', text: 'Loading ' + team + '…'}));
     const {seasons} = await api('seasons');
     const season = seasons[0].id;
-    root.replaceChildren(el('p', {class: 'account-empty', text: 'Loading ' + team + '…'}));
     // The profile first: it makes sure the server holds this team's matches for the history.
-    const profile = await api('team', {seasonId: season, number: team});
-    const [history, board, upcoming, published] = await Promise.all([
-      api('team', {seasonId: season, number: team, history: 1}).catch(() => ({events: []})),
+    const [profile, board] = await Promise.all([
+      api('team', {seasonId: season, number: team}),
       api('openskill', {seasonId: season, gradeLevel: 'All'}).catch(() => ({rows: []})),
-      api('team', {seasonId: season, number: team, upcoming: 1}).catch(() => ({events: []})),
-      fetch('/api/scoutvision/matches?team=' + encodeURIComponent(team)).then((r) => r.ok ? r.json() : {matches: []}).catch(() => ({matches: []})),
     ]);
     if (id !== request) return;
-    if (history.loading) setTimeout(() => { if (id === request && location.hash === '#account') render(team); }, 15000);
     const info = profile.team || {number: team};
     const ratingOf = new Map((board.rows || []).map((row) => [row.teamNumber, row.skill?.rating]));
     const me = (board.rows || []).find((row) => row.teamNumber === team);
@@ -152,34 +158,11 @@
       perEvent.set(m.event.id, row);
     }
     const short = (name) => String(name || '').split(':')[0].slice(0, 46);
-
-    // Skills per event (best driver and programming run at each event).
-    const skillPoints = {driver: [], programming: []};
-    await Promise.all([...events.values()].filter((event) => new Date(event.start) <= new Date()).map(async (event) => {
-      try {
-        const data = await api('event', {sku: event.sku, scouting: 1});
-        for (const type of ['driver', 'programming']) {
-          const best = Math.max(-1, ...(data.skills || []).filter((row) => row.type === type && row.team?.number?.toUpperCase() === team).map((row) => row.score));
-          if (best >= 0) skillPoints[type].push({t: new Date(event.start).getTime(), v: best, label: short(event.name)});
-        }
-      } catch {}
-    }));
-    if (id !== request) return;
-
-    // Your team's next match (or projected seed) at its live and upcoming events, and the same
-    // view of every favourite event.
     const now = Date.now(), live = (event) => new Date(event.start).getTime() - 864e5 <= now && now <= new Date(event.end || event.start).getTime() + 864e5;
-    const mine = [...(profile.events || []).filter(live), ...(upcoming.events || [])]
-      .filter((event, i, all) => all.findIndex((other) => other.sku === event.sku) === i)
-      .sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 3);
+    // RobotEvents' list of upcoming registrations is the slow request; it feeds two cards.
+    let upcomingList;
+    const upcoming = () => upcomingList ??= api('team', {seasonId: season, number: team, upcoming: 1}).then((r) => r.events || []).catch(() => null);
     const favorites = window.solarProfile?.favorites || {teams: [], events: []};
-    const [mineOutlook, favoriteOutlook] = await Promise.all([
-      Promise.all(mine.map((event) => outlook(event.sku, team, ratingOf).catch(() => null))),
-      Promise.all(favorites.events.slice(0, 8).map((event) => outlook(event.sku, team, ratingOf).catch(() => ({failed: true, sku: event.sku, name: event.name})))),
-    ]);
-    if (id !== request) return;
-    const nextUp = nextUpCard(mineOutlook.filter(Boolean), team);
-    const favoriteEvents = favoriteEventsCard(favoriteOutlook, team);
 
     const skillsRow = me ? [me.combinedScore, me.programmingScore, me.driverScore] : [];
     const rating = me?.skill || profile.skill;   // season-wide OpenSkill, as on the leaderboard
@@ -190,7 +173,15 @@
           el('p', {class: 'account-sub', text: [info.organization, [info.location?.city, info.location?.region].filter(Boolean).join(', ')].filter(Boolean).join(' · ')})),
         el('div', {class: 'account-actions'}, changeTeamButton(),
           el('a', {class: 'account-link', href: '/team/' + encodeURIComponent(team) + '?season=' + season, text: 'Full team page →'}))),
-      nextUp,
+      // Your team's next match (or projected seed) at its live and upcoming events.
+      slot('next-up', 'Next up for ' + team, async () => {
+        const later = await upcoming();
+        const mine = [...(profile.events || []).filter(live), ...(later || [])]
+          .filter((event, i, all) => all.findIndex((other) => other.sku === event.sku) === i)
+          .sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 3);
+        if (!mine.length && later === null) throw new Error('upcoming events unavailable');
+        return nextUpCard((await Promise.all(mine.map((event) => outlook(event.sku, team, ratingOf).catch(() => null)))).filter(Boolean), team);
+      }, id),
       el('div', {class: 'account-tiles'},
         tile('Solar rank', me ? '#' + me.rank : '—', me ? 'of ' + board.rows.length + ' · score ' + me.score.toFixed(1) : 'Not rated yet'),
         tile('OpenSkill', rating ? rating.rating.toFixed(1) : '—', rating ? 'μ ' + rating.mean.toFixed(1) + ' ± ' + (3 * rating.uncertainty).toFixed(1) + ' · season-wide' : null),
@@ -200,21 +191,46 @@
         tile('Schedule strength', Number.isFinite(opponents) ? opponents.toFixed(1) : '—', Number.isFinite(partners) ? 'avg opponent · partners ' + partners.toFixed(1) : 'avg opponent OpenSkill'),
       ),
       el('div', {class: 'account-grid'},
-        lineChart({title: 'OpenSkill after each event', note: history.loading ? 'Solar is still loading this season’s results; this chart fills in shortly.' :
-          'Conservative rating (μ − 3σ) with only the results known at that point. Hover for rank.',
-          series: [{name: 'OpenSkill', color: BLUE, points: (history.events || []).filter((row) => Number.isFinite(row.rating)).map((row) => ({
-            t: new Date(row.date).getTime(), v: row.rating, label: short(row.name), note: row.rank ? 'rank #' + row.rank + ' of ' + row.rated : ''}))}]}),
-        lineChart({title: 'Skills by event', note: 'Best driver and programming runs at each event.', format: (v) => String(Math.round(v)),
-          series: [{name: 'Driver', color: BLUE, points: skillPoints.driver}, {name: 'Programming', color: ORANGE, points: skillPoints.programming}]}),
+        slot('account-chart', 'OpenSkill after each event', async () => {
+          const history = await api('team', {seasonId: season, number: team, history: 1});
+          if (history.loading) setTimeout(() => { if (id === request && !root.hidden) render(team); }, 15000);
+          return lineChart({title: 'OpenSkill after each event', note: history.loading ? 'Solar is still loading this season’s results; this chart fills in shortly.' :
+            'Conservative rating (μ − 3σ) with only the results known at that point. Hover for rank.',
+            series: [{name: 'OpenSkill', color: BLUE, points: (history.events || []).filter((row) => Number.isFinite(row.rating)).map((row) => ({
+              t: new Date(row.date).getTime(), v: row.rating, label: short(row.name), note: row.rank ? 'rank #' + row.rank + ' of ' + row.rated : ''}))}]});
+        }, id),
+        // Skills per event (best driver and programming run at each event).
+        slot('account-chart', 'Skills by event', async () => {
+          const skillPoints = {driver: [], programming: []};
+          await Promise.all([...events.values()].filter((event) => new Date(event.start) <= new Date()).map(async (event) => {
+            try {
+              const data = await api('event', {sku: event.sku, scouting: 1});
+              for (const type of ['driver', 'programming']) {
+                const best = Math.max(-1, ...(data.skills || []).filter((row) => row.type === type && row.team?.number?.toUpperCase() === team).map((row) => row.score));
+                if (best >= 0) skillPoints[type].push({t: new Date(event.start).getTime(), v: best, label: short(event.name)});
+              }
+            } catch {}
+          }));
+          return lineChart({title: 'Skills by event', note: 'Best driver and programming runs at each event.', format: (v) => String(Math.round(v)),
+            series: [{name: 'Driver', color: BLUE, points: skillPoints.driver}, {name: 'Programming', color: ORANGE, points: skillPoints.programming}]});
+        }, id),
         lineChart({title: 'Points per match by event', note: 'Average alliance score for and against.', format: (v) => v.toFixed(0),
           series: [{name: 'Scored', color: BLUE, points: [...perEvent.values()].map((row) => ({t: row.t, v: mean(row.scored), label: short(row.name)}))},
             {name: 'Conceded', color: ORANGE, points: [...perEvent.values()].map((row) => ({t: row.t, v: mean(row.conceded), label: short(row.name)}))}]}),
         recentMatches(played, side, other, season),
-        upcomingCard(upcoming.events || [], season),
-        analysesCard(published.matches || []),
+        slot('', 'Upcoming events', async () => {
+          const later = await upcoming();
+          if (later === null) throw new Error('upcoming events unavailable');
+          return upcomingCard(later, season);
+        }, id),
+        slot('', 'ScoutVision analyses', async () => {
+          const response = await fetch('/api/scoutvision/matches?team=' + encodeURIComponent(team));
+          return analysesCard(response.ok ? (await response.json()).matches || [] : []);
+        }, id),
       ),
       favoriteTeams(board.rows || [], season),
-      favoriteEvents,
+      favorites.events.length ? slot('favorites', 'Favourite events', async () => favoriteEventsCard(await Promise.all(favorites.events.slice(0, 8).map((event) =>
+        outlook(event.sku, team, ratingOf).catch(() => ({failed: true, sku: event.sku, name: event.name})))), team), id) : favoriteEventsCard([], team),
     );
   }
 
