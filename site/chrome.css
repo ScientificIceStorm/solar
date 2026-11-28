@@ -95,3 +95,10 @@
 .sv-news{grid-column:1/-1;width:min(560px,100%);margin:40px auto 0;text-align:center;color:#fff}
 .sv-news h2{margin:0 0 6px;font-size:clamp(26px,3.2vw,36px);letter-spacing:-.04em;text-shadow:0 2px 18px #0819368a}
 .sv-news>p{margin:0 0 16px;color:#eef4ffe6;text-shadow:0 1px 10px #08193680}
+/* Browser autofill paints its own box behind filled fields; keep the glass look instead. */
+.newsletter-form input:-webkit-autofill,.newsletter-form input:-webkit-autofill:hover,.newsletter-form input:-webkit-autofill:focus{
+  -webkit-text-fill-color:#fff;caret-color:#fff;box-shadow:none;transition:background-color 100000s 0s,color 100000s 0s}
+.newsletter-form input:autofill{background:none}
+[data-theme=dark] #profilePanel input:-webkit-autofill,[data-theme=dark] #profilePanel input:-webkit-autofill:hover,[data-theme=dark] #profilePanel input:-webkit-autofill:focus{
+  -webkit-text-fill-color:#e4ecff;box-shadow:0 0 0 40px #0f1d3d inset}
+#profilePanel input:-webkit-autofill{box-shadow:0 0 0 40px #fff inset}
