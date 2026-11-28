@@ -74,6 +74,8 @@ body.sv-body .group-title a{color:#fff;font-size:.82rem;font-weight:650;text-dec
 </style><link rel="stylesheet" href="/scoutvision/solar-shell.css?v=solar1">
 <link rel="stylesheet" href="/scoutvision/solar-theme.css?v=solar1">
 <script src="/profile.js?v=account-3" defer></script>
+<link rel="stylesheet" href="/scoutvision/intro/intro.css?v=1">
+<script src="/scoutvision/intro/intro.js?v=1" defer></script>
 </head>
 <body class="sv-body">
 <header class="masthead">
@@ -95,6 +97,39 @@ body.sv-body .group-title a{color:#fff;font-size:.82rem;font-weight:650;text-dec
 </section>
 </nav>
 </header>
+<section class="sv-intro" id="svIntro" aria-label="How ScoutVision reads a match">
+<div class="sv-intro-stage">
+  <canvas id="svField" aria-hidden="true"></canvas>
+  <div class="sv-intro-hero" data-show="-1,-.5,.05,.09">
+    <span class="sv-kicker"><i></i>Beta · computer vision for VEX Override</span>
+    <h1>ScoutVision</h1>
+    <p>Point a camera at a match. Get back every robot, every pin and every point, and who scored it.</p>
+    <span class="sv-cue"><span></span>Scroll to watch a real match</span>
+  </div>
+  <div class="sv-intro-copy">
+    <div class="sv-chapters">
+      <section data-show=".09,.12,.25,.29"><span class="sv-step">01 · DETECT</span><h2>Every robot, every frame.</h2>
+        <p>A detector trained on Override footage boxes all four robots 30 times a second and keeps each one tied to its team, even when it ducks behind another robot for a moment.</p></section>
+      <section data-show=".29,.33,.49,.53"><span class="sv-step">02 · TRACK</span><h2>From the stands to the floor.</h2>
+        <p>The field's corners pin down the camera, so every box lands on a real spot on the floor, in inches. Paths, speed and where each robot spends its match come straight out of that.</p></section>
+      <section data-show=".53,.57,.71,.75"><span class="sv-step">03 · SCORE</span><h2>All nine goals, read live.</h2>
+        <p>The scoring reader watches the colours in each stack and which way every toggle points, and keeps the score as the match runs.</p></section>
+      <section data-show=".75,.78,.86,.89"><span class="sv-step">04 · CREDIT</span><h2>Know who scored it.</h2>
+        <p>Each change goes to the robot that made it, so a team's numbers come from what <b>it</b> did, not just what its alliance did.</p></section>
+    </div>
+    <div class="sv-feed" id="svFeed"><h3>Play by play</h3><ol id="svFeedList"></ol></div>
+  </div>
+  <div class="sv-hud" id="svHud" aria-hidden="true"><span class="score r" id="svRed">0</span><span id="svPhase"><span id="svClock">AUTO 0:15</span><small>Red · Blue</small></span><span class="score b" id="svBlue">0</span></div>
+  <div class="sv-intro-outro" data-show=".89,.93,1.5,2">
+    <span class="final" id="svIntroFinal"></span>
+    <h2>Every match, read.</h2>
+    <p>That was one real semifinal, exactly as ScoutVision read it. Every published match is below.</p>
+    <div class="actions"><a class="go" href="#replays">Watch the replays</a><a class="alt" href="/scoutvision/import/">Analyze your own match</a></div>
+  </div>
+  <div class="sv-intro-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="sv-intro-foot"><span>Real match data: <span id="svIntroEvent">Smoky Mountain Forge</span></span><a id="svSkip" href="#replays">Skip intro ↓</a></div>
+</div>
+</section>
 <div class="sv-shell">
 <aside class="sv-sidebar">
   <a class="sv-brand" href="/scoutvision/"><span>ScoutVision<small>by SolarScout</small></span></a>
