@@ -4,9 +4,9 @@
 // and the replay can be rebuilt with what was learned.
 
 import {access} from "./storage.js?v=load10";
-import {analyze, seekFrame} from "./tracking.js?v=fitted2";
-import {goals} from "./scoring.js?v=fitted2";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=fitted2";
+import {analyze, seekFrame} from "./tracking.js?v=fitted3";
+import {goals} from "./scoring.js?v=fitted3";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=fitted3";
 import {clipId, share, sharingOn} from "./share.js?v=load10";
 
 const ROUNDS = 7;

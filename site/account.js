@@ -166,6 +166,21 @@
     }));
     if (id !== request) return;
 
+    // Your team's next match (or projected seed) at its live and upcoming events, and the same
+    // view of every favourite event.
+    const now = Date.now(), live = (event) => new Date(event.start).getTime() - 864e5 <= now && now <= new Date(event.end || event.start).getTime() + 864e5;
+    const mine = [...(profile.events || []).filter(live), ...(upcoming.events || [])]
+      .filter((event, i, all) => all.findIndex((other) => other.sku === event.sku) === i)
+      .sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 3);
+    const favorites = window.solarProfile?.favorites || {teams: [], events: []};
+    const [mineOutlook, favoriteOutlook] = await Promise.all([
+      Promise.all(mine.map((event) => outlook(event.sku, team, ratingOf).catch(() => null))),
+      Promise.all(favorites.events.slice(0, 8).map((event) => outlook(event.sku, team, ratingOf).catch(() => ({failed: true, sku: event.sku, name: event.name})))),
+    ]);
+    if (id !== request) return;
+    const nextUp = nextUpCard(mineOutlook.filter(Boolean), team);
+    const favoriteEvents = favoriteEventsCard(favoriteOutlook, team);
+
     const skillsRow = me ? [me.combinedScore, me.programmingScore, me.driverScore] : [];
     const rating = me?.skill || profile.skill;   // season-wide OpenSkill, as on the leaderboard
     root.replaceChildren(
@@ -173,7 +188,9 @@
         el('div', {}, el('p', {class: 'account-kicker', text: 'Your team'}),
           el('h1', {id: 'accountTitle'}, document.createTextNode(team + ' '), el('span', {text: info.name || info.teamName || ''})),
           el('p', {class: 'account-sub', text: [info.organization, [info.location?.city, info.location?.region].filter(Boolean).join(', ')].filter(Boolean).join(' · ')})),
-        el('a', {class: 'account-link', href: '/team/' + encodeURIComponent(team) + '?season=' + season, text: 'Full team page →'})),
+        el('div', {class: 'account-actions'}, changeTeamButton(),
+          el('a', {class: 'account-link', href: '/team/' + encodeURIComponent(team) + '?season=' + season, text: 'Full team page →'}))),
+      nextUp,
       el('div', {class: 'account-tiles'},
         tile('Solar rank', me ? '#' + me.rank : '—', me ? 'of ' + board.rows.length + ' · score ' + me.score.toFixed(1) : 'Not rated yet'),
         tile('OpenSkill', rating ? rating.rating.toFixed(1) : '—', rating ? 'μ ' + rating.mean.toFixed(1) + ' ± ' + (3 * rating.uncertainty).toFixed(1) + ' · season-wide' : null),
@@ -196,7 +213,167 @@
         upcomingCard(upcoming.events || [], season),
         analysesCard(published.matches || []),
       ),
+      favoriteTeams(board.rows || [], season),
+      favoriteEvents,
     );
+  }
+
+  // ---- next match, favourites, team picker ------------------------------------------------
+  // An event as your team will meet it: its next scheduled match with Solar's win chance, its
+  // place in the standings, or (before the schedule is out) where its rating ranks it in the field.
+  async function outlook(sku, team, ratingOf) {
+    const data = await api('event', {sku});
+    const event = data.event || {sku};
+    const has = (m) => m.alliances.some((a) => a.teams.some((t) => t.number.toUpperCase() === team));
+    const upcomingMatches = (data.matches || []).filter((m) => !m.completed && has(m))
+      .sort((a, b) => new Date(a.scheduled || 0) - new Date(b.scheduled || 0) || a.roundCode - b.roundCode || a.matchNumber - b.matchNumber);
+    const next = upcomingMatches[0] || null;
+    let chance = null;
+    if (next) {
+      const odds = await api('event', {sku, history: 1}).catch(() => ({}));
+      const forecast = odds?.[next.id] || next.forecast;
+      const side = next.alliances.find((a) => a.teams.some((t) => t.number.toUpperCase() === team));
+      chance = Number.isFinite(forecast?.[side?.color]) ? forecast[side.color] : null;
+    }
+    const standing = (data.standings || []).find((row) => row.team?.number?.toUpperCase() === team) || null;
+    let field = null;
+    if (!(data.matches || []).length) {
+      const roster = await api('event', {sku, roster: 1}).catch(() => []);
+      const numbers = (Array.isArray(roster) ? roster : []).map((row) => String(row.number).toUpperCase());
+      if (numbers.includes(team)) {
+        const rated = numbers.map((number) => ({number, rating: ratingOf.get(number)})).filter((row) => Number.isFinite(row.rating))
+          .sort((a, b) => b.rating - a.rating);
+        const place = rated.findIndex((row) => row.number === team);
+        field = {size: numbers.length, rank: place >= 0 ? place + 1 : null, rated: rated.length};
+      } else field = {size: numbers.length, absent: true};
+    }
+    const played = (data.matches || []).filter((m) => m.completed && has(m)).length;
+    return {event, next, chance, standing, field, played, attending: Boolean(next || standing || (field && !field.absent) || played)};
+  }
+
+  const when = (date) => date ? new Date(date).toLocaleString(undefined, {weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}) : '';
+  function allianceLine(match, team) {
+    return el('div', {class: 'next-alliances'}, ...['red', 'blue'].map((color) => {
+      const side = match.alliances.find((a) => a.color === color);
+      return el('span', {class: 'next-side ' + color}, ...(side?.teams || []).map((t) =>
+        el('a', {href: '/team/' + encodeURIComponent(t.number), class: t.number.toUpperCase() === team ? 'me' : '', text: t.number})));
+    }));
+  }
+  function chanceBar(chance) {
+    if (!Number.isFinite(chance)) return el('p', {class: 'account-muted', text: 'Solar predicts this match once both alliances have results.'});
+    return el('div', {class: 'next-chance'}, el('b', {text: pct(chance)}), el('span', {text: ' chance to win'}),
+      el('div', {class: 'next-track', role: 'img', 'aria-label': pct(chance) + ' chance to win'}, el('i', {style: 'width:' + Math.round(chance * 100) + '%'})));
+  }
+  function outlookBody(row, team) {
+    const name = String(row.event.name || row.event.sku).split(':')[0];
+    const body = [el('a', {class: 'next-event', href: '/event/' + encodeURIComponent(row.event.sku), text: name}),
+      el('p', {class: 'account-muted', text: [row.event.start ? new Date(row.event.start).toLocaleDateString() : '', row.event.location?.city].filter(Boolean).join(' · ')})];
+    if (row.next) {
+      body.push(el('p', {class: 'next-match'}, el('b', {text: row.next.name}), document.createTextNode(row.next.scheduled ? ' · ' + when(row.next.scheduled) : '')),
+        allianceLine(row.next, team), chanceBar(row.chance));
+    } else if (row.field?.absent) {
+      body.push(el('p', {class: 'account-muted', text: team + ' isn’t registered here' + (row.field.size ? ' (' + row.field.size + ' teams).' : '.')}));
+    } else if (row.field) {
+      body.push(el('p', {}, el('b', {text: row.field.rank ? 'Projected #' + row.field.rank : 'Not rated yet'}),
+        document.createTextNode(row.field.rank ? ' of ' + row.field.size + ' teams by OpenSkill. The schedule isn’t out yet.' : ' · ' + row.field.size + ' teams registered. The schedule isn’t out yet.')));
+    } else if (row.played && row.standing) {
+      body.push(el('p', {}, el('b', {text: 'Ranked #' + row.standing.rank}),
+        document.createTextNode(' · ' + [row.standing.wins, row.standing.losses, row.standing.ties].join('–') + ' · all your matches here are played.')));
+    } else if (!row.attending) {
+      body.push(el('p', {class: 'account-muted', text: team + ' has no matches here.'}));
+    }
+    if (row.standing && row.next) body.push(el('p', {class: 'account-muted', text: 'Currently ranked #' + row.standing.rank + ' · ' + [row.standing.wins, row.standing.losses, row.standing.ties].join('–')}));
+    return body;
+  }
+  function nextUpCard(rows, team) {
+    const card = el('section', {class: 'account-card next-up'}, el('h2', {text: 'Next up for ' + team}));
+    if (!rows.length) { card.append(el('p', {class: 'account-empty', text: 'No upcoming events registered. When ' + team + ' registers, its next match and Solar’s prediction show here.'})); return card; }
+    card.append(el('div', {class: 'next-grid'}, ...rows.map((row) => el('article', {class: 'next-item'}, ...outlookBody(row, team)))));
+    return card;
+  }
+  function favoriteEventsCard(rows, team) {
+    const card = el('section', {class: 'account-card favorites'}, el('h2', {text: 'Favourite events'}));
+    if (!rows.length) {
+      card.append(el('p', {class: 'account-empty', text: 'Tap ☆ Favorite on any event page to follow it here, with your team’s next match and prediction there.'}));
+      return card;
+    }
+    card.append(el('div', {class: 'next-grid'}, ...rows.map((row) => row.failed
+      ? el('article', {class: 'next-item'}, el('a', {class: 'next-event', href: '/event/' + encodeURIComponent(row.sku), text: String(row.name).split(':')[0]}),
+        el('p', {class: 'account-muted', text: 'Couldn’t load this event right now.'}))
+      : el('article', {class: 'next-item'}, el('button', {type: 'button', class: 'favorite-button small', 'data-favorite-event': row.event.sku, 'data-name': row.event.name || row.event.sku, text: '★'}),
+        ...outlookBody(row, team)))));
+    return card;
+  }
+  function favoriteTeams(rows, season) {
+    const card = el('section', {class: 'account-card favorites'}, el('h2', {text: 'Favourite teams'}));
+    const saved = window.solarProfile?.favorites?.teams || [];
+    if (!saved.length) {
+      card.append(el('p', {class: 'account-empty', text: 'Tap ☆ Favorite on any team page to compare it with your team here.'}));
+      return card;
+    }
+    const byTeam = new Map(rows.map((row) => [row.teamNumber, row]));
+    const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '—';
+    card.append(el('div', {class: 'account-scroll'}, el('table', {class: 'account-matches fav-table'},
+      el('thead', {}, el('tr', {}, ...['Team', 'Solar rank', 'OpenSkill', 'Record', 'Win %', 'Skills', ''].map((h, i) => el('th', {class: i && i < 6 ? 'numeric' : '', text: h})))),
+      el('tbody', {}, ...saved.map((number) => {
+        const row = byTeam.get(number), skill = row?.skill;
+        return el('tr', {},
+          el('td', {}, el('a', {href: '/team/' + encodeURIComponent(number) + '?season=' + season, text: number}),
+            el('span', {class: 'account-muted', text: row?.teamName ? ' ' + row.teamName : ''})),
+          el('td', {class: 'numeric', text: row ? '#' + row.rank : '—'}),
+          el('td', {class: 'numeric', text: fmt(skill?.rating)}),
+          el('td', {class: 'numeric', text: skill ? [skill.wins, skill.losses, skill.draws].join('–') : '—'}),
+          el('td', {class: 'numeric', text: skill?.matches ? pct(skill.wins / skill.matches) : '—'}),
+          el('td', {class: 'numeric', text: row?.combinedScore ? String(row.combinedScore) : '—'}),
+          el('td', {}, el('button', {type: 'button', class: 'favorite-button small', 'data-favorite-team': number, text: '★'})));
+      })))));
+    return card;
+  }
+
+  // Pick the team the dashboard follows: first sign-in, or "Change team".
+  let pickerRows = null;
+  async function pickTeam(cancel) {
+    const input = el('input', {type: 'search', placeholder: 'Team number or name, like 98601B', 'aria-label': 'Your team', autocomplete: 'off'});
+    const list = el('div', {class: 'team-picks', role: 'listbox'});
+    const note = el('p', {class: 'account-muted', role: 'status'});
+    const choose = async (number) => {
+      note.textContent = 'Saving…';
+      const saved = await window.solarProfile?.saveTeam(number);
+      if (saved) show(); else note.textContent = 'Enter a VEX team number like 98601B.';
+    };
+    const form = el('form', {class: 'team-picker'}, input, el('button', {type: 'submit', class: 'account-button', text: 'Use this team'}));
+    form.onsubmit = (event) => { event.preventDefault(); choose(input.value); };
+    root.replaceChildren(el('div', {class: 'account-card account-welcome'},
+      el('p', {class: 'account-kicker', text: 'Welcome to Solar'}),
+      el('h1', {id: 'accountTitle', text: 'Pick your team'}),
+      el('p', {text: 'Your dashboard follows this team: its next match and Solar’s prediction, its rating and skills over the season, and the teams and events you favourite.'}),
+      form, list, note,
+      cancel ? el('button', {type: 'button', class: 'account-link plain', text: 'Cancel', onclick: ''}) : null));
+    if (cancel) root.querySelector('.plain').onclick = cancel;
+    input.focus();
+    try {
+      if (!pickerRows) {
+        const {seasons} = await api('seasons');
+        pickerRows = (await api('openskill', {seasonId: seasons[0].id, gradeLevel: 'All'})).rows || [];
+      }
+    } catch { pickerRows = []; }
+    input.oninput = () => {
+      const query = input.value.trim().toLowerCase();
+      if (query.length < 2) { list.replaceChildren(); return; }
+      const hits = pickerRows.filter((row) => [row.teamNumber, row.teamName, row.organization].join(' ').toLowerCase().includes(query))
+        .sort((a, b) => Number(b.teamNumber.toLowerCase().startsWith(query)) - Number(a.teamNumber.toLowerCase().startsWith(query)) || a.rank - b.rank).slice(0, 6);
+      list.replaceChildren(...hits.map((row) => {
+        const button = el('button', {type: 'button', class: 'team-pick'}, el('b', {text: row.teamNumber}),
+          el('span', {text: ' ' + (row.teamName || '') + (row.organization ? ' · ' + row.organization : '')}), el('small', {text: '#' + row.rank}));
+        button.onclick = () => choose(row.teamNumber);
+        return button;
+      }));
+    };
+  }
+  function changeTeamButton() {
+    const button = el('button', {type: 'button', class: 'account-link plain', text: 'Change team'});
+    button.onclick = () => pickTeam(() => show());
+    return button;
   }
 
   function recentMatches(played, side, other, season) {
@@ -246,12 +423,19 @@
     root.hidden = false;
     try { await window.solarProfile?.connect(); } catch (error) { signedOut(error.message); return; }
     const session = window.solarProfile?.session;
-    if (!session) return signedOut('Sign in and pick your team to see its rating, skills and results over the season.');
+    if (!session) {
+      if (!location.hash) {        // the remembered sign-in has expired: back to the front page
+        localStorage.removeItem('solar-signed-in');
+        dispatchEvent(new HashChangeEvent('hashchange'));
+        return;
+      }
+      return signedOut('Sign in and pick your team to see its next match, rating, skills and results over the season.');
+    }
     const team = String(session.user.user_metadata?.team || '').toUpperCase();
-    if (!team) return signedOut('Add your team number in the Profile panel (Your team → Save) to build your dashboard.');
+    if (!team) return pickTeam();
     render(team).catch((error) => root.replaceChildren(el('p', {class: 'account-empty', text: error.message})));
   }
   window.solarAccount = {show};
-  window.solarProfile?.onChange(() => { if (location.hash === '#account') show(); });
+  window.solarProfile?.onChange(() => { if (!root.hidden) show(); });
   if (location.hash === '#account') show();
 })();

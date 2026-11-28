@@ -8,8 +8,8 @@
 // cameras; training here builds the reference set for a camera ScoutVision has never seen.
 
 import {access} from "./storage.js?v=load10";
-import {field} from "./tracking.js?v=fitted2";
-import {backFacingWall, bandColor, goals, pixels, wallBand, wallPoints} from "./scoring.js?v=fitted2";
+import {field} from "./tracking.js?v=fitted3";
+import {backFacingWall, bandColor, goals, pixels, wallBand, wallPoints} from "./scoring.js?v=fitted3";
 import {closestCounts, closestOwner, FIELD_CORNERS, pixelReader, resetScoringReferences, signature} from "./scoring-model.js?v=load10";
 
 export const WALLS = ["far", "left", "right", "near"];

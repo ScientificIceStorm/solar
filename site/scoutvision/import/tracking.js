@@ -1,6 +1,6 @@
 import {detect, isYolo, report, suppress} from "./detector.js?v=load10";
 import {loadHead} from "./finetune.js?v=load10";
-import {buildScoring} from "./scoring.js?v=fitted2";
+import {buildScoring} from "./scoring.js?v=fitted3";
 import {scoringReferences} from "./scoring-model.js?v=load10";
 import {access} from "./storage.js?v=load10";
 

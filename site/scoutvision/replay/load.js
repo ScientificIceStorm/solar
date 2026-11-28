@@ -80,7 +80,7 @@ try {
   document.getElementById("replay-data").textContent = JSON.stringify(data);
   await new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "/scoutvision/replay/engine.js?v=matchstats-3";
+    script.src = "/scoutvision/replay/engine.js?v=stats-4";
     script.onload = resolve;
     script.onerror = () => reject(new Error("Could not load the 3D replay engine."));
     document.body.append(script);

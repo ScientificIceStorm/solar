@@ -70,7 +70,8 @@ function switchView() {
   const route = location.hash.slice(1);
   const detail = location.pathname.match(/^\/(team|event)\/([a-z0-9-]+)$/i);
   const map = !detail && route === 'map';
-  const account = !detail && route === 'account';
+  // Signed in, the front page is your dashboard (profile.js remembers the sign-in).
+  const account = !detail && (route === 'account' || (!route && localStorage.getItem('solar-signed-in') === '1'));
   $('mapView').hidden = !map;
   $('accountView').hidden = !account;
   ui.home.hidden = Boolean(detail) || map || account || Object.hasOwn(views, route);
@@ -840,7 +841,8 @@ function renderEvent(data, loadExtras) {
     event.divisions.map((item) => '<option value="' + escape(item.id) + '"' +
       (item.id === division?.id ? ' selected' : '') + '>' + escape(item.name) + '</option>').join('') +
     '</select></label>' : '';
-  ui.detail.innerHTML = '<div class="detail-intro"><a href="/#events">← Events</a><h1>' + escape(event.name) + '</h1><p>' +
+  ui.detail.innerHTML = '<div class="detail-intro"><a href="/#events">← Events</a><h1>' + escape(event.name) + '</h1>' +
+    '<button type="button" class="favorite-button" aria-pressed="false" data-favorite-event="' + escape(event.sku) + '" data-name="' + escape(event.name) + '">☆ Favorite</button><p>' +
     escape([dateRange(event), locationText(event.location)].filter(Boolean).join(' · ')) + '</p></div>' +
     '<div class="detail-toolbar event-toolbar"><div class="detail-tabs" role="group" aria-label="Event sections">' +
     '<span class="nav-indicator" aria-hidden="true"></span>' +
@@ -1273,7 +1275,8 @@ function renderTeam(data, season, {partial = false, failed = false} = {}) {
     };
   });
   ui.detail.innerHTML = '<div class="detail-intro"><a href="/#teams">← Teams</a><p class="eyebrow">TEAM ' +
-    escape(team.number) + '</p><h1>' + escape(team.teamName || team.number) + '</h1><p>' +
+    escape(team.number) + '</p><h1>' + escape(team.teamName || team.number) + '</h1>' +
+    '<button type="button" class="favorite-button" aria-pressed="false" data-favorite-team="' + escape(team.number.toUpperCase()) + '">☆ Favorite</button><p>' +
     escape([team.organization, locationText(team.location)].filter(Boolean).join(' · ')) + '</p></div>' +
     '<section class="panel"><div class="detail-toolbar"><h2>Season overview</h2><label>Season <select id="teamSeason"></select>' +
     '</label></div><div class="stats" id="officialStats">' + ratings +

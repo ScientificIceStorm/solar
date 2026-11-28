@@ -558,7 +558,7 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
     }
   }
 
-  const checked=[...anchors].sort((a,b)=>a.frame-b.frame), hold=new Map();
+  const checked=[...anchors].sort((a,b)=>a.frame-b.frame), hold=new Map(), checkedGoals=new Set();
   let nextCheck=0;
   const held=(id,frame)=>(hold.get(id) ?? -1)>frame;
   function applyChecks(frame, positions) {
@@ -567,7 +567,7 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
       goals.forEach((goal,i)=>{
         const counts=answer.goals?.[goal.id];
         if (!Array.isArray(counts)) return;
-        hold.set(goal.id,frame+fps*5); pending.delete(goal.id); seen[i]=frame;
+        hold.set(goal.id,frame+fps*5); pending.delete(goal.id); seen[i]=frame; checkedGoals.add(i);
         const previous=stacks[i], current=ordered(counts,previous);
         if (current.join()===previous.join()) return;
         const points=score(stacks,ownership);
@@ -611,8 +611,20 @@ export function buildScoring(frame, project, teams, fps, model, anchors=[]) {
             const geometric=decoder.calibrated ? null : countStack(read,base,boxes,width,height,previous.length);
             current=decoder.stack(goals[i].id,i,previous,boxes,geometric);
           }
-          const dropping=current !== null && current.length<previous.length;
-          if (!stable(goals[i].id,current,dropping?5:3)) return;
+          // After you check a goal, the reader has to agree with your answer the way play could:
+          // new pins on top, a couple at a time while it was hidden, and descores off the top.
+          // Anything else (five reds popping in on a goal you just checked) needs four seconds of
+          // the same reading before it replaces your answer.
+          let needed=current !== null && current.length<previous.length ? 5 : 3;
+          if (checkedGoals.has(i) && current !== null && current.join()!==previous.join()) {
+            const prefix=(a,b)=>a.every((color,k)=>b[k]===color);
+            const hidden=seen[i]===null ? frame : frame-seen[i];
+            const plausible=current.length>previous.length
+              ? prefix(previous,current) && current.length-previous.length<=2+Math.floor(hidden/(1.5*fps))
+              : prefix(current,previous);
+            if (!plausible) needed=8;
+          }
+          if (!stable(goals[i].id,current,needed)) return;
           const lastSeen=seen[i];
           if (current !== null) {
             if (frame % fps===0) calls[i]++;

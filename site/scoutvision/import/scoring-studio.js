@@ -1,7 +1,7 @@
 // "Teach scoring" card: label goal stacks and toggles on review frames, then train.
 import {access} from "./storage.js?v=load10";
-import {goals} from "./scoring.js?v=fitted2";
-import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=fitted2";
+import {goals} from "./scoring.js?v=fitted3";
+import {geometry, OWNER_NAMES, trainScoring, WALLS} from "./scoring-train.js?v=fitted3";
 import {clipId, share} from "./share.js?v=load10";
 
 const COLOR_NAMES = ["Red", "Blue", "Yellow"];

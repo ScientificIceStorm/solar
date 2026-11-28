@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#060b1c">
+  <meta name="description" content="Vision UI: a new V5 brain screen for running, stepping through and tuning VEX autonomous routes.">
+  <title>Vision UI · Solar</title>
+  <link rel="stylesheet" href="/styles.css?v=wide-1">
+  <script src="/profile.js?v=account-3" defer></script>
+  <script src="/vision-ui/vision.js?v=1" defer></script>
+  <style>
+    :root{--ink:#eaf2ff;--quiet:#9fb0d0;--cyan:#3cc9f0;--orange:#f6a13a;--violet:#9b8cff;--green:#4ade80;--deep:#060b1c}
+    html{overflow-x:clip;scroll-behavior:smooth}
+    body.vision{background:var(--deep);color:var(--ink)}
+    body.vision .masthead{position:relative;z-index:5}
+    .vision main{width:100%;max-width:none;margin:0}
+    #fluid{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;filter:blur(38px) saturate(130%);opacity:.9;pointer-events:none}
+    .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.07;mix-blend-mode:overlay;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+    .vision section{position:relative;z-index:2}
+    .hero{min-height:calc(100svh - 95px);display:grid;place-items:center;text-align:center;padding:0 22px}
+    .hero-inner{will-change:transform,opacity}
+    .kicker{display:inline-flex;gap:8px;align-items:center;padding:6px 13px;border:1px solid #ffffff2b;border-radius:99px;background:#ffffff10;
+      backdrop-filter:blur(12px);font-size:13px;font-weight:650;letter-spacing:.02em;color:#cfe3ff}
+    .kicker i{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
+    .hero h1{margin:22px 0 10px;font-size:clamp(64px,13vw,190px);line-height:.88;letter-spacing:-.075em;font-weight:800;
+      background:linear-gradient(100deg,#fff 10%,#9fe6ff 45%,#9b8cff 75%,#fff 95%);background-size:220% 100%;
+      -webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 9s ease-in-out infinite}
+    @keyframes sheen{50%{background-position:100% 0}}
+    .hero p{max-width:640px;margin:0 auto;font-size:clamp(17px,2vw,21px);line-height:1.45;color:#d6e2f7}
+    .scroll-cue{margin-top:46px;display:inline-flex;flex-direction:column;align-items:center;gap:9px;color:var(--quiet);font-size:12px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none}
+    .scroll-cue span{width:22px;height:36px;border:2px solid #ffffff55;border-radius:12px;position:relative}
+    .scroll-cue span::after{content:"";position:absolute;left:50%;top:7px;width:4px;height:8px;margin-left:-2px;border-radius:2px;background:#fff;animation:cue 1.8s ease-in-out infinite}
+    @keyframes cue{60%{transform:translateY(10px);opacity:0}}
+
+    /* The brain rises out of the hero and flattens as it scrolls in. */
+    .stage{min-height:120vh;display:grid;place-items:center;perspective:1400px;padding:0 22px}
+    .device{width:min(1040px,92vw);aspect-ratio:2/1.06;border-radius:clamp(14px,2.4vw,30px);padding:clamp(10px,1.8vw,22px);
+      background:linear-gradient(150deg,#2a2f3b,#0c0f15 40%,#050608);box-shadow:0 60px 120px #000a,0 0 0 1px #ffffff1a inset,0 0 80px #3cc9f033;
+      transform-style:preserve-3d;will-change:transform}
+    .device img,.device svg{display:block;width:100%;height:100%;border-radius:clamp(6px,1vw,12px);object-fit:cover;background:#070d22}
+    .stage-caption{margin-top:34px;text-align:center;color:var(--quiet);font-size:15px}
+
+    /* Scroll-driven route playback. */
+    .play{height:620vh}
+    .play-sticky{position:sticky;top:0;height:100vh;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:clamp(18px,3vw,48px);align-items:center;
+      width:min(1380px,calc(100% - 44px));margin:0 auto}
+    .play-main{display:flex;flex-direction:column;justify-content:center;gap:clamp(14px,3vh,28px);min-width:0}
+    .play-copy{max-width:560px}
+    .play-copy h2,.section-title{margin:0 0 8px;font-size:clamp(30px,4.4vw,54px);line-height:1;letter-spacing:-.05em}
+    .play-copy p{margin:0;color:var(--quiet);font-size:16px}
+    .play .device{width:min(100%,calc((100vh - 210px) * 1.88))}
+    .steps{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:step}
+    .steps li{display:flex;gap:10px;align-items:center;padding:7px 11px;border-radius:10px;color:#7f8fb0;font-size:13.5px;font-weight:650;
+      transition:background-color .25s,color .25s,transform .25s}
+    .steps li::before{counter-increment:step;content:counter(step);width:22px;font-variant-numeric:tabular-nums;color:#56658a}
+    .steps li b{width:9px;height:9px;border-radius:2px;flex:none}
+    .steps li.done{color:#c4d0ea}
+    .steps li.now{background:#3cc9f01f;color:#fff;transform:translateX(6px);box-shadow:0 0 0 1px #3cc9f055 inset}
+    .progress-rail{position:fixed;left:0;top:0;height:3px;width:100%;transform-origin:0 50%;transform:scaleX(0);background:linear-gradient(90deg,var(--cyan),var(--violet));z-index:20}
+
+    .features{width:min(1240px,calc(100% - 44px));margin:0 auto;padding:12vh 0 4vh}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px;margin-top:34px}
+    .card{padding:24px;border-radius:22px;background:linear-gradient(160deg,#ffffff14,#ffffff06);border:1px solid #ffffff1c;backdrop-filter:blur(14px)}
+    .card h3{margin:14px 0 6px;font-size:20px;letter-spacing:-.02em}
+    .card p{margin:0;color:var(--quiet);font-size:15px;line-height:1.5}
+    .card .icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#3cc9f01f;color:var(--cyan);font-weight:800}
+    .gallery{width:min(1240px,calc(100% - 44px));margin:0 auto;padding:8vh 0;display:grid;grid-template-columns:1.25fr 1fr;gap:22px;align-items:center}
+    .gallery figure{margin:0}
+    .gallery .device{width:100%;aspect-ratio:auto}
+    .gallery img{aspect-ratio:2/1}
+    .gallery figcaption{margin-top:14px;color:var(--quiet);font-size:14.5px}
+    .outro{text-align:center;padding:16vh 22px 18vh}
+    .outro h2{font-size:clamp(40px,7vw,96px);letter-spacing:-.06em;line-height:.95;margin:0 0 16px}
+    .outro p{color:var(--quiet);margin:0 0 28px;font-size:17px}
+    .button{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:99px;background:#fff;color:#0a1636;font-weight:750;text-decoration:none;
+      box-shadow:0 10px 40px #3cc9f055;transition:transform .2s,box-shadow .2s}
+    .button:hover{transform:translateY(-2px);box-shadow:0 14px 50px #3cc9f088}
+    .button.ghost{background:#ffffff14;color:#fff;box-shadow:none;border:1px solid #ffffff33;margin-left:8px}
+    .reveal{opacity:0;transform:translateY(46px) scale(.98);filter:blur(6px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1),filter .9s}
+    .reveal.in{opacity:1;transform:none;filter:none}
+    .grid .reveal:nth-child(2){transition-delay:.08s}.grid .reveal:nth-child(3){transition-delay:.16s}.grid .reveal:nth-child(4){transition-delay:.24s}.grid .reveal:nth-child(5){transition-delay:.32s}
+    .vision footer{position:relative;z-index:2}
+    @media(max-width:900px){
+      .play{height:520vh}
+      .play-sticky{grid-template-columns:1fr;align-content:center}
+      .steps{display:none}
+      .gallery{grid-template-columns:1fr}
+    }
+    @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;filter:none}.hero h1{animation:none}#fluid{display:none}}
+  </style>
+</head>
+<body class="vision">
+  <div class="progress-rail" id="progress"></div>
+  <canvas id="fluid" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="Solar home">solar<span class="brand-dot">.</span></a>
+    <nav class="top-nav" aria-label="Explore Solar">
+      <a href="/#skills">Skills</a><a href="/#teams">Teams</a><a href="/#insights">Insights</a><a href="/#events">Events</a><a href="/#map">Map</a>
+      <a class="scoutvision-link" href="/scoutvision/">ScoutVision <span class="scoutvision-beta">Beta</span></a><a class="vision-ui-link" href="/vision-ui/" aria-current="page">Vision UI</a>
+      <button id="profileToggle" type="button" aria-expanded="false" aria-controls="profilePanel">Profile</button>
+      <section id="profilePanel" hidden aria-label="Profile">
+        <button type="button" id="profileGoogle">Continue with Google</button>
+        <form id="profileForm">
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+          <button type="submit" value="login">Log in</button>
+          <button type="submit" value="signup">Sign up</button>
+        </form>
+        <button type="button" id="profileLogout" hidden>Sign out</button>
+        <p id="profileStatus" role="status"></p>
+      </section>
+    </nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="vision-title">
+      <div class="hero-inner" id="heroInner">
+        <span class="kicker"><i></i>A new V5 brain screen</span>
+        <h1 id="vision-title">Vision UI</h1>
+        <p>Pick a route, watch it on the field map and step through it move by move, right on the V5 brain. Built for VEX Override.</p>
+        <a class="scroll-cue" href="#stage"><span></span>Scroll</a>
+      </div>
+    </section>
+
+    <section class="stage" id="stage" aria-label="The Vision UI brain screen">
+      <div>
+        <div class="device" id="tiltDevice"><img src="/vision-ui/brain-route.webp" width="960" height="480" alt="Vision UI on the V5 brain: the autonomous screen at step 6 of 13, driving to waypoint 4 on the field map, with route choices, odometry and step controls."></div>
+        <p class="stage-caption reveal">Autonomous, stats and PID: everything a match needs, one tap from the brain's home screen.</p>
+      </div>
+    </section>
+
+    <section class="play" id="play" aria-label="Route playback">
+      <div class="play-sticky">
+        <div class="play-main">
+          <div class="play-copy reveal">
+            <h2>Watch the route run.</h2>
+            <p>Keep scrolling: the brain plays <b>Near side 2</b> one step at a time.</p>
+          </div>
+          <div class="device" id="playDevice">
+            <svg id="brain" viewBox="0 0 960 480" role="img" aria-label="Vision UI playing the Near side 2 route step by step"></svg>
+          </div>
+        </div>
+        <ol class="steps" id="stepList" aria-label="Route steps"></ol>
+      </div>
+    </section>
+
+    <section class="features" aria-labelledby="features-title">
+      <h2 class="section-title reveal" id="features-title">Made for the pits, not a laptop.</h2>
+      <div class="grid">
+        <article class="card reveal"><div class="icon">▶</div><h3>Route picker</h3><p>Every saved autonomous route as a button. The brain shows which one is armed and when it's ready to run.</p></article>
+        <article class="card reveal"><div class="icon">⌖</div><h3>Live field map</h3><p>The route drawn on the Override field, numbered waypoint by waypoint, with forward, reverse and turn moves in their own colours.</p></article>
+        <article class="card reveal"><div class="icon">⏯</div><h3>Step through it</h3><p>Pause, go back a step or jump ahead to test one move at a time, with the step's target, position and speed on screen.</p></article>
+        <article class="card reveal"><div class="icon">ϟ</div><h3>Stats</h3><p>Match numbers on the brain itself, with a badge when something needs a look.</p></article>
+        <article class="card reveal"><div class="icon">⚙</div><h3>PID tuning</h3><p>Tune the drive and turn controllers from the screen between runs, without re-uploading code.</p></article>
+      </div>
+    </section>
+
+    <section class="gallery" aria-label="Screens">
+      <figure class="reveal"><div class="device"><img src="/vision-ui/brain-route.webp" width="960" height="480" loading="lazy" alt="Vision UI mid-route: step 6 of 13, driving to waypoint 4."></div>
+        <figcaption>Mid-route: step 6 of 13, driving to waypoint 4 at x −23.9, y −22.2.</figcaption></figure>
+      <figure class="reveal"><div class="device"><img src="/vision-ui/brain-ready.webp" width="480" height="240" loading="lazy" alt="Vision UI with Near side 2 armed and ready at step 1."></div>
+        <figcaption>Armed and ready: Near side 2 at step 1, driving to waypoint 1.</figcaption></figure>
+    </section>
+
+    <section class="outro" aria-labelledby="outro-title">
+      <h2 class="reveal" id="outro-title">Vision UI</h2>
+      <p class="reveal">In development for VEX V5 Override.</p>
+      <div class="reveal"><a class="button" href="https://github.com/shreyasrawat/basilisk_override">View on GitHub ↗</a><a class="button ghost" href="/scoutvision/">Try ScoutVision</a></div>
+    </section>
+  </main>
+  <footer><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+</body>
+</html>
