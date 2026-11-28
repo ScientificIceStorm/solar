@@ -7,11 +7,6 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "node scripts/vendor-maplibre.mjs",
-    "check": "node scripts/check-site.mjs",
-    "test": "node --test \"test/site/*.test.mjs\""
-  },
-  "dependencies": {
-    "maplibre-gl": "6.20.0"
+    "check": "node scripts/check-site.mjs"
   }
 }

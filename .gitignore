@@ -50,4 +50,22 @@ assets/config/solar.local.json
 
 # Local Cloudflare Pages settings and state
 .dev.vars
+.dev.vars.*
 .wrangler/
+
+# Node (website tooling)
+node_modules/
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# Local Solar server cache
+.solar_rankings_cache/
+
+# Python
+__pycache__/
+
+# Windows
+Thumbs.db
