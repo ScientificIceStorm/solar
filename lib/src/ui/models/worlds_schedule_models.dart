@@ -63,11 +63,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
       WorldsScheduleDay(
         date: DateTime(2026, 4, 21),
         headline: 'Check-in and opening day',
-        note: 'Inspection closes at 11:00 AM CT before the first HS quals.',
+        note:
+            'Official RECF agenda: inspection closes at 11:00 AM CT, then HS opens with ceremonies, practice, and the first qualification block.',
         sessions: <WorldsScheduleSession>[
           WorldsScheduleSession(
             timeLabel: '7:45 AM',
-            title: 'Venue opens and teams set up pits',
+            title: 'Venue opens',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.logistics,
           ),
@@ -76,6 +77,7 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Inspection in divisions',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.logistics,
+            detail: 'Teams must be inspected by 11:00 AM CT.',
           ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
@@ -84,10 +86,34 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             tone: WorldsScheduleSessionTone.competition,
           ),
           WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:30 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '12:00 PM - 1:00 PM',
+            title: 'Lunch break',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
             timeLabel: '1:00 PM - 2:00 PM',
             title: 'Opening Ceremonies',
             location: 'Dome',
             tone: WorldsScheduleSessionTone.milestone,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '2:30 PM - 5:45 PM',
+            title: 'Skills Challenge',
+            location: 'Rooms 100-106',
+            tone: WorldsScheduleSessionTone.competition,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '2:30 PM - 5:45 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
           WorldsScheduleSession(
             timeLabel: '3:00 PM - 4:30 PM',
@@ -101,13 +127,32 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
           ),
+          WorldsScheduleSession(
+            timeLabel: '6:15 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 22),
         headline: 'Full qualification day',
-        note: 'Morning and afternoon blocks run in parallel with skills.',
+        note:
+            'Morning and afternoon skills windows run in parallel with HS qualification matches.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:00 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
             title: 'Skills Challenge',
@@ -128,6 +173,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
           ),
           WorldsScheduleSession(
             timeLabel: '1:00 PM - 4:15 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '1:00 PM - 4:15 PM',
             title: 'Skills Challenge',
             location: 'Rooms 100-106',
             tone: WorldsScheduleSessionTone.competition,
@@ -137,14 +188,33 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Qualification matches',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '4:30 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
         ],
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 23),
         headline: 'Final qualification day',
-        note: 'Qualification blocks continue with skills sessions throughout the day.',
+        note:
+            'Thursday mirrors Wednesday, with the final full HS qualification schedule before playoffs.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:00 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
             title: 'Skills Challenge',
@@ -164,6 +234,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             tone: WorldsScheduleSessionTone.logistics,
           ),
           WorldsScheduleSession(
+            timeLabel: '1:00 PM - 4:15 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
             timeLabel: '1:00 PM - 4:30 PM',
             title: 'Skills Challenge',
             location: 'Rooms 100-106',
@@ -174,6 +250,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Qualification matches',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '4:30 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
         ],
       ),
@@ -181,8 +263,20 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
         date: DateTime(2026, 4, 24),
         headline: 'Playoffs, finals, and game unveil',
         note:
-            'Alliance selection happens immediately after the last HS quals match.',
+            'Alliance selection follows the final HS qualification block, then divisional playoffs roll into finals and the game unveil.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:15 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 10:15 AM',
             title: 'Final Skills Challenge window',
@@ -195,6 +289,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
             detail: 'Senior recognition happens in division.',
+          ),
+          WorldsScheduleSession(
+            timeLabel: '12:00 PM - 1:00 PM',
+            title: 'Lunch break',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
           WorldsScheduleSession(
             timeLabel: '12:30 PM',
@@ -214,6 +314,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Dome',
             tone: WorldsScheduleSessionTone.milestone,
           ),
+          WorldsScheduleSession(
+            timeLabel: '7:00 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
     ],
@@ -228,11 +334,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
       WorldsScheduleDay(
         date: DateTime(2026, 4, 25),
         headline: 'Check-in and opening day',
-        note: 'MS and VURC follow the same published opening cadence as HS.',
+        note:
+            'MS and VURC follow the same official opening cadence as HS, including inspection, ceremonies, and an evening qualification block.',
         sessions: <WorldsScheduleSession>[
           WorldsScheduleSession(
             timeLabel: '7:45 AM',
-            title: 'Venue opens and teams set up pits',
+            title: 'Venue opens',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.logistics,
           ),
@@ -241,6 +348,7 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Inspection in divisions',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.logistics,
+            detail: 'Teams must be inspected by 11:00 AM CT.',
           ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
@@ -249,10 +357,34 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             tone: WorldsScheduleSessionTone.competition,
           ),
           WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:30 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '12:00 PM - 1:00 PM',
+            title: 'Lunch break',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
             timeLabel: '1:00 PM - 2:00 PM',
             title: 'Opening Ceremonies',
             location: 'Dome',
             tone: WorldsScheduleSessionTone.milestone,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '2:30 PM - 5:45 PM',
+            title: 'Skills Challenge',
+            location: 'Rooms 100-106',
+            tone: WorldsScheduleSessionTone.competition,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '2:30 PM - 5:45 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
           WorldsScheduleSession(
             timeLabel: '3:00 PM - 4:30 PM',
@@ -266,13 +398,32 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
           ),
+          WorldsScheduleSession(
+            timeLabel: '6:15 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 26),
         headline: 'Qualification and skills day',
-        note: 'This is the longest published V5RC MS/VURC competition day.',
+        note:
+            'Sunday is the longest official MS/VURC competition day, with parallel skills, practice-field access, and qualification blocks into the evening.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:00 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
             title: 'Skills Challenge',
@@ -293,6 +444,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
           ),
           WorldsScheduleSession(
             timeLabel: '1:00 PM - 6:15 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '1:00 PM - 6:15 PM',
             title: 'Skills Challenge',
             location: 'Rooms 100-106',
             tone: WorldsScheduleSessionTone.competition,
@@ -303,14 +460,32 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
           ),
+          WorldsScheduleSession(
+            timeLabel: '6:30 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 27),
         headline: 'Playoffs and finals',
         note:
-            'Alliance selection follows the last morning qualification match.',
+            'Alliance selection follows the final morning MS/VURC qualification block before divisional playoffs and Dome finals.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:15 PM',
+            title: 'Practice fields open',
+            location: 'Rooms 120-127, 130-132',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 10:15 AM',
             title: 'Final Skills Challenge window',
@@ -341,6 +516,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Dome',
             tone: WorldsScheduleSessionTone.milestone,
           ),
+          WorldsScheduleSession(
+            timeLabel: '7:00 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
     ],
@@ -356,11 +537,11 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
         date: DateTime(2026, 4, 28),
         headline: 'Check-in and opening day',
         note:
-            'Tuesday starts with inspection and shifts into short practice and quals blocks.',
+            'Tuesday opens with inspection, then shifts into VIQRC practice matches and the first qualification block after ceremonies.',
         sessions: <WorldsScheduleSession>[
           WorldsScheduleSession(
             timeLabel: '7:45 AM',
-            title: 'Venue opens and teams set up pits',
+            title: 'Venue opens',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.logistics,
           ),
@@ -369,6 +550,7 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Inspection in divisions',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.logistics,
+            detail: 'Teams must be inspected by 11:00 AM CT.',
           ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
@@ -377,10 +559,36 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             tone: WorldsScheduleSessionTone.competition,
           ),
           WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:30 PM',
+            title: 'Practice fields open',
+            location:
+                'ES: Rooms 120-127, 130-132  •  MS: Rooms 260-267, 274-276',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '12:00 PM - 1:00 PM',
+            title: 'Lunch break',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
             timeLabel: '1:00 PM - 2:00 PM',
             title: 'Opening Ceremonies',
             location: 'Dome',
             tone: WorldsScheduleSessionTone.milestone,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '2:30 PM - 5:30 PM',
+            title: 'Skills Challenge',
+            location: 'Rooms 100-106',
+            tone: WorldsScheduleSessionTone.competition,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '2:30 PM - 5:30 PM',
+            title: 'Practice fields open',
+            location:
+                'ES: Rooms 120-127, 130-132  •  MS: Rooms 260-267, 274-276',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
           WorldsScheduleSession(
             timeLabel: '2:30 PM - 3:55 PM',
@@ -394,14 +602,33 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
           ),
+          WorldsScheduleSession(
+            timeLabel: '5:30 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 29),
         headline: 'Full VIQRC qualifier day',
         note:
-            'ES and MS practice fields stay split by room group throughout the day.',
+            'ES and MS practice fields stay split by room group throughout the official Wednesday qualifier schedule.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:00 PM',
+            title: 'Practice fields open',
+            location:
+                'ES: Rooms 120-127, 130-132  •  MS: Rooms 260-267, 274-276',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 12:00 PM',
             title: 'Skills Challenge',
@@ -422,6 +649,13 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
           ),
           WorldsScheduleSession(
             timeLabel: '1:00 PM - 5:15 PM',
+            title: 'Practice fields open',
+            location:
+                'ES: Rooms 120-127, 130-132  •  MS: Rooms 260-267, 274-276',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '1:00 PM - 5:15 PM',
             title: 'Skills Challenge',
             location: 'Rooms 100-106',
             tone: WorldsScheduleSessionTone.competition,
@@ -432,13 +666,33 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
           ),
+          WorldsScheduleSession(
+            timeLabel: '5:30 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
         ],
       ),
       WorldsScheduleDay(
         date: DateTime(2026, 4, 30),
         headline: 'Divisional playoffs and IQ finals',
-        note: 'Published finals block runs from the Dome in the afternoon.',
+        note:
+            'Thursday wraps with divisional playoffs, Dome finals, and the game unveil on the official RECF agenda.',
         sessions: <WorldsScheduleSession>[
+          WorldsScheduleSession(
+            timeLabel: '7:45 AM',
+            title: 'Venue opens',
+            location: 'Halls 1-5',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '8:00 AM - 12:15 PM',
+            title: 'Practice fields open',
+            location:
+                'ES: Rooms 120-127, 130-132  •  MS: Rooms 260-267, 274-276',
+            tone: WorldsScheduleSessionTone.logistics,
+          ),
           WorldsScheduleSession(
             timeLabel: '8:00 AM - 10:15 AM',
             title: 'Final Skills Challenge window',
@@ -450,6 +704,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Qualification matches',
             location: 'Halls 1-5',
             tone: WorldsScheduleSessionTone.competition,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '12:00 PM - 1:00 PM',
+            title: 'Lunch break',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
           WorldsScheduleSession(
             timeLabel: '12:30 PM',
@@ -468,6 +728,12 @@ final worldsScheduleTracks = <WorldsScheduleTrackData>[
             title: 'Finals, Closing Ceremonies, and Game Unveil',
             location: 'Dome',
             tone: WorldsScheduleSessionTone.milestone,
+          ),
+          WorldsScheduleSession(
+            timeLabel: '5:00 PM',
+            title: 'Venue closes',
+            location: 'All locations',
+            tone: WorldsScheduleSessionTone.logistics,
           ),
         ],
       ),

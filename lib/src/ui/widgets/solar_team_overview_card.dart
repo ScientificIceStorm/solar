@@ -22,9 +22,6 @@ class SolarTeamOverviewCard extends StatelessWidget {
     final winRateLabel = teamStats.winRate == null
         ? '--'
         : '${teamStats.winRate!.toStringAsFixed(1)}%';
-    final totalEvents = teamStats.allEvents.isNotEmpty
-        ? teamStats.allEvents.length
-        : teamStats.futureEvents.length + teamStats.pastEvents.length;
     final metricRows = <_TeamPosterMetric>[
       _TeamPosterMetric(label: 'W/L/T', value: teamStats.recordLabel),
       _TeamPosterMetric(label: 'WIN RATE', value: winRateLabel),
@@ -38,10 +35,6 @@ class SolarTeamOverviewCard extends StatelessWidget {
         value: teamStats.skillsScoreLabel,
       ),
       _TeamPosterMetric(label: 'SKILLS RANK', value: teamStats.skillsRankLabel),
-      _TeamPosterMetric(
-        label: 'UPCOMING',
-        value: '${teamStats.futureEvents.length}/$totalEvents',
-      ),
       _TeamPosterMetric(
         label: 'CCWM',
         value: _decimalLabel(teamStats.ccwm, signed: true),

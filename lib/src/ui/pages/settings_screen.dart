@@ -979,7 +979,7 @@ class _TopBarAccentSelector extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const Text(
-            'Top bar color',
+            'Top bar accent',
             style: TextStyle(
               color: Color(0xFF8E92A7),
               fontSize: 12,
