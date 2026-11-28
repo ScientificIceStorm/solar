@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const ui = Object.fromEntries(
-  'title searchForm search season grade region lookup count status results pagination range previous next detail home browse footer homeForm homeQuery suggestions jumpNow browsePanel'.split(' ').map((id) => [id, $(id)])
+  'title searchForm search season grade region lookup count status results pagination range previous next detail home browse footer homeForm homeQuery suggestions browsePanel'.split(' ').map((id) => [id, $(id)])
 );
 const views = {
   skills: ['World Skills', 'Search teams…'],
@@ -22,7 +22,6 @@ let searchIndex;
 let listError = '';
 let loading = false;
 let seasonsReady = false;
-let jumpToCurrentWeek = false;
 let homeSearchTimer;
 let eventRefreshTimer;
 let teamReplayObserver;
@@ -170,7 +169,6 @@ async function loadRows() {
   ratingIndexUpdating = false;
   listError = '';
   loading = true;
-  jumpToCurrentWeek = view === 'events';
   ui.region.replaceChildren(new Option('All regions', ''));
   render();
   try {
@@ -219,8 +217,8 @@ function table(columns, body) {
 function eventRow(event) {
   const name = escape(event.name);
   const link = event.sku ? eventLink(event.sku, event.name, event.seasonId) : name;
-  return '<tr data-row-link><td>' + link + '<span data-webcast-sku="' + escape(event.sku) + '"></span></td><td class="muted">' + escape(locationText(event.location)) +
-    '</td><td class="numeric">' + escape(dateRange(event)) + '</td></tr>';
+  return '<tr data-row-link><td>' + link + '<span data-webcast-sku="' + escape(event.sku) + '"></span></td><td class="event-detail">' + escape(locationText(event.location)) +
+    '</td><td class="event-detail event-dates numeric">' + escape(dateRange(event)) + '</td></tr>';
 }
 
 function updateWebcastBadge(element) {
@@ -228,7 +226,6 @@ function updateWebcastBadge(element) {
   if (url && !element.firstChild) element.innerHTML = externalLink(url, 'Webcast');
 }
 
-const weekLength = 7 * 86400000;
 function weekStart(value) {
   const date = new Date(value);
   if (!value || Number.isNaN(date.valueOf())) return null;
@@ -243,12 +240,13 @@ function jumpList(label, links) {
       escape(name) + '</strong><small>' + escape(caption) + '</small></a>').join('') + '</div></aside>';
 }
 
-function wireJumps(container) {
+function wireJumps(container, beforeJump) {
   container.querySelector('.jump-list')?.addEventListener('click', (event) => {
     const link = event.target.closest('a');
     if (!link) return;
     event.preventDefault();
     const target = $(link.hash.slice(1));
+    beforeJump?.(target);
     target?.scrollIntoView({block: 'start'});
     target?.focus({preventScroll: true});
     container.querySelectorAll('.jump-list a').forEach((item) => {
@@ -258,52 +256,92 @@ function wireJumps(container) {
   });
 }
 
-function renderCalendar(events) {
+function eventCount(count) {
+  return count + (count === 1 ? ' event' : ' events');
+}
+
+function eventTable(events) {
+  return table([['Event'], ['Location'], ['Dates', 'numeric']], events.map(eventRow));
+}
+
+function weekName(start) {
+  return start === null ? 'Dates pending' : 'Week of ' + dateLabel(start);
+}
+
+// Weeks run Monday to Sunday in UTC. Undated events count as upcoming.
+function groupEvents(events) {
+  const now = weekStart(new Date());
+  const groups = {current: [], ongoing: [], upcoming: [], archived: []};
+  for (const event of events) {
+    const start = weekStart(event.start);
+    const key = start === null || start > now ? 'upcoming' : start === now ? 'current' :
+      weekStart(event.end) >= now ? 'ongoing' : 'archived';
+    groups[key].push(event);
+  }
+  return {now, ...groups};
+}
+
+// Soonest week first, with undated events last.
+function byWeek(events) {
   const weeks = new Map();
   for (const event of events) {
     const start = weekStart(event.start);
     if (!weeks.has(start)) weeks.set(start, []);
     weeks.get(start).push(event);
   }
-  const groups = [...weeks].sort(([a], [b]) => (a ?? Infinity) - (b ?? Infinity))
-    .map(([start, rows]) => ({
-      start, rows, id: 'week-' + (start ?? 'tbd'),
-      name: start === null ? 'Dates pending' : 'Week of ' + dateLabel(start),
-      caption: rows.length + (rows.length === 1 ? ' event' : ' events'),
-    }));
-  const now = weekStart(new Date());
-  const nearest = groups.find((group) => group.start === now) ||
-    groups.find((group) => group.start !== null && group.start > now) ||
-    groups.findLast((group) => group.start !== null);
-  ui.jumpNow.hidden = !nearest;
-  if (nearest) {
-    ui.jumpNow.textContent = nearest.start === now ? '↓ This week' : nearest.start > now ? '↓ Next events' : '↓ Latest events';
-    ui.jumpNow.onclick = () => ui.results.querySelector('a[href="#' + nearest.id + '"]')?.click();
-  }
+  return [...weeks].sort(([a], [b]) => (a ?? Infinity) - (b ?? Infinity));
+}
+
+function disclosure(className, id, heading, count) {
+  return '<details class="' + className + '"' + (id ? ' id="' + id + '" tabindex="-1"' : '') +
+    '><summary class="section-heading">' + heading + '<span>' + eventCount(count) + '</span></summary></details>';
+}
+
+// Fill a <details> the first time it opens.
+function buildOnOpen(details, build) {
+  let built = false;
+  const fill = () => {
+    if (built || !details.open) return;
+    built = true;
+    build(details);
+    details.querySelectorAll('[data-webcast-sku]').forEach(updateWebcastBadge);
+  };
+  details.addEventListener('toggle', fill);
+  return fill;
+}
+
+function renderCalendar(events) {
+  const {now, current, ongoing, upcoming, archived} = groupEvents(events);
+  const addTable = (rows) => (details) => details.insertAdjacentHTML('beforeend', eventTable(rows));
+  const addWeeks = (weeks) => (details) => {
+    details.insertAdjacentHTML('beforeend', weeks.map(([start, rows]) =>
+      disclosure('event-week', '', '<h3>' + escape(weekName(start)) + '</h3>', rows.length)).join(''));
+    details.querySelectorAll('.event-week').forEach((week, index) => buildOnOpen(week, addTable(weeks[index][1])));
+  };
+  const sections = [
+    {id: 'events-ongoing', name: 'Ongoing', title: 'Ongoing from earlier weeks', rows: ongoing,
+      build: addTable(byWeek(ongoing).flatMap(([, rows]) => rows))},
+    {id: 'events-upcoming', name: 'Upcoming', rows: upcoming, build: addWeeks(byWeek(upcoming))},
+    {id: 'events-archived', name: 'Archived', rows: archived, build: addWeeks(byWeek(archived).reverse())},
+  ].filter((section) => section.rows.length);
+  const links = [{id: 'events-this-week', name: 'This week', rows: current}, ...sections]
+    .map(({id, name, rows}) => ({id, name, caption: eventCount(rows.length)}));
   $('eventSearchFallback').hidden = true;
-  ui.results.innerHTML = '<div class="split-layout"><div class="calendar-rail">' +
+  ui.results.innerHTML = '<div class="split-layout events-layout"><div class="calendar-rail">' +
     '<button type="button" class="event-search-trigger" data-event-search aria-haspopup="dialog">Search events</button>' +
-    jumpList('Season weeks', groups) + '</div>' +
-    '<div class="split-content">' + groups.map((group) =>
-      '<section class="panel week-card" tabindex="-1" id="' + group.id + '"><div class="section-heading"><h2>' +
-      escape(group.name) + '</h2><span>' + escape(group.caption) + '</span></div>' +
-      table([['Event'], ['Location'], ['Dates', 'numeric']], group.rows.map(eventRow)) +
-      '</section>').join('') + '</div></div>';
-  wireJumps(ui.results);
+    jumpList('Events', links) + '</div><div class="split-content">' +
+    '<section class="panel week-card" tabindex="-1" id="events-this-week"><div class="section-heading"><div>' +
+    '<h2>This week</h2><p>' + escape(weekName(now)) + '</p></div><span>' + eventCount(current.length) + '</span></div>' +
+    (current.length ? eventTable(byWeek(current)[0][1]) : '<p class="status">No events this week.</p>') + '</section>' +
+    sections.map(({id, name, title, rows}) =>
+      disclosure('panel week-card', id, '<h2>' + (title || name) + '</h2>', rows.length)).join('') + '</div></div>';
+  const fills = new Map(sections.map(({id, build}) => [$(id), buildOnOpen($(id), build)]));
+  wireJumps(ui.results, (target) => {
+    if (!fills.has(target)) return;
+    target.open = true;
+    fills.get(target)();
+  });
   ui.results.querySelectorAll('[data-webcast-sku]').forEach(updateWebcastBadge);
-  if (nearest && jumpToCurrentWeek && !ui.search.value.trim()) {
-    jumpToCurrentWeek = false;
-    requestAnimationFrame(() => {
-      if (view !== 'events' || ui.search.value.trim()) return;
-      const link = ui.results.querySelector('a[href="#' + nearest.id + '"]');
-      link?.setAttribute('aria-current', 'location');
-      $(nearest.id)?.scrollIntoView({behavior: 'instant', block: 'start'});
-      if (link && link.offsetParent) {
-        const rail = link.closest('.jump-list');
-        rail.scrollTop = Math.max(0, link.offsetTop - rail.clientHeight / 2);
-      }
-    });
-  }
 }
 
 function render() {
@@ -324,7 +362,6 @@ function render() {
     (insightValue(b, insightMetric) ?? -Infinity) - (insightValue(a, insightMetric) ?? -Infinity) || a.rank - b.rank);
   const visible = filtered.slice(start, start + pageSize);
   ui.pagination.hidden = isEvents || filtered.length <= pageSize;
-  ui.jumpNow.hidden = !isEvents || !filtered.length;
   ui.range.textContent = (start + 1) + '–' + Math.min(start + pageSize, filtered.length) + ' of ' + filtered.length.toLocaleString();
   ui.previous.disabled = !page;
   ui.next.disabled = start + pageSize >= filtered.length;

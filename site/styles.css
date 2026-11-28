@@ -119,7 +119,7 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
 .home-search form,.panel button,.top-nav a,.jump-list a,.team-link,.event-link{transition:background-color .18s ease,color .18s ease,box-shadow .18s ease}
 .home-search form:focus-within{box-shadow:0 0 0 3px #ffffff5c,0 15px 35px #06162f46}
 .calendar-mode{background:transparent;border:0;border-radius:0;box-shadow:none;overflow:visible}
-.calendar-mode>.toolbar,.calendar-mode>.status{background:#f0f5fff0;border:1px solid #fff8;border-radius:13px;margin-bottom:12px}
+.calendar-mode>.toolbar,.calendar-mode>.status{background:#f0f5fff0;border:1px solid #fff8;border-radius:13px;margin-bottom:20px}
 .split-layout{display:grid;grid-template-columns:minmax(155px,205px) minmax(0,1fr);align-items:start;gap:16px}
 .split-content{min-width:0;display:grid;gap:12px}
 .jump-list{position:sticky;top:92px;max-height:calc(100svh - 110px);overflow:auto;scrollbar-width:thin;padding:8px;background:#eaf1fbdc;border:1px solid #fff9;border-radius:14px;backdrop-filter:blur(12px)}
@@ -133,8 +133,6 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
 .section-heading h2,#detail .section-heading h2{padding:0;margin:0;font-size:15px;letter-spacing:-.02em}
 .section-heading p{margin:4px 0 0;color:#53637e;font-size:11px}
 .section-heading>span{font-size:10px;font-weight:750;color:#354b6c;background:#e2ebfb;border-radius:30px;padding:4px 9px;white-space:nowrap}
-.week-card td:first-child{white-space:normal;min-width:240px}
-.week-card td{height:auto;padding-block:9px}
 .match-tables{padding:0 10px 10px;display:grid;gap:10px}
 .match-tables .table-wrap{border-radius:9px;border:1px solid #d7e4f3}
 .match-tables table{min-width:495px}
@@ -167,7 +165,6 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
   .jump-list{position:static;max-height:none}
   .jump-list>div{display:flex;overflow:auto;gap:4px}
   .jump-list a{flex:0 0 auto;max-width:170px;background:#f8fbff9c}
-  .week-card td:first-child{min-width:185px}
   .team-event-card .section-heading{align-items:flex-start}
 }
 @media(prefers-reduced-motion:reduce){
@@ -195,7 +192,7 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
 .home-search input:focus,.toolbar input:focus{outline:none}
 .calendar-mode>.toolbar{position:static;background:#eaf2ffdb;backdrop-filter:blur(16px);box-shadow:0 4px 14px #06162f20}
 .calendar-rail{position:sticky;top:92px;display:grid;gap:8px}
-.calendar-rail .jump-list{position:static;max-height:calc(100svh - 152px)}
+.calendar-rail .jump-list{position:static}
 .event-search-trigger{justify-self:start;display:inline-flex;align-items:center;gap:7px;background:#edf4ffdf;box-shadow:0 3px 12px #06162f23}
 .event-search-trigger::before{content:"";width:14px;height:14px;background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23394f74' stroke-width='2'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='m16 16 5 5'/%3E%3C/svg%3E")}
 .event-search-dialog{inset:88px auto auto max(14px,calc((100vw - 1120px)/2));margin:0;width:min(450px,calc(100% - 28px));padding:0;overflow:hidden;border:1px solid #fff9;border-radius:19px;background:#eef4ff;color:#172b4b;box-shadow:0 12px 50px #06162f72;transform-origin:top left}
@@ -319,7 +316,6 @@ footer a{text-decoration:none}footer a:hover{text-decoration:underline}.divider{
 @media(max-width:760px){
   .info-nav button{width:auto;white-space:nowrap}
   .calendar-rail{position:static}
-  .calendar-rail .jump-list{max-height:none}
   .event-search-dialog{top:65px}
   .match-tables th,.match-tables td{font-size:10px}
   .match-label{font-size:10px;gap:3px}
@@ -435,3 +431,46 @@ button:active:not(:disabled),.jump-list a:active,.map-events a:active{transform:
 #profileTeamForm{display:grid;gap:6px;margin-top:6px}#profileTeamForm a{font-size:13px}
 .analysis-link{display:inline-grid;place-items:center;height:20px;padding:0 6px;margin-right:4px;border-radius:6px;background:#1b46ac;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.04em;text-decoration:none;vertical-align:middle}
 .analysis-link:hover{background:#143a88}
+/* Events page: weekly sections */
+.events-layout{gap:22px}
+.events-layout .split-content{gap:20px}
+.week-card{min-height:0}
+.week-card .section-heading{padding:20px 24px}
+.week-card h2,.week-card h3{margin:0;line-height:1.4}
+.week-card h3{font-size:14px;letter-spacing:-.01em}
+.week-card .section-heading p{margin-top:5px;font-size:12.5px}
+.week-card summary{justify-content:flex-start;gap:12px;list-style:none;cursor:pointer;transition:background-color .18s ease}
+.week-card summary::-webkit-details-marker{display:none}
+.week-card summary::before{content:"";flex:none;width:7px;height:7px;margin-right:2px;border:solid #526888;border-width:2px 2px 0 0;transform:rotate(45deg);transition:transform .18s ease}
+.week-card details[open]>summary::before,.week-card[open]>summary::before{transform:rotate(135deg)}
+.week-card summary:hover{background:#e9f1ff}
+.week-card summary:focus-visible{outline-offset:-3px}
+.week-card summary>span{margin-left:auto}
+.event-week{border-top:1px solid #dbe4f3}
+.week-card .event-week>summary{padding-block:17px}
+.week-card .status{padding:0 24px 22px}
+.week-card table{white-space:normal;line-height:1.6}
+.week-card th{padding:12px 24px;background:#ebf1fc;color:#5a6b8a;border-color:#dbe4f3}
+.week-card th:first-child{width:54%}
+.week-card td{height:auto;padding:19px 24px;border-color:#dbe4f3}
+.week-card tbody tr:last-child td{border-bottom:0}
+.week-card tbody tr:hover{background:#eaf2ff}
+.week-card td:first-child .event-link,.week-card td:first-child{font-weight:600}
+.week-card .event-detail{font-size:12.5px;color:#53637e}
+.week-card .event-dates{white-space:nowrap}
+@media(max-width:760px){
+  .events-layout{gap:14px}
+  .events-layout .split-content{gap:12px}
+  .calendar-mode>.toolbar,.calendar-mode>.status{margin-bottom:14px}
+  .week-card .section-heading{padding:16px}
+  .week-card .event-week>summary{padding:14px 16px}
+  .week-card .status{padding:0 16px 18px}
+  .week-card table,.week-card tbody,.week-card tr,.week-card td{display:block}
+  .week-card thead{display:none}
+  .week-card tr{padding:14px 16px;border-top:1px solid #dbe4f3}
+  .week-card td{padding:0;border:0;text-align:left}
+  .week-card td+td{margin-top:3px}
+  .week-card .event-dates{white-space:normal}
+}
+@media(max-width:460px){.events-layout .week-card{scroll-margin-top:120px}}
+@media(min-width:761px) and (max-width:980px){.week-card th,.week-card td{padding-inline:16px}.week-card .event-dates{white-space:normal}}
