@@ -59,6 +59,8 @@ class LocationSummary {
     required this.region,
     required this.postcode,
     required this.country,
+    this.latitude,
+    this.longitude,
   });
 
   final String venue;
@@ -67,8 +69,13 @@ class LocationSummary {
   final String region;
   final String postcode;
   final String country;
+  final double? latitude;
+  final double? longitude;
 
   factory LocationSummary.fromJson(JsonMap json) {
+    final coordinates = asJsonMap(json['coordinates']);
+    final latitude = coordinates['lat'] ?? json['latitude'];
+    final longitude = coordinates['lon'] ?? json['longitude'];
     return LocationSummary(
       venue: readString(json['venue']),
       address1: readString(json['address_1'] ?? json['address1']),
@@ -76,6 +83,8 @@ class LocationSummary {
       region: readString(json['region']),
       postcode: readString(json['postcode']),
       country: readString(json['country']),
+      latitude: double.tryParse('$latitude'),
+      longitude: double.tryParse('$longitude'),
     );
   }
 
@@ -87,6 +96,8 @@ class LocationSummary {
       'region': region,
       'postcode': postcode,
       'country': country,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
   }
 }
@@ -392,16 +403,28 @@ class MatchAlliance {
     required this.color,
     required this.score,
     required this.teams,
+    this.disqualifiedTeamIds = const [],
   });
 
   final String color;
   final int score;
   final List<TeamReference> teams;
+  final List<int> disqualifiedTeamIds;
 
   factory MatchAlliance.fromJson(JsonMap json) {
     return MatchAlliance(
       color: readString(json['color']),
       score: readInt(json['score'], -1),
+      disqualifiedTeamIds: {
+        if (json['disqualifiedTeamIds'] case final List ids)
+          ...ids.whereType<int>(),
+        for (final row in asJsonMapList(json['teams']))
+          if ((row['disqualified'] ?? row['dq'] ?? row['is_disqualified']) ==
+              true)
+            TeamReference.fromJson(
+              asJsonMap(row['team']).isEmpty ? row : asJsonMap(row['team']),
+            ).id,
+      }.where((id) => id > 0).toList(),
       teams: asJsonMapList(json['teams'])
           .map((teamRow) {
             final teamJson = asJsonMap(teamRow['team']);
@@ -417,6 +440,8 @@ class MatchAlliance {
     return <String, dynamic>{
       'color': color,
       'score': score,
+      if (disqualifiedTeamIds.isNotEmpty)
+        'disqualifiedTeamIds': disqualifiedTeamIds,
       'teams': teams.map((team) => team.toJson()).toList(),
     };
   }
@@ -504,6 +529,7 @@ class RankingRecord {
     required this.highScore,
     required this.averagePoints,
     required this.totalPoints,
+    this.awp,
   });
 
   final int id;
@@ -520,6 +546,7 @@ class RankingRecord {
   final int highScore;
   final double averagePoints;
   final int totalPoints;
+  final int? awp;
 
   factory RankingRecord.fromJson(JsonMap json) {
     final record = asJsonMap(json['record']);
@@ -558,6 +585,9 @@ class RankingRecord {
       wp: readInt(json['wp'], -1),
       ap: readInt(json['ap'], -1),
       sp: readInt(json['sp'], -1),
+      awp: int.tryParse(
+        '${json['awp'] ?? json['autonomous_win_points'] ?? ''}',
+      ),
       highScore: readInt(json['high_score'] ?? json['highScore'], -1),
       averagePoints: readDouble(
         json['average_points'] ?? json['averagePoints'],
@@ -580,6 +610,7 @@ class RankingRecord {
       'wp': wp,
       'ap': ap,
       'sp': sp,
+      if (awp != null) 'awp': awp,
       'highScore': highScore,
       'averagePoints': averagePoints,
       'totalPoints': totalPoints,

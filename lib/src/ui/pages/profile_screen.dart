@@ -248,9 +248,6 @@ class _ProfileTeamGraphDeckState extends State<_ProfileTeamGraphDeck> {
   }
 
   Future<_ProfileGraphDeckData> _loadGraphDeckData(TeamSummary team) async {
-    await widget.controller.ensureSolarizeCoverageForTeams(
-      teams: <TeamSummary>[team],
-    );
     final teamStats = await widget.controller.fetchTeamStatsSnapshot(team);
     return _hydrateGraphDeckData(
       headline: 'Team ${teamStats.team.number}',

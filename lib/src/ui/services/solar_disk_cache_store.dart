@@ -6,6 +6,10 @@ import 'package:path_provider/path_provider.dart';
 class SolarDiskCacheStore {
   SolarDiskCacheStore._();
 
+  SolarDiskCacheStore.inMemory() : _memory = {};
+
+  Map<String, _SolarCacheEnvelope>? _memory;
+
   static final SolarDiskCacheStore instance = SolarDiskCacheStore._();
 
   Future<List<T>?> readList<T>({
@@ -31,10 +35,14 @@ class SolarDiskCacheStore {
       return null;
     }
 
-    return items
-        .whereType<Map>()
-        .map((item) => fromJson(Map<String, dynamic>.from(item)))
-        .toList(growable: false);
+    try {
+      return items
+          .whereType<Map>()
+          .map((item) => fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> writeList<T>({
@@ -57,6 +65,10 @@ class SolarDiskCacheStore {
   }
 
   Future<void> clear(String namespace, String key) async {
+    if (_memory != null) {
+      _memory!.remove('$namespace|$key');
+      return;
+    }
     final file = await _fileFor(namespace: namespace, key: key);
     if (await file.exists()) {
       await file.delete();
@@ -67,6 +79,7 @@ class SolarDiskCacheStore {
     required String namespace,
     required String key,
   }) async {
+    if (_memory != null) return _memory!['$namespace|$key'];
     try {
       final file = await _fileFor(namespace: namespace, key: key);
       if (!await file.exists()) {
@@ -88,10 +101,19 @@ class SolarDiskCacheStore {
     required String key,
     required _SolarCacheEnvelope envelope,
   }) async {
+    if (_memory != null) {
+      _memory!['$namespace|$key'] = envelope;
+      return;
+    }
     try {
       final file = await _fileFor(namespace: namespace, key: key);
       await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode(envelope.toJson()), flush: true);
+      // Foreground and background isolates may read while a refresh writes.
+      final temporary = File(
+        '${file.path}.$pid.${DateTime.now().microsecondsSinceEpoch}.tmp',
+      );
+      await temporary.writeAsString(jsonEncode(envelope.toJson()), flush: true);
+      await temporary.rename(file.path);
     } catch (_) {
       // Keep the app responsive if local cache writes fail.
     }

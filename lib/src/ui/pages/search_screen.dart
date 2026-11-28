@@ -44,6 +44,7 @@ class _SearchScreenState extends State<SearchScreen> {
   late SearchResultScope _scope = widget.args.initialScope;
   AppSessionController? _sessionController;
   Future<SolarQuickviewSnapshot?>? _quickviewFuture;
+  Timer? _searchDebounce;
 
   @override
   void didChangeDependencies() {
@@ -63,17 +64,21 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _handleSearchChanged(String value) {
+    _searchDebounce?.cancel();
     final normalizedQuery = value.trim();
     final controller = _sessionController;
     if (controller != null && normalizedQuery.length >= 2) {
       unawaited(controller.preloadSearchEvents());
       unawaited(controller.preloadSearchTeams());
-      unawaited(controller.preloadLiveSearchTeams(normalizedQuery));
+      _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+        unawaited(controller.preloadLiveSearchTeams(normalizedQuery));
+      });
     }
     setState(() {});
   }
@@ -220,45 +225,47 @@ class _SearchInputCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Row(
-              children: SearchResultScope.values.map((option) {
-                final selected = option == scope;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: InkWell(
-                      onTap: () => onScopeSelected(option),
-                      borderRadius: BorderRadius.circular(11),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? const Color(0xFF16182C)
-                              : Colors.transparent,
+              children: SearchResultScope.values
+                  .map((option) {
+                    final selected = option == scope;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: InkWell(
+                          onTap: () => onScopeSelected(option),
                           borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: selected
-                                ? const Color(0xFF16182C)
-                                : const Color(0xFFE2E5F0),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          _searchScopeLabel(option),
-                          style: TextStyle(
-                            color: selected
-                                ? Colors.white
-                                : const Color(0xFF5F6478),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOutCubic,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? const Color(0xFF16182C)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(11),
+                              border: Border.all(
+                                color: selected
+                                    ? const Color(0xFF16182C)
+                                    : const Color(0xFFE2E5F0),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              _searchScopeLabel(option),
+                              style: TextStyle(
+                                color: selected
+                                    ? Colors.white
+                                    : const Color(0xFF5F6478),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                );
-              }).toList(growable: false),
+                    );
+                  })
+                  .toList(growable: false),
             ),
           ],
         ),
@@ -876,9 +883,7 @@ class _SearchUpcomingEventsSection extends StatelessWidget {
               ),
             )
           : events.isEmpty
-          ? const _SectionEmptyLabel(
-              'No upcoming events yet.',
-            )
+          ? const _SectionEmptyLabel('No upcoming events yet.')
           : Column(
               children: events
                   .map((event) => _SearchEventTile(event: event))
@@ -960,13 +965,15 @@ String _eventLocationLabel(LocationSummary location) {
 
 List<EventSummary> _upcomingSearchEvents(List<EventSummary> events) {
   final now = DateTime.now();
-  final upcoming = events.where((event) {
-    final anchor = event.end?.toLocal() ?? event.start?.toLocal();
-    if (anchor == null) {
-      return true;
-    }
-    return !anchor.isBefore(now.subtract(const Duration(days: 1)));
-  }).toList(growable: false);
+  final upcoming = events
+      .where((event) {
+        final anchor = event.end?.toLocal() ?? event.start?.toLocal();
+        if (anchor == null) {
+          return true;
+        }
+        return !anchor.isBefore(now.subtract(const Duration(days: 1)));
+      })
+      .toList(growable: false);
 
   upcoming.sort((a, b) {
     final aAnchor = _eventSortAnchor(a);

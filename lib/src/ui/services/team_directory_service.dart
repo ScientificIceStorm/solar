@@ -27,7 +27,6 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
   final SolarApi _api;
   static const _eventsTimeout = Duration(seconds: 16);
   static const _statsTimeout = Duration(seconds: 12);
-  static const _openSkillTimeout = Duration(seconds: 7);
 
   @override
   Future<TeamStatsSnapshot> loadTeamStats(
@@ -79,16 +78,9 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
                 team: team,
               ),
             );
-      final openSkillFuture = seedOpenSkillEntry != null || seasonId == null
-          ? Future<OpenSkillCacheEntry?>.value(seedOpenSkillEntry)
-          : _safeNullableFuture<OpenSkillCacheEntry>(
-              () => _loadOpenSkillEntry(
-                seasonId: seasonId!,
-                gradeLevel: gradeLevel,
-                team: team,
-              ),
-              timeout: _openSkillTimeout,
-            );
+      final openSkillFuture = Future<OpenSkillCacheEntry?>.value(
+        seedOpenSkillEntry,
+      );
       final results = await Future.wait<Object?>(<Future<Object?>>[
         rankingsFuture.then<Object?>((value) => value),
         matchHistoryFuture.then<Object?>((value) => value),
@@ -247,10 +239,7 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
     return upcoming.take(6).toList(growable: false);
   }
 
-  Future<List<RankingRecord>> _loadRankings(
-    int teamId, {
-    int? seasonId,
-  }) async {
+  Future<List<RankingRecord>> _loadRankings(int teamId, {int? seasonId}) async {
     final rankings = await _api.robotEvents.fetchTeamRankings(
       teamId,
       season: seasonId,
@@ -384,56 +373,6 @@ class SolarTeamDirectoryService implements TeamDirectoryService {
               .toList(growable: false);
       for (final entry in entries) {
         if (entry.teamId == team.id ||
-            entry.teamNumber.trim().toUpperCase() ==
-                team.number.trim().toUpperCase()) {
-          return entry;
-        }
-      }
-    } catch (_) {
-      return null;
-    }
-
-    return null;
-  }
-
-  Future<OpenSkillCacheEntry?> _loadOpenSkillEntry({
-    required int seasonId,
-    required String gradeLevel,
-    required TeamSummary team,
-  }) async {
-    final directMatch = await _loadOpenSkillEntryForGrade(
-      seasonId: seasonId,
-      gradeLevel: gradeLevel,
-      team: team,
-    );
-    if (directMatch != null) {
-      return directMatch;
-    }
-
-    final alternateGradeLevel = _alternateGradeLevel(gradeLevel);
-    if (alternateGradeLevel == null || alternateGradeLevel == gradeLevel) {
-      return null;
-    }
-
-    return _loadOpenSkillEntryForGrade(
-      seasonId: seasonId,
-      gradeLevel: alternateGradeLevel,
-      team: team,
-    );
-  }
-
-  Future<OpenSkillCacheEntry?> _loadOpenSkillEntryForGrade({
-    required int seasonId,
-    required String gradeLevel,
-    required TeamSummary team,
-  }) async {
-    try {
-      final entries = await _api.roboServer.fetchOpenSkillCache(
-        season: seasonId,
-        gradeLevel: gradeLevel,
-      );
-      for (final entry in entries) {
-        if (entry.id == team.id ||
             entry.teamNumber.trim().toUpperCase() ==
                 team.number.trim().toUpperCase()) {
           return entry;

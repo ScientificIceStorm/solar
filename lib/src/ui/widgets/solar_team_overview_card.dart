@@ -19,7 +19,6 @@ class SolarTeamOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final solarizeRank = teamStats.openSkillEntry?.ranking;
     final winRateLabel = teamStats.winRate == null
         ? '--'
         : '${teamStats.winRate!.toStringAsFixed(1)}%';
@@ -39,12 +38,6 @@ class SolarTeamOverviewCard extends StatelessWidget {
         value: teamStats.skillsScoreLabel,
       ),
       _TeamPosterMetric(label: 'SKILLS RANK', value: teamStats.skillsRankLabel),
-      _TeamPosterMetric(
-        label: 'SOLARIZE RANK',
-        value: solarizeRank == null || solarizeRank <= 0
-            ? '--'
-            : '#$solarizeRank',
-      ),
       _TeamPosterMetric(
         label: 'UPCOMING',
         value: '${teamStats.futureEvents.length}/$totalEvents',

@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _homeScrollController = ScrollController();
   AppSessionController? _sessionController;
   _HomeSearchScope _searchScope = _HomeSearchScope.all;
+  Timer? _searchDebounce;
 
   @override
   void didChangeDependencies() {
@@ -56,12 +57,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _homeScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _handleSearchChanged(String value) {
+    _searchDebounce?.cancel();
     final normalizedQuery = value.trim();
     final controller = _sessionController;
 
@@ -73,7 +76,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (normalizedQuery.length >= 2) {
       unawaited(controller.preloadSearchEvents());
       unawaited(controller.preloadSearchTeams());
-      unawaited(controller.preloadLiveSearchTeams(normalizedQuery));
+      _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+        unawaited(controller.preloadLiveSearchTeams(normalizedQuery));
+      });
     }
 
     setState(() {});

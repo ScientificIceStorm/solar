@@ -1,3 +1,4 @@
+import 'package:solar_v6/src/ui/services/solar_disk_cache_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:solar_v6/src/app/app_session_controller.dart';
@@ -63,6 +64,7 @@ void main() {
       },
     );
     final controller = AppSessionController(
+      cacheStore: SolarDiskCacheStore.inMemory(),
       repository: repository,
       teamDirectory: teamDirectory,
     );
@@ -70,9 +72,13 @@ void main() {
     await controller.initialize();
     await Future<void>.delayed(Duration.zero);
     await controller.updatePreferredSeason(seasonId: 190);
+    await Future<void>.delayed(Duration.zero);
+    await controller.refreshTeamStats();
     expect(teamDirectory.lastLoadedPreferredSeasonId, 190);
 
     await controller.updateTeam(teamNumber: '229V');
+    await Future<void>.delayed(Duration.zero);
+    await controller.refreshTeamStats();
     expect(teamDirectory.lastValidatedPreferredSeasonId, 190);
     expect(teamDirectory.lastLoadedPreferredSeasonId, 190);
   });
@@ -94,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Competition'), findsOneWidget);
-    expect(find.text('Team number'), findsOneWidget);
+    expect(find.text('Primary team number'), findsOneWidget);
   });
 
   testWidgets('onboarding creates a local team profile and opens home', (
@@ -198,6 +204,7 @@ void main() {
 
       expect(find.byType(SettingsScreen), findsOneWidget);
       expect(find.text('Settings'), findsWidgets);
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey<String>('nav-rankings')));
       await tester.pump();
@@ -205,6 +212,7 @@ void main() {
 
       expect(find.byType(RankingsScreen), findsOneWidget);
       expect(find.text('SKILL'), findsWidgets);
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey<String>('nav-calendar')));
       await tester.pump();
@@ -253,6 +261,7 @@ Future<AppSessionController> _buildTestController() async {
   );
 
   final controller = AppSessionController(
+    cacheStore: SolarDiskCacheStore.inMemory(),
     repository: InMemoryAccountRepository(),
     teamDirectory: FakeTeamDirectoryService(
       teamsByNumber: <String, TeamSummary>{'98601Y': team},

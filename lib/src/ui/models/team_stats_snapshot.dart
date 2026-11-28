@@ -25,6 +25,54 @@ class TeamStatsSnapshot {
   final DateTime? lastUpdated;
   final String? errorMessage;
 
+  TeamStatsSnapshot withWorldSkillsEntry(WorldSkillsEntry entry) {
+    return TeamStatsSnapshot(
+      team: team,
+      allEvents: allEvents,
+      upcomingEvents: upcomingEvents,
+      rankings: rankings,
+      matchHistory: matchHistory,
+      openSkillEntry: openSkillEntry,
+      worldSkillsEntry: entry,
+      lastUpdated: lastUpdated,
+      errorMessage: errorMessage,
+    );
+  }
+
+  factory TeamStatsSnapshot.fromJson(
+    Map<String, dynamic> json,
+  ) => TeamStatsSnapshot(
+    team: TeamSummary.fromJson(Map<String, dynamic>.from(json['team'] as Map)),
+    allEvents: (json['allEvents'] as List? ?? [])
+        .map((e) => EventSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+    upcomingEvents: (json['upcomingEvents'] as List? ?? [])
+        .map((e) => EventSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+    rankings: (json['rankings'] as List? ?? [])
+        .map((e) => RankingRecord.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+    matchHistory: (json['matchHistory'] as List? ?? [])
+        .map((e) => MatchSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList(),
+    worldSkillsEntry: json['worldSkillsEntry'] is Map
+        ? WorldSkillsEntry.fromJson(
+            Map<String, dynamic>.from(json['worldSkillsEntry'] as Map),
+          )
+        : null,
+    lastUpdated: DateTime.tryParse(json['lastUpdated'] as String? ?? ''),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'team': team.toJson(),
+    'allEvents': allEvents.map((e) => e.toJson()).toList(),
+    'upcomingEvents': upcomingEvents.map((e) => e.toJson()).toList(),
+    'rankings': rankings.map((e) => e.toJson()).toList(),
+    'matchHistory': matchHistory.map((e) => e.toJson()).toList(),
+    'worldSkillsEntry': worldSkillsEntry?.toJson(),
+    'lastUpdated': lastUpdated?.toIso8601String(),
+  };
+
   bool get hasLiveSignal {
     return allEvents.isNotEmpty ||
         upcomingEvents.isNotEmpty ||
@@ -112,10 +160,12 @@ class TeamStatsSnapshot {
   int get totalMatches => totalWins + totalLosses + totalTies;
 
   List<MatchSummary> get completedMatches {
-    return matchHistory.where((match) {
-      return match.alliances.length >= 2 &&
-          match.alliances.every((alliance) => alliance.score >= 0);
-    }).toList(growable: false);
+    return matchHistory
+        .where((match) {
+          return match.alliances.length >= 2 &&
+              match.alliances.every((alliance) => alliance.score >= 0);
+        })
+        .toList(growable: false);
   }
 
   int? scoreForTeam(MatchSummary match) {
@@ -333,10 +383,9 @@ class TeamStatsSnapshot {
 
     final sorted = values.toList()..sort();
     final median = sorted[sorted.length ~/ 2];
-    final deviations = values
-        .map((value) => (value - median).abs())
-        .toList(growable: false)
-      ..sort();
+    final deviations =
+        values.map((value) => (value - median).abs()).toList(growable: false)
+          ..sort();
     final mad = deviations[deviations.length ~/ 2];
     final guardBand = mad <= 0 ? (signed ? 18.0 : 12.0) : mad * 2.6;
 

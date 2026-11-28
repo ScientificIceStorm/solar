@@ -314,7 +314,7 @@ class _DivisionRankingsTabState extends State<_DivisionRankingsTab> {
   }
 }
 
-enum _DivisionTeamSortMode { solarize, alphabetical }
+enum _DivisionTeamSortMode { eventRank, alphabetical }
 
 class _DivisionMatchesTab extends StatefulWidget {
   const _DivisionMatchesTab({
@@ -641,7 +641,7 @@ class _DivisionTeamsTab extends StatefulWidget {
 
 class _DivisionTeamsTabState extends State<_DivisionTeamsTab> {
   final TextEditingController _searchController = TextEditingController();
-  _DivisionTeamSortMode _sortMode = _DivisionTeamSortMode.solarize;
+  _DivisionTeamSortMode _sortMode = _DivisionTeamSortMode.eventRank;
 
   @override
   void dispose() {
@@ -654,10 +654,7 @@ class _DivisionTeamsTabState extends State<_DivisionTeamsTab> {
     return FutureBuilder<List<Object>>(
       future: Future.wait<Object>(<Future<Object>>[
         widget.rankingsFuture.then<Object>((value) => value),
-        widget.eventTeamsFuture.then<Object>((value) async {
-          await widget.controller.ensureSolarizeCoverageForTeams(teams: value);
-          return value;
-        }),
+        widget.eventTeamsFuture.then<Object>((value) => value),
       ]),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
@@ -693,8 +690,8 @@ class _DivisionTeamsTabState extends State<_DivisionTeamsTab> {
               return a.number.compareTo(b.number);
             }
 
-            final aRank = widget.controller.openSkillEntryForTeam(a.number)?.ranking;
-            final bRank = widget.controller.openSkillEntryForTeam(b.number)?.ranking;
+            final aRank = rankings.where((r) => r.team.number.toUpperCase() == a.number.toUpperCase()).firstOrNull?.rank;
+            final bRank = rankings.where((r) => r.team.number.toUpperCase() == b.number.toUpperCase()).firstOrNull?.rank;
             final aValue = (aRank == null || aRank <= 0) ? 999999 : aRank;
             final bValue = (bRank == null || bRank <= 0) ? 999999 : bRank;
             final rankCompare = aValue.compareTo(bValue);
@@ -978,31 +975,10 @@ Color _predictionStripeColor(SolarMatchPrediction? prediction) {
       : const Color(0xFFFF6B64);
 }
 
-bool _matchHasOfficialScore(MatchSummary match) {
-  if (match.alliances.length < 2) {
-    return false;
-  }
-
-  MatchAlliance? red;
-  MatchAlliance? blue;
-  for (final alliance in match.alliances) {
-    final color = alliance.color.toLowerCase();
-    if (color == 'red') {
-      red = alliance;
-    } else if (color == 'blue') {
-      blue = alliance;
-    }
-  }
-
-  red ??= match.alliances.first;
-  blue ??= match.alliances.length > 1 ? match.alliances[1] : match.alliances.first;
-  return red.score >= 0 && blue.score >= 0;
-}
-
 String _divisionTeamSortModeLabel(_DivisionTeamSortMode mode) {
   switch (mode) {
-    case _DivisionTeamSortMode.solarize:
-      return 'Solarize';
+    case _DivisionTeamSortMode.eventRank:
+      return 'Event rank';
     case _DivisionTeamSortMode.alphabetical:
       return 'A-Z';
   }

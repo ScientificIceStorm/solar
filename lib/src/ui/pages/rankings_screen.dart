@@ -8,16 +8,11 @@ import '../../app/solar_app_scope.dart';
 import '../../core/solar_competition_scope.dart';
 import '../../models/robot_events_models.dart';
 import '../../models/world_skills_models.dart';
-import '../models/solar_ml_ranking.dart';
-import '../services/solar_ml_ranking_service.dart';
-import '../services/solar_disk_cache_store.dart';
 import '../theme/solar_chrome_palette.dart';
 import '../widgets/solar_navigation.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
 import 'onboarding_screen.dart';
-
-enum _RankingsMode { skill, solarMl }
 
 class RankingsScreen extends StatefulWidget {
   const RankingsScreen({super.key});
@@ -28,49 +23,66 @@ class RankingsScreen extends StatefulWidget {
   State<RankingsScreen> createState() => _RankingsScreenState();
 }
 
-class _RankingsScreenState extends State<RankingsScreen> {
+class _RankingsScreenState extends State<RankingsScreen>
+    with WidgetsBindingObserver {
   static const _allRegionsLabel = 'All Regions';
   static const _gradeOptions = <String>['High School', 'Middle School'];
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  static const _solarMlService = SolarMlRankingService();
-  static final _diskCacheStore = SolarDiskCacheStore.instance;
 
   AppSessionController? _sessionController;
   bool _isBootstrapping = true;
   bool _isLoadingRankings = false;
-  bool _isLoadingSolarize = false;
   int _loadGeneration = 0;
   List<SeasonSummary> _availableSeasons = const <SeasonSummary>[];
   List<WorldSkillsEntry> _activeRankings = const <WorldSkillsEntry>[];
-  List<SolarMlRankingEntry> _solarMlEntries = const <SolarMlRankingEntry>[];
   int? _selectedSeasonId;
   String? _selectedGradeLevel;
   String _selectedRegion = _allRegionsLabel;
-  _RankingsMode _mode = _RankingsMode.skill;
-  String? _loadedSolarizeCacheKey;
+  String? _loadError;
+  Timer? _retryTimer;
+  bool _didAutoRetry = false;
+  int _seenDataRevision = -1;
+  String? _displayedRankingsKey;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final controller = SolarAppScope.of(context);
-    if (!identical(_sessionController, controller)) {
+    if (!identical(_sessionController, controller) ||
+        (_seenDataRevision != controller.dataRevision && !_isLoadingRankings)) {
       _sessionController = controller;
+      _seenDataRevision = controller.dataRevision;
       unawaited(_bootstrapFilters(controller, forceSeasons: false));
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _retryTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _sessionController;
+    if (state == AppLifecycleState.resumed &&
+        controller != null &&
+        _loadError != null &&
+        !_isBootstrapping &&
+        !_isLoadingRankings) {
+      unawaited(_bootstrapFilters(controller, forceSeasons: true));
+    }
   }
 
   Future<void> _bootstrapFilters(
@@ -78,17 +90,20 @@ class _RankingsScreenState extends State<RankingsScreen> {
     required bool forceSeasons,
   }) async {
     final generation = ++_loadGeneration;
+    _retryTimer?.cancel();
 
     setState(() {
       _isBootstrapping = true;
+      _loadError = null;
     });
 
     final seasons = await controller.fetchWorldSkillsSeasons(
       programFilter: solarPrimaryProgramFilter,
       force: forceSeasons,
     );
-    final defaultSeasonId = await controller
-        .resolveDefaultWorldSkillsSeasonId();
+    final defaultSeasonId =
+        controller.preferredSeasonId ??
+        (seasons.isEmpty ? null : seasons.first.id);
     if (!_isCurrentLoad(controller, generation)) {
       return;
     }
@@ -105,7 +120,25 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _selectedSeasonId = resolvedSeasonId;
       _selectedGradeLevel = resolvedGradeLevel;
       _isBootstrapping = false;
+      _loadError = seasons.isEmpty
+          ? controller.seasonLoadError ??
+                'No seasons are available. Tap Retry to check again.'
+          : null;
     });
+
+    if (seasons.isEmpty &&
+        !_didAutoRetry &&
+        controller.seasonRetryAfter != null) {
+      _didAutoRetry = true;
+      _retryTimer = Timer(
+        controller.seasonRetryAfter! + const Duration(seconds: 1),
+        () {
+          if (mounted) {
+            unawaited(_bootstrapFilters(controller, forceSeasons: true));
+          }
+        },
+      );
+    }
 
     await _loadRankings(
       controller,
@@ -127,20 +160,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
       }
       setState(() {
         _activeRankings = const <WorldSkillsEntry>[];
-        _solarMlEntries = const <SolarMlRankingEntry>[];
         _isLoadingRankings = false;
-        _isLoadingSolarize = false;
-        _loadedSolarizeCacheKey = null;
       });
       return;
     }
 
     setState(() {
       _isLoadingRankings = true;
-      _isLoadingSolarize = false;
-      _activeRankings = const <WorldSkillsEntry>[];
-      _solarMlEntries = const <SolarMlRankingEntry>[];
-      _loadedSolarizeCacheKey = null;
+      final key = '$seasonId|$gradeLevel';
+      if (_displayedRankingsKey != key) _activeRankings = [];
+      _displayedRankingsKey = key;
     });
 
     final entries = await controller.fetchWorldSkillsRankings(
@@ -157,21 +186,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
     setState(() {
       _activeRankings = entries;
       _isLoadingRankings = false;
+      _loadError = controller.rankingsLoadError;
       if (!regions.contains(_selectedRegion)) {
         _selectedRegion = _allRegionsLabel;
       }
     });
-
-    unawaited(
-      _warmSolarizeRankings(
-        controller,
-        generation: generation,
-        seasonId: seasonId,
-        gradeLevel: gradeLevel,
-        entries: entries,
-        force: force,
-      ),
-    );
   }
 
   bool _isCurrentLoad(AppSessionController controller, int generation) {
@@ -356,28 +375,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text('How Rankings Work'),
-          content: const SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Skill uses the official World Skills list from REC Foundation.',
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Solarize uses match history only. Recent form, opponent strength, elimination rounds, and event strength matter more than old qualifier-only results.',
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Recent results count more than old ones, and one-off disaster matches are damped so a disconnect or broken robot does not nuke a team unfairly.',
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Official skills are not part of this ranking, and the list only shows rank, team, and rating.',
-                ),
-              ],
-            ),
+          content: const Text(
+            'Official World Skills scores from VEX Events, filtered by season, grade, and region. Saved scores open immediately; pull down to refresh.',
           ),
           actions: <Widget>[
             TextButton(
@@ -388,105 +387,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
         );
       },
     );
-  }
-
-  Future<void> _warmSolarizeRankings(
-    AppSessionController controller, {
-    required int generation,
-    required int seasonId,
-    required String gradeLevel,
-    required List<WorldSkillsEntry> entries,
-    required bool force,
-  }) async {
-    final cacheKey = '$seasonId|${gradeLevel.trim().toLowerCase()}';
-    final cachedEntries = await _diskCacheStore.readList<SolarMlRankingEntry>(
-      namespace: 'solar_ml_screen_rankings_v2',
-      key: cacheKey,
-      fromJson: SolarMlRankingEntry.fromJson,
-    );
-    final usableCachedEntries =
-        cachedEntries != null && _isUsableSolarMlEntries(cachedEntries)
-        ? cachedEntries
-        : null;
-    if (cachedEntries != null && usableCachedEntries == null) {
-      await _diskCacheStore.clear('solar_ml_screen_rankings_v2', cacheKey);
-    }
-    if (usableCachedEntries != null &&
-        usableCachedEntries.isNotEmpty &&
-        _isCurrentLoad(controller, generation)) {
-      setState(() {
-        _solarMlEntries = usableCachedEntries;
-        _isLoadingSolarize = false;
-        _loadedSolarizeCacheKey = cacheKey;
-      });
-      if (!force) {
-        return;
-      }
-    }
-    if (!force &&
-        _loadedSolarizeCacheKey == cacheKey &&
-        _solarMlEntries.isNotEmpty) {
-      return;
-    }
-
-    if (!_isCurrentLoad(controller, generation)) {
-      return;
-    }
-
-    setState(() {
-      _isLoadingSolarize = true;
-    });
-
-    final openSkillEntries = await controller.fetchOpenSkillRankings(
-      seasonId: seasonId,
-      gradeLevel: gradeLevel,
-      force: force,
-    );
-
-    if (!_isCurrentLoad(controller, generation)) {
-      return;
-    }
-
-    if (openSkillEntries.isEmpty &&
-        usableCachedEntries != null &&
-        usableCachedEntries.isNotEmpty) {
-      setState(() {
-        _solarMlEntries = usableCachedEntries;
-        _isLoadingSolarize = false;
-        _loadedSolarizeCacheKey = cacheKey;
-      });
-      return;
-    }
-
-    final solarMlEntries = _solarMlService.build(
-      worldSkills: entries,
-      openSkillEntries: openSkillEntries,
-    );
-
-    if (!_isCurrentLoad(controller, generation)) {
-      return;
-    }
-
-    setState(() {
-      _solarMlEntries = solarMlEntries;
-      _isLoadingSolarize = false;
-      _loadedSolarizeCacheKey = cacheKey;
-    });
-    if (solarMlEntries.isNotEmpty) {
-      await _diskCacheStore.writeList<SolarMlRankingEntry>(
-        namespace: 'solar_ml_screen_rankings_v2',
-        key: cacheKey,
-        items: solarMlEntries,
-        toJson: (item) => item.toJson(),
-        ttl: _dailyCacheTtl(),
-      );
-    }
-  }
-
-  Duration _dailyCacheTtl() {
-    final now = DateTime.now();
-    final tomorrow = DateTime(now.year, now.month, now.day + 1);
-    return tomorrow.difference(now);
   }
 
   @override
@@ -501,47 +401,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
           return const Scaffold(body: SizedBox.shrink());
         }
 
-        final filteredEntries = _mode == _RankingsMode.skill
-            ? _filterEntries(
-                entries: _filterEntriesByRegion(
-                  entries: _activeRankings,
-                  selectedRegion: _selectedRegion,
-                ),
-                query: _searchController.text,
-              )
-            : const <WorldSkillsEntry>[];
-        final solarRegionTeamNumbers =
-            _mode == _RankingsMode.solarMl &&
-                _selectedRegion != _allRegionsLabel
-            ? <String>{
-                for (final ranking in _activeRankings)
-                  if (_regionLabel(ranking) == _selectedRegion)
-                    ranking.teamNumber.trim().toUpperCase(),
-              }
-            : null;
-        final filteredMlEntries = _mode == _RankingsMode.solarMl
-            ? _filterSolarMlEntries(
-                entries: solarRegionTeamNumbers == null
-                    ? _solarMlEntries
-                    : _solarMlEntries
-                          .where((entry) {
-                            return solarRegionTeamNumbers.contains(
-                              entry.teamNumber.trim().toUpperCase(),
-                            );
-                          })
-                          .toList(growable: false),
-                query: _searchController.text,
-              )
-            : const <SolarMlRankingEntry>[];
-        final activeRowCount = _mode == _RankingsMode.skill
-            ? filteredEntries.length
-            : filteredMlEntries.length;
+        final filteredEntries = _filterEntries(
+          entries: _filterEntriesByRegion(
+            entries: _activeRankings,
+            selectedRegion: _selectedRegion,
+          ),
+          query: _searchController.text,
+        );
+        final activeRowCount = filteredEntries.length;
         final topInset = MediaQuery.paddingOf(context).top;
-        final showStatusCard =
-            _isBootstrapping ||
-            _isLoadingRankings ||
-            (_mode == _RankingsMode.solarMl && _isLoadingSolarize) ||
-            activeRowCount == 0;
+        final showStatusCard = activeRowCount == 0;
         final listItemCount = showStatusCard ? 3 : activeRowCount + 2;
         final chromeColor = solarChromeAccentColor(
           controller.chromeAccentPreference,
@@ -580,7 +449,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   RefreshIndicator(
                     color: Colors.white,
                     onRefresh: () async {
-                      await controller.refreshTeamStats();
                       await _bootstrapFilters(controller, forceSeasons: true);
                     },
                     child: StretchingOverscrollIndicator(
@@ -607,7 +475,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
                                 selectedRegion: _selectedRegion,
                               ),
                               seasonLabel: _selectedSeasonId == null
-                                  ? 'Season loading'
+                                  ? (_isBootstrapping
+                                        ? 'Season loading'
+                                        : 'Season unavailable')
                                   : _seasonDisplayNameFromId(
                                       _availableSeasons,
                                       _selectedSeasonId!,
@@ -617,34 +487,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                               onInfoTap: _showRankingSystemDialog,
                               onFilterTap: () => _showFilterSheet(controller),
                               onMoreTap: () => _showFilterSheet(controller),
-                              mode: _mode,
-                              onSkillTap: () {
-                                setState(() {
-                                  _mode = _RankingsMode.skill;
-                                });
-                              },
-                              onSolarMlTap: () {
-                                setState(() {
-                                  _mode = _RankingsMode.solarMl;
-                                });
-                                final seasonId = _selectedSeasonId;
-                                if (seasonId != null &&
-                                    _activeRankings.isNotEmpty) {
-                                  unawaited(
-                                    _warmSolarizeRankings(
-                                      controller,
-                                      generation: _loadGeneration,
-                                      seasonId: seasonId,
-                                      gradeLevel:
-                                          _selectedGradeLevel ??
-                                          controller
-                                              .defaultWorldSkillsGradeLevel,
-                                      entries: _activeRankings,
-                                      force: false,
-                                    ),
-                                  );
-                                }
-                              },
                             );
                           }
 
@@ -657,23 +499,22 @@ class _RankingsScreenState extends State<RankingsScreen> {
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 22,
                               ),
-                              child:
-                                  _isBootstrapping ||
-                                      _isLoadingRankings ||
-                                      (_mode == _RankingsMode.solarMl &&
-                                          _isLoadingSolarize)
+                              child: _isBootstrapping || _isLoadingRankings
                                   ? const _RankingsStatusCard.loading()
                                   : _RankingsStatusCard.message(
-                                      _searchController.text.trim().isEmpty
-                                          ? _mode == _RankingsMode.skill
-                                                ? 'World skills rankings will appear here after the API data finishes loading.'
-                                                : 'Solarize rankings are still being prepared from match history and season form.'
-                                          : 'No ranked teams matched "${_searchController.text.trim()}".',
+                                      _loadError ??
+                                          (_searchController.text.trim().isEmpty
+                                              ? 'No world skills scores have been posted for this season and grade.'
+                                              : 'No ranked teams matched "${_searchController.text.trim()}".'),
+                                      onRetry: () => _bootstrapFilters(
+                                        controller,
+                                        forceSeasons: true,
+                                      ),
                                     ),
                             );
                           }
 
-                          if (_mode == _RankingsMode.skill) {
+                          {
                             final entry = filteredEntries[index - 2];
                             return Padding(
                               padding: const EdgeInsets.symmetric(
@@ -689,19 +530,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                               ),
                             );
                           }
-
-                          final entry = filteredMlEntries[index - 2];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 22),
-                            child: _SolarMlRankingRow(
-                              entry: entry,
-                              highlighted:
-                                  entry.teamNumber.trim().toUpperCase() ==
-                                  account.team.number.trim().toUpperCase(),
-                              showDivider:
-                                  index - 2 != filteredMlEntries.length - 1,
-                            ),
-                          );
                         },
                       ),
                     ),
@@ -733,9 +561,6 @@ class _RankingsHeader extends StatelessWidget {
     required this.onInfoTap,
     required this.onFilterTap,
     required this.onMoreTap,
-    required this.mode,
-    required this.onSkillTap,
-    required this.onSolarMlTap,
   });
 
   final double topInset;
@@ -747,9 +572,6 @@ class _RankingsHeader extends StatelessWidget {
   final VoidCallback onInfoTap;
   final VoidCallback onFilterTap;
   final VoidCallback onMoreTap;
-  final _RankingsMode mode;
-  final VoidCallback onSkillTap;
-  final VoidCallback onSolarMlTap;
 
   @override
   Widget build(BuildContext context) {
@@ -809,9 +631,7 @@ class _RankingsHeader extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: TextField(
                 key: const ValueKey<String>('rankings-search-field'),
@@ -914,74 +734,9 @@ class _RankingsHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: InkWell(
-                    onTap: onSkillTap,
-                    borderRadius: BorderRadius.circular(22),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: mode == _RankingsMode.skill
-                            ? Colors.white
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'SKILL',
-                        style: TextStyle(
-                          color: mode == _RankingsMode.skill
-                              ? const Color(0xFF16182C)
-                              : Colors.white.withValues(alpha: 0.42),
-                          fontSize: 16,
-                          fontWeight: mode == _RankingsMode.skill
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: onSolarMlTap,
-                    borderRadius: BorderRadius.circular(22),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: mode == _RankingsMode.solarMl
-                            ? Colors.white
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        solarizeLabel.toUpperCase(),
-                        style: TextStyle(
-                          color: mode == _RankingsMode.solarMl
-                              ? const Color(0xFF16182C)
-                              : Colors.white.withValues(alpha: 0.42),
-                          fontSize: 16,
-                          fontWeight: mode == _RankingsMode.solarMl
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          const Text(
+            'SKILL',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1010,12 +765,17 @@ class _HeaderIconButton extends StatelessWidget {
 }
 
 class _RankingsStatusCard extends StatelessWidget {
-  const _RankingsStatusCard.loading() : message = null, loading = true;
+  const _RankingsStatusCard.loading()
+    : message = null,
+      loading = true,
+      onRetry = null;
 
-  const _RankingsStatusCard.message(this.message) : loading = false;
+  const _RankingsStatusCard.message(this.message, {this.onRetry})
+    : loading = false;
 
   final String? message;
   final bool loading;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -1035,13 +795,25 @@ class _RankingsStatusCard extends StatelessWidget {
                 ),
               ),
             )
-          : Text(
-              message!,
-              style: const TextStyle(
-                color: Color(0xFF6F748B),
-                fontSize: 15,
-                height: 1.45,
-              ),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message!,
+                  style: const TextStyle(
+                    color: Color(0xFF6F748B),
+                    fontSize: 15,
+                    height: 1.45,
+                  ),
+                ),
+                if (onRetry != null)
+                  TextButton.icon(
+                    key: const ValueKey('rankings-retry'),
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+              ],
             ),
     );
   }
@@ -1168,112 +940,6 @@ class _RankingRow extends StatelessWidget {
           ),
           if (showDivider) ...<Widget>[
             const SizedBox(height: 10),
-            Container(height: 1, color: const Color(0xFFDADAE3)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SolarMlRankingRow extends StatelessWidget {
-  const _SolarMlRankingRow({
-    required this.entry,
-    required this.highlighted,
-    required this.showDivider,
-  });
-
-  final SolarMlRankingEntry entry;
-  final bool highlighted;
-  final bool showDivider;
-
-  @override
-  Widget build(BuildContext context) {
-    final labelColor = highlighted
-        ? const Color(0xFF2930FF)
-        : const Color(0xFF16182C);
-    final subtitle = _teamSubtitle(entry.teamName, entry.organization);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Column(
-        children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
-              SizedBox(
-                width: 54,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '${entry.rank}',
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      color: labelColor,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -1.1,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    SolarTeamLinkText(
-                      teamNumber: entry.teamNumber,
-                      teamId: entry.teamId,
-                      teamName: entry.teamName,
-                      organization: entry.organization,
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: labelColor,
-                        fontSize: 26,
-                        fontWeight: highlighted
-                            ? FontWeight.w500
-                            : FontWeight.w300,
-                        letterSpacing: -1.1,
-                      ),
-                    ),
-                    if (subtitle.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF8E92A7),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  Text(
-                    entry.solarRating.toStringAsFixed(1),
-                    style: const TextStyle(
-                      color: Color(0xFF64677A),
-                      fontSize: 28,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: -0.9,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (showDivider) ...<Widget>[
-            const SizedBox(height: 14),
             Container(height: 1, color: const Color(0xFFDADAE3)),
           ],
         ],
@@ -1518,30 +1184,6 @@ List<WorldSkillsEntry> _filterEntriesByRegion({
       .toList(growable: false);
 }
 
-List<SolarMlRankingEntry> _filterSolarMlEntries({
-  required List<SolarMlRankingEntry> entries,
-  required String query,
-}) {
-  final normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery.isEmpty) {
-    return entries;
-  }
-
-  return entries
-      .where((entry) {
-        final haystack = <String>[
-          entry.teamNumber,
-          entry.teamName,
-          entry.organization,
-          entry.city,
-          entry.region,
-          entry.country,
-        ].join(' ').toLowerCase();
-        return haystack.contains(normalizedQuery);
-      })
-      .toList(growable: false);
-}
-
 List<String> _regionOptions(List<WorldSkillsEntry> entries) {
   final regions =
       <String>{
@@ -1614,31 +1256,4 @@ String _teamSubtitle(String primary, String secondary) {
   }
   final normalizedSecondary = secondary.trim();
   return normalizedSecondary;
-}
-
-bool _isUsableSolarMlEntries(List<SolarMlRankingEntry> entries) {
-  if (entries.isEmpty) {
-    return true;
-  }
-
-  final sample = entries.take(16).toList(growable: false);
-  final validCount = sample.where((entry) {
-    return entry.rank > 0 &&
-        entry.teamId > 0 &&
-        entry.teamNumber.trim().isNotEmpty &&
-        (entry.teamName.trim().isNotEmpty ||
-            entry.organization.trim().isNotEmpty);
-  }).length;
-  final distinctRatings = sample
-      .map((entry) => entry.solarRating.toStringAsFixed(2))
-      .toSet()
-      .length;
-
-  if (validCount < (sample.length / 2).ceil()) {
-    return false;
-  }
-  if (sample.length >= 8 && distinctRatings < 4) {
-    return false;
-  }
-  return true;
 }

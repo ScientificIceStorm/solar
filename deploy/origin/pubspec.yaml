@@ -1,0 +1,8 @@
+name: solar_v6
+publish_to: none
+environment:
+  sdk: ^3.10.4
+dependencies:
+  args: ^2.7.0
+  html: ^0.15.6
+  http: ^1.5.0

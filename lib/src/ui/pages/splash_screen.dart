@@ -30,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    _timer = Timer(const Duration(milliseconds: 1300), () {
+    _timer = Timer(Duration.zero, () {
       if (!mounted) {
         return;
       }

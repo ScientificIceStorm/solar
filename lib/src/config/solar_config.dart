@@ -32,9 +32,9 @@ class SolarConfig {
 
   static const defaults = SolarConfig(
     robotEventsApiKey: '',
-    robotEventsBaseUrl: 'https://www.robotevents.com/api/v2',
+    robotEventsBaseUrl: 'https://events.vex.com/api/v2',
     roboServerBaseUrl: 'http://127.0.0.1:8080',
-    worldSkillsBaseUrl: 'https://www.robotevents.com/api',
+    worldSkillsBaseUrl: 'https://events.vex.com/api',
     supabaseUrl: '',
     supabaseAnonKey: '',
     supabaseRedirectUrl: 'dev.minzhang.solarV6://login-callback',

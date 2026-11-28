@@ -40,14 +40,7 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
 
   Future<TeamStatsSnapshot> _loadSnapshot({bool force = false}) {
     final controller = SolarAppScope.of(context);
-    return controller
-        .ensureSolarizeCoverageForTeams(
-          teams: <TeamSummary>[widget.team],
-          force: force,
-        )
-        .then(
-          (_) => controller.fetchTeamStatsSnapshot(widget.team, force: force),
-        );
+    return controller.fetchTeamStatsSnapshot(widget.team, force: force);
   }
 
   Future<void> _refresh() async {

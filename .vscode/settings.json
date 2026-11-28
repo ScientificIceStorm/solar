@@ -1,5 +1,6 @@
 {
-    "chat.tools.terminal.autoApprove": {
-        "flutter": true
-    }
+  "chat.tools.terminal.autoApprove": {
+    "flutter": true
+  },
+  "dart.flutterSdkPath": "C:\\Users\\Dabao\\develop\\flutter"
 }

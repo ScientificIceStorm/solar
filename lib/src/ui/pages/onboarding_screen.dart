@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/solar_app_scope.dart';
+import '../../core/api_exception.dart';
 import '../models/app_account.dart';
 import '../models/onboarding_slide.dart';
 import '../widgets/solar_screen_background.dart';
@@ -28,11 +29,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     OnboardingSlide(
       title: 'Everything Solar has right now',
       description:
-          'Quickview, Solarize rankings, calendars, division tabs, team pages, match predictions, event photos, widgets, live activities, and notifications are all already in this build.',
+          'Quickview, skills rankings, calendars, division tabs, team pages, match predictions, event photos, widgets, live activities, and notifications are all already in this build.',
       imageAsset: 'assets/images/onboarding_1.png',
       highlights: <String>[
         'Quickview',
-        'Solarize',
+        'Skills rankings',
         'Calendar',
         'Division tabs',
         'Match details',
@@ -52,7 +53,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'Division standings',
         'Schedule view',
         'Skills view',
-        'Solarize team list',
+        'Event team list',
       ],
     ),
     OnboardingSlide(
@@ -127,6 +128,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       Navigator.of(
         context,
       ).pushNamedAndRemoveUntil(HomeScreen.routeName, (route) => false);
+    } on SolarApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.userMessage)));
     } on FormatException catch (error) {
       if (!mounted) {
         return;
@@ -175,216 +181,230 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Scaffold(
       body: SolarScreenBackground(
         padding: EdgeInsets.zero,
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _slides.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentIndex = index;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final slide = _slides[index];
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 36, 24, 22),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(28),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                        ),
-                        child: Image.asset(slide.imageAsset, fit: BoxFit.cover),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-              padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: const <BoxShadow>[
-                  BoxShadow(
-                    color: Color(0x21000000),
-                    blurRadius: 22,
-                    offset: Offset(0, 14),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: <Widget>[
-                  Text(
-                    slide.title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 29,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                      letterSpacing: -0.6,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    slide.description,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.68),
-                      fontSize: 14,
-                      height: 1.55,
-                    ),
-                  ),
-                  if (slide.highlights.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 18),
-                    Column(
-                      children: slide.highlights
-                          .take(6)
-                          .map(
-                            (highlight) => Padding(
-                              padding: const EdgeInsets.only(bottom: 7),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  Icon(
-                                    Icons.check_circle_outline_rounded,
-                                    color: Colors.white.withValues(alpha: 0.74),
-                                    size: 15,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    highlight,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                    ),
-                  ],
-                  if (_currentIndex == _slides.length - 1) ...<Widget>[
-                    const SizedBox(height: 22),
-                    _OnboardingPickerSection<AppCompetitionPreference>(
-                      title: 'Competition',
-                      value: _competition,
-                      options: AppCompetitionPreference.values,
-                      labelBuilder: (value) => switch (value) {
-                        AppCompetitionPreference.vexV5 => 'VEX V5',
-                        AppCompetitionPreference.vexIQ => 'VEX IQ',
-                        AppCompetitionPreference.vexU => 'VEX U',
-                        AppCompetitionPreference.vexAI => 'VEX AI',
-                      },
-                      onSelected: (value) {
-                        setState(() {
-                          _competition = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    _OnboardingPickerSection<AppFollowMode>(
-                      title: 'Follow Mode',
-                      value: _followMode,
-                      options: AppFollowMode.values,
-                      labelBuilder: (value) => switch (value) {
-                        AppFollowMode.single => 'Single team focus',
-                        AppFollowMode.multi => 'Multi-team follow',
-                      },
-                      onSelected: (value) {
-                        setState(() {
-                          _followMode = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    SolarTextField(
-                      controller: _teamController,
-                      hintText: 'Primary team number',
-                      icon: Icons.tag_rounded,
-                      textInputAction: TextInputAction.done,
-                    ),
-                    if (_followMode == AppFollowMode.multi) ...<Widget>[
-                      const SizedBox(height: 12),
-                      SolarTextField(
-                        controller: _followedTeamsController,
-                        hintText: 'Follow team numbers (comma separated)',
-                        icon: Icons.group_outlined,
-                        textInputAction: TextInputAction.done,
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      _followMode == AppFollowMode.multi
-                          ? 'Primary team is optional. Add any extra teams you want to follow now.'
-                          : 'Team number is optional. You can add more teams later in Settings.',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.68),
-                        fontSize: 12,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 28),
-                  Row(
-                    children: <Widget>[
-                      TextButton(
-                        onPressed: _isFinishing ? null : _handleSkip,
-                        child: Text(
-                          widget.previewOnly ? 'Close' : 'Skip',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      const Spacer(),
-                      Row(
-                        children: List<Widget>.generate(
-                          _slides.length,
-                          (index) => AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: index == _currentIndex ? 18 : 6,
-                            height: 6,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: Column(
+              children: <Widget>[
+                SizedBox(
+                  height: (constraints.maxHeight * 0.38).clamp(160.0, 340.0),
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _slides.length,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      final slide = _slides[index];
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 36, 24, 22),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: index == _currentIndex
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.28),
-                              borderRadius: BorderRadius.circular(99),
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                            child: Image.asset(
+                              slide.imageAsset,
+                              fit: BoxFit.cover,
                             ),
                           ),
                         ),
-                      ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: _isFinishing ? null : _nextPage,
-                        icon: _isFinishing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                        label: Text(
-                          _currentIndex == _slides.length - 1 ? 'Done' : 'Next',
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+                  padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: const <BoxShadow>[
+                      BoxShadow(
+                        color: Color(0x21000000),
+                        blurRadius: 22,
+                        offset: Offset(0, 14),
                       ),
                     ],
                   ),
-                ],
-              ),
+                  child: Column(
+                    children: <Widget>[
+                      Text(
+                        slide.title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 29,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                          letterSpacing: -0.6,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        slide.description,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.68),
+                          fontSize: 14,
+                          height: 1.55,
+                        ),
+                      ),
+                      if (slide.highlights.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 18),
+                        Column(
+                          children: slide.highlights
+                              .take(6)
+                              .map(
+                                (highlight) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 7),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.check_circle_outline_rounded,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.74,
+                                        ),
+                                        size: 15,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        highlight,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                      ],
+                      if (_currentIndex == _slides.length - 1) ...<Widget>[
+                        const SizedBox(height: 22),
+                        _OnboardingPickerSection<AppCompetitionPreference>(
+                          title: 'Competition',
+                          value: _competition,
+                          options: AppCompetitionPreference.values,
+                          labelBuilder: (value) => switch (value) {
+                            AppCompetitionPreference.vexV5 => 'VEX V5',
+                            AppCompetitionPreference.vexIQ => 'VEX IQ',
+                            AppCompetitionPreference.vexU => 'VEX U',
+                            AppCompetitionPreference.vexAI => 'VEX AI',
+                          },
+                          onSelected: (value) {
+                            setState(() {
+                              _competition = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        _OnboardingPickerSection<AppFollowMode>(
+                          title: 'Follow Mode',
+                          value: _followMode,
+                          options: AppFollowMode.values,
+                          labelBuilder: (value) => switch (value) {
+                            AppFollowMode.single => 'Single team focus',
+                            AppFollowMode.multi => 'Multi-team follow',
+                          },
+                          onSelected: (value) {
+                            setState(() {
+                              _followMode = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        SolarTextField(
+                          controller: _teamController,
+                          hintText: 'Primary team number',
+                          icon: Icons.tag_rounded,
+                          textInputAction: TextInputAction.done,
+                        ),
+                        if (_followMode == AppFollowMode.multi) ...<Widget>[
+                          const SizedBox(height: 12),
+                          SolarTextField(
+                            controller: _followedTeamsController,
+                            hintText: 'Follow team numbers (comma separated)',
+                            icon: Icons.group_outlined,
+                            textInputAction: TextInputAction.done,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          _followMode == AppFollowMode.multi
+                              ? 'Primary team is optional. Add any extra teams you want to follow now.'
+                              : 'Team number is optional. You can add more teams later in Settings.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.68),
+                            fontSize: 12,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+                      Row(
+                        children: <Widget>[
+                          TextButton(
+                            onPressed: _isFinishing ? null : _handleSkip,
+                            child: Text(
+                              widget.previewOnly ? 'Close' : 'Skip',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: List<Widget>.generate(
+                              _slides.length,
+                              (index) => AnimatedContainer(
+                                duration: const Duration(milliseconds: 220),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                width: index == _currentIndex ? 18 : 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: index == _currentIndex
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.28),
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: _isFinishing ? null : _nextPage,
+                            icon: _isFinishing
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                            label: Text(
+                              _currentIndex == _slides.length - 1
+                                  ? 'Done'
+                                  : 'Next',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -423,42 +443,44 @@ class _OnboardingPickerSection<T> extends StatelessWidget {
         const SizedBox(height: 10),
         Wrap(
           runSpacing: 8,
-          children: options.map((option) {
-            final selected = option == value;
-            return InkWell(
-              onTap: () => onSelected(option),
-              borderRadius: BorderRadius.circular(12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.03),
+          children: options
+              .map((option) {
+                final selected = option == value;
+                return InkWell(
+                  onTap: () => onSelected(option),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: selected
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.22),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: Text(
+                      labelBuilder(option),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: selected ? Colors.black : Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
-                child: Text(
-                  labelBuilder(option),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected ? Colors.black : Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            );
-          }).toList(growable: false),
+                );
+              })
+              .toList(growable: false),
         ),
       ],
     );

@@ -40,7 +40,7 @@ class SolarApp extends StatefulWidget {
   State<SolarApp> createState() => _SolarAppState();
 }
 
-class _SolarAppState extends State<SolarApp> {
+class _SolarAppState extends State<SolarApp> with WidgetsBindingObserver {
   static const MethodChannel _iosCompanionChannel = MethodChannel(
     'solar/ios_companion',
   );
@@ -55,6 +55,7 @@ class _SolarAppState extends State<SolarApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controllerFuture = _loadController();
   }
 
@@ -70,11 +71,19 @@ class _SolarAppState extends State<SolarApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_didAttachCompanionRouteHandler) {
       _iosCompanionChannel.setMethodCallHandler(null);
     }
     _ownedController?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited((_ownedController ?? widget.controller)?.refreshInBackground());
+    }
   }
 
   @override

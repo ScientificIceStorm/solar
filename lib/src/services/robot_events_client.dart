@@ -50,6 +50,8 @@ class RobotEventsClient {
     String? sku,
     int? season,
     int? teamId,
+    DateTime? startsAfter,
+    int? maxPages,
   }) async {
     final data = await _pagedGet(
       '/events',
@@ -60,7 +62,9 @@ class RobotEventsClient {
             : <String, Object?>{'sku': sku.trim()},
         ...?season == null ? null : <String, Object?>{'season': season},
         ...?teamId == null ? null : <String, Object?>{'team': teamId},
+        if (startsAfter != null) 'start': startsAfter.toUtc().toIso8601String(),
       },
+      maxPages: maxPages,
     );
     return data.map(EventSummary.fromJson).toList(growable: false);
   }
@@ -139,6 +143,7 @@ class RobotEventsClient {
   Future<List<JsonMap>> _pagedGet(
     String path, {
     Map<String, Object?> query = const <String, Object?>{},
+    int? maxPages,
   }) async {
     _ensureApiKey();
 
@@ -165,7 +170,8 @@ class RobotEventsClient {
 
       results.addAll(pageData);
 
-      if (serverPage >= lastPage) {
+      if (serverPage >= lastPage ||
+          (maxPages != null && currentPage >= maxPages)) {
         break;
       }
       currentPage = serverPage + 1;

@@ -7,7 +7,7 @@ import 'event_division_screen.dart';
 import 'event_schedule_screen.dart';
 import 'event_skills_screen.dart';
 import '../widgets/solar_event_photo.dart';
-import '../widgets/solarize_team_list.dart';
+import '../widgets/solar_event_team_list.dart';
 
 class EventDetailsScreen extends StatefulWidget {
   const EventDetailsScreen({required this.event, super.key});
@@ -241,7 +241,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                     ),
                     const SizedBox(height: 18),
                     _SmallEventActionButton(
-                      label: 'View Solarize team list',
+                      label: 'View team list',
                       onTap: () => _showSolarizeTeams(context, event),
                     ),
                   ],
@@ -395,7 +395,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                       ),
                       const SizedBox(height: 18),
                       const Text(
-                        'Solarize Teams',
+                        'Event Teams',
                         style: TextStyle(
                           color: Color(0xFF24243A),
                           fontSize: 24,
@@ -425,7 +425,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                           onChanged: (_) => setModalState(() {}),
                           decoration: InputDecoration(
                             border: InputBorder.none,
-                            hintText: 'Search Solarize teams',
+                            hintText: 'Search teams',
                             prefixIcon: const Icon(Icons.search_rounded),
                             suffixIcon: searchController.text.trim().isEmpty
                                 ? null
@@ -476,13 +476,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                 })
                                 .toList(growable: false);
 
-                            return SolarizeTeamList(
+                            return SolarEventTeamList(
                               controller: controller,
                               teams: filteredTeams,
                               highlightTeamNumber: highlightTeamNumber,
                               emptyLabel: query.isEmpty
                                   ? 'No event teams available yet.'
-                                  : 'No Solarize teams matched your search.',
+                                  : 'No teams matched your search.',
                               event: event,
                             );
                           },

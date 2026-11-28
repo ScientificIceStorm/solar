@@ -114,16 +114,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _parseTeamNumbers(_followedTeamsController.text),
       );
 
+      if (!mounted) return;
       _teamController.text =
           controller.currentAccount?.team.number ?? _teamController.text;
-      _followedTeamsController.text =
-          controller.favoriteTeamNumbers.join(', ');
+      _followedTeamsController.text = controller.favoriteTeamNumbers.join(', ');
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Settings updated.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Settings saved. Team details refresh in the background.',
+          ),
+        ),
+      );
     } on FormatException catch (error) {
       if (!mounted) {
         return;
@@ -334,8 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickCustomAccentColor() async {
     final controller = SolarAppScope.of(context);
     final initial = Color(
-      controller.customChromeAccentValue ??
-          const Color(0xFF2C4C86).toARGB32(),
+      controller.customChromeAccentValue ?? const Color(0xFF2C4C86).toARGB32(),
     );
     var red = (initial.r * 255).roundToDouble();
     var green = (initial.g * 255).roundToDouble();
@@ -438,7 +441,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     await controller.setCustomChromeAccentValue(selected.toARGB32());
-    await controller.setChromeAccentPreference(AppChromeAccentPreference.custom);
+    await controller.setChromeAccentPreference(
+      AppChromeAccentPreference.custom,
+    );
   }
 
   @override
@@ -513,7 +518,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ? 'Checking the active season.'
                             : _selectedSeasonId == null
                             ? currentSeason == null
-                                  ? 'Connect the API to load seasons.'
+                                  ? controller.seasonLoadError ??
+                                        'Tap to retry loading seasons.'
                                   : 'Current season default'
                             : selectedSeason?.programName ?? 'Tap to change';
 
@@ -521,9 +527,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           label: 'Season',
                           value: title,
                           subtitle: subtitle,
-                          enabled: seasons.isNotEmpty && !isLoading,
+                          enabled: !isLoading,
                           onTap: seasons.isEmpty
-                              ? null
+                              ? () => setState(() {
+                                  _seasonsFuture = controller
+                                      .fetchWorldSkillsSeasons(
+                                        programFilter:
+                                            _programFilterForCompetition(
+                                              controller.competitionPreference,
+                                            ),
+                                        force: true,
+                                      );
+                                })
                               : () => _pickSeason(seasons),
                         );
                       },
@@ -910,9 +925,7 @@ class _SettingsChoiceOptionTile<T> extends StatelessWidget {
           color: selected ? const Color(0xFFEEF1FF) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected
-                ? const Color(0xFF5B61F6)
-                : const Color(0xFFE3E6F0),
+            color: selected ? const Color(0xFF5B61F6) : const Color(0xFFE3E6F0),
           ),
         ),
         child: Row(
@@ -977,75 +990,77 @@ class _TopBarAccentSelector extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: AppChromeAccentPreference.values.map((option) {
-              final selected = option == value;
-              final swatchColor = solarChromeAccentColor(
-                option,
-                customAccentValue: customAccentValue,
-              );
-              return InkWell(
-                onTap: () async {
-                  if (option == AppChromeAccentPreference.custom) {
-                    await onPickCustomColor();
-                  } else {
-                    await onSelected(option);
-                  }
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? swatchColor.withValues(alpha: 0.14)
-                        : Colors.transparent,
+            children: AppChromeAccentPreference.values
+                .map((option) {
+                  final selected = option == value;
+                  final swatchColor = solarChromeAccentColor(
+                    option,
+                    customAccentValue: customAccentValue,
+                  );
+                  return InkWell(
+                    onTap: () async {
+                      if (option == AppChromeAccentPreference.custom) {
+                        await onPickCustomColor();
+                      } else {
+                        await onSelected(option);
+                      }
+                    },
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: selected
-                          ? swatchColor.withValues(alpha: 0.58)
-                          : const Color(0xFFE3E6F0),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: swatchColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.black.withValues(alpha: 0.18),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? swatchColor.withValues(alpha: 0.14)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: selected
+                              ? swatchColor.withValues(alpha: 0.58)
+                              : const Color(0xFFE3E6F0),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: swatchColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.black.withValues(alpha: 0.18),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Text(
+                            solarChromeAccentLabel(option),
+                            style: const TextStyle(
+                              color: Color(0xFF24243A),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (selected) ...<Widget>[
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.check_rounded,
+                              size: 14,
+                              color: Color(0xFF24243A),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        solarChromeAccentLabel(option),
-                        style: const TextStyle(
-                          color: Color(0xFF24243A),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (selected) ...<Widget>[
-                        const SizedBox(width: 6),
-                        const Icon(
-                          Icons.check_rounded,
-                          size: 14,
-                          color: Color(0xFF24243A),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-            }).toList(growable: false),
+                    ),
+                  );
+                })
+                .toList(growable: false),
           ),
         ],
       ),
@@ -1088,12 +1103,7 @@ class _ColorSliderRow extends StatelessWidget {
               activeTrackColor: activeColor,
               thumbColor: activeColor,
             ),
-            child: Slider(
-              value: value,
-              min: 0,
-              max: 255,
-              onChanged: onChanged,
-            ),
+            child: Slider(value: value, min: 0, max: 255, onChanged: onChanged),
           ),
         ),
         SizedBox(

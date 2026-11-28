@@ -69,10 +69,6 @@ class _EventTeamScreenState extends State<EventTeamScreen> {
     AppSessionController controller, {
     required bool force,
   }) async {
-    await controller.ensureSolarizeCoverageForTeams(
-      teams: <TeamSummary>[widget.args.team],
-      force: force,
-    );
     return controller.fetchTeamStatsSnapshot(widget.args.team, force: force);
   }
 

@@ -1,0 +1,15 @@
+**
+!deploy/
+!deploy/origin/
+!deploy/origin/pubspec.yaml
+!deploy/seed/
+!deploy/seed/*.json
+!bin/
+!bin/**
+!lib/
+!lib/**
+!site/
+!site/**
+**/solar.local.json
+**/.env*
+**/.dev.vars*

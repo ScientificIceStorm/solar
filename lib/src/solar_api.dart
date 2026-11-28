@@ -8,8 +8,7 @@ import 'services/world_skills_client.dart';
 
 class SolarApi {
   SolarApi._({required this.config, required http.Client httpClient})
-    : _httpClient = httpClient,
-      _jsonClient = JsonApiClient(httpClient);
+    : _jsonClient = JsonApiClient(httpClient);
 
   factory SolarApi({required SolarConfig config, http.Client? httpClient}) {
     return SolarApi._(config: config, httpClient: httpClient ?? http.Client());
@@ -24,8 +23,9 @@ class SolarApi {
   }
 
   final SolarConfig config;
-  final http.Client _httpClient;
   final JsonApiClient _jsonClient;
+
+  bool get isRateLimited => _jsonClient.isRateLimited;
 
   late final RobotEventsClient robotEvents = RobotEventsClient(
     jsonClient: _jsonClient,
@@ -44,6 +44,6 @@ class SolarApi {
   );
 
   void close() {
-    _httpClient.close();
+    _jsonClient.close();
   }
 }
