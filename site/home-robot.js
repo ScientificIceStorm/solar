@@ -1,24 +1,19 @@
-// Solar front page: a VEX V5 robot raising its 6-bar lift, side-on, drawn as halftone dots
-// across the whole first screen.
+// Solar front page: the word "solar" drawn as halftone dots across the first screen.
 //
-// A 6-bar is two parallelogram four-bars stacked on a floating middle bar: stage 1 pivots on the
-// tower and swings up and forward, stage 2 swings back the other way, so the claw rises almost
-// straight up while every vertical bar stays vertical. The lift cycles on its own; the dots
-// scatter away from the pointer and spring back.
+// The letters are rendered once per layout into a small mask (one pixel per dot), so each frame
+// only moves dots. On load the dots fly in from scattered positions and settle into the word, a
+// soft light sweep passes over it every few seconds, and the dots scatter away from the pointer
+// and spring back.
 (() => {
   const canvas = document.getElementById("homeRobot");
   if (!canvas) return;
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const g = canvas.getContext("2d");
-  const shape = document.createElement("canvas");
-  const s = shape.getContext("2d", {willReadFrequently: true});
-  const L1 = 17, L2 = 15.5, TOWER = 3, LOW = 7.5, GAP = 3.6, MAX_ANGLE = 58 * Math.PI / 180;
-  const WHITE = "#ffffff", PIN = "#ffd23c";
+  const mask = document.createElement("canvas");
+  const m = mask.getContext("2d", {willReadFrequently: true});
+  const WORD = "solar";
 
-  // Layout in CSS pixels, rebuilt on resize: the dot grid covers the canvas, and the robot is
-  // scaled to stand over the search box.
-  let W = 0, H = 0, CELL = 7, MAX_R = 3.4, cols = 0, rows = 0, dots = [], PX = 8, FLOOR = 0, ORIGIN = 0;
-  const X = x => ORIGIN + x * PX, Y = y => FLOOR - y * PX;
+  let W = 0, H = 0, CELL = 7, MAX_R = 3.4, dots = [], left = 0, right = 0, first = true;
 
   function layout() {
     const box = canvas.getBoundingClientRect();
@@ -28,79 +23,52 @@
     canvas.width = Math.round(W * ratio);
     canvas.height = Math.round(H * ratio);
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
-    CELL = W < 700 ? 5 : W < 1300 ? 6 : 7;
+    CELL = W < 700 ? 3 : 3.5;
     MAX_R = CELL * .5;
-    cols = Math.ceil(W / CELL); rows = Math.ceil(H / CELL);
-    shape.width = cols; shape.height = rows;
+    const cols = Math.ceil(W / CELL), rows = Math.ceil(H / CELL);
+    mask.width = cols; mask.height = rows;
+
+    // A modest word sitting just above the search box.
+    const search = document.querySelector(".home-search");
+    const bar = search ? search.getBoundingClientRect() : null;
+    const top = bar ? bar.top - box.top : H - 130, barWidth = bar && bar.width ? bar.width : Math.min(W * .9, 640);
+    m.setTransform(1 / CELL, 0, 0, 1 / CELL, 0, 0);
+    m.clearRect(0, 0, W, H);
+    m.fillStyle = "#fff";
+    m.textAlign = "center";
+    m.textBaseline = "alphabetic";
+    if ("letterSpacing" in m) m.letterSpacing = "-0.02em";
+    let size = 100;
+    m.font = `800 ${size}px Manrope, system-ui, sans-serif`;
+    const probe = m.measureText(WORD);
+    size = barWidth * .5 / (probe.width / size);                     // half as wide as the search bar
+    m.font = `800 ${size}px Manrope, system-ui, sans-serif`;
+    const width = m.measureText(WORD).width;
+    const descent = m.measureText(WORD).actualBoundingBoxDescent || 0;
+    const base = top - 18 - descent;
+    m.fillText(WORD, W / 2, base);
+    left = W / 2 - width / 2; right = W / 2 + width / 2;
+
+    const cover = m.getImageData(0, 0, cols, rows).data;
+    const old = dots;
     dots = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const x = (c + .5) * CELL, y = (r + .5) * CELL;
-      dots.push({hx: x, hy: y, x, y, vx: 0, vy: 0, size: 0, fill: WHITE, rgb: -1});
+      const alpha = cover[(r * cols + c) * 4 + 3] / 255;
+      if (alpha < .05) continue;
+      const hx = (c + .5) * CELL, hy = (r + .5) * CELL;
+      dots.push({hx, hy, x: hx, y: hy, vx: 0, vy: 0, target: MAX_R * Math.sqrt(alpha), size: 0});
     }
-    FLOOR = H - Math.max(120, H * .2);
-    PX = Math.min((FLOOR - H * .05) / 50, W * .7 / 30);
-    ORIGIN = W / 2 - 8.5 * PX;
+    // The first time, throw the dots across the screen so they assemble into the word.
+    if (first && !still) {
+      for (const d of dots) {
+        const a = Math.random() * Math.PI * 2, r = (.35 + Math.random() * .65) * Math.max(W, H) * .6;
+        d.x = W / 2 + Math.cos(a) * r; d.y = H / 2 + Math.sin(a) * r;
+      }
+    } else if (old.length) {
+      for (const d of dots) d.size = d.target;
+    }
+    first = false;
     return true;
-  }
-
-  function bar(ax, ay, bx, by, width = 1.35, alpha = 1, color = WHITE) {
-    s.globalAlpha = alpha;
-    s.strokeStyle = color;
-    s.lineWidth = width * PX;
-    s.beginPath(); s.moveTo(X(ax), Y(ay)); s.lineTo(X(bx), Y(by)); s.stroke();
-  }
-  function disc(x, y, radius, alpha = 1) {
-    s.globalAlpha = alpha;
-    s.fillStyle = WHITE;
-    s.beginPath(); s.arc(X(x), Y(y), radius * PX, 0, Math.PI * 2); s.fill();
-  }
-  function hole(x, y, radius) {
-    s.globalCompositeOperation = "destination-out";
-    disc(x, y, radius, .8);
-    s.globalCompositeOperation = "source-over";
-  }
-
-  function drawRobot(lift) {
-    s.setTransform(1 / CELL, 0, 0, 1 / CELL, 0, 0);
-    s.clearRect(0, 0, W, H);
-    s.globalCompositeOperation = "source-over";
-    s.lineCap = "round";
-    s.lineJoin = "round";
-    const angle = lift * MAX_ANGLE, c = Math.cos(angle), n = Math.sin(angle);
-    const a0 = [TOWER, LOW], a1 = [TOWER, LOW + GAP];
-    const m0 = [a0[0] + L1 * c, a0[1] + L1 * n], m1 = [a1[0] + L1 * c, a1[1] + L1 * n];
-    const m2 = [m1[0], m1[1] + 1.2], m3 = [m1[0], m1[1] + 1.2 + GAP];
-    const e0 = [m2[0] - L2 * c, m2[1] + L2 * n], e1 = [m3[0] - L2 * c, m3[1] + L2 * n];
-
-    bar(-9, -.4, 26, -.4, .4, .45);                                   // floor
-    for (const x of [0, 7.5, 15]) { disc(x, 1.9, 1.9, .62); disc(x, 1.9, .6); }
-    s.globalAlpha = .92;
-    s.fillStyle = WHITE;
-    s.beginPath();
-    s.moveTo(X(-2.5), Y(1.2)); s.lineTo(X(18), Y(1.2)); s.lineTo(X(18.5), Y(3.2));
-    s.quadraticCurveTo(X(14), Y(4.6), X(9), Y(5)); s.lineTo(X(-1.2), Y(5)); s.lineTo(X(-2.8), Y(3.4));
-    s.closePath(); s.fill();
-    for (const [x, y] of [[1, 3.2], [5, 3.4], [9, 3.3], [13, 3]]) hole(x, y, .42);
-
-    bar(TOWER, 4.6, TOWER, a1[1] + 1.6, 1.4);                         // tower
-    bar(TOWER, 6.2, 9.5, 4.8, .9, .8);                                // tower brace
-    bar(a0[0], a0[1], m0[0], m0[1]);                                  // stage 1
-    bar(a1[0], a1[1], m1[0], m1[1]);
-    bar(m0[0], m0[1] - .3, m3[0], m3[1] + .5, 1.4);                   // middle bar
-    bar(m2[0], m2[1], e0[0], e0[1]);                                  // stage 2
-    bar(m3[0], m3[1], e1[0], e1[1]);
-    bar(e0[0], e0[1] - .4, e1[0], e1[1] + 2.4, 1.4);                  // end bar
-    const top = e1[1] + 2.4;                                          // claw holding a pin
-    bar(e1[0] - .2, top, e1[0] + 6.5, top, 1.1);
-    bar(e1[0] + 6.5, top, e1[0] + 6.5, top - 3.2, 1);
-    const pin = [e1[0] + 4.3, top - 1.2];
-    s.globalAlpha = 1;
-    s.fillStyle = PIN;
-    s.beginPath();
-    s.moveTo(X(pin[0] - 1.15), Y(pin[1])); s.lineTo(X(pin[0] + 1.15), Y(pin[1]));
-    s.lineTo(X(pin[0] + .42), Y(pin[1] + 2.6)); s.lineTo(X(pin[0] - .42), Y(pin[1] + 2.6));
-    s.closePath(); s.fill();
-    for (const p of [a0, a1, m0, m1, m2, m3, e0, e1]) hole(p[0], p[1], .38);
   }
 
   // The pointer is followed over the whole page, so the search box doesn't block the effect.
@@ -113,27 +81,19 @@
   }, {passive: true});
   document.addEventListener("pointerleave", () => { pointer.active = false; });
 
-  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  function cycle(t) {
-    const p = t % 7.2;
-    if (p < 1.1) return 0;
-    if (p < 3.6) return ease((p - 1.1) / 2.5);
-    if (p < 4.9) return 1;
-    return 1 - ease((p - 4.9) / 2.3);
+  // A band of light that crosses the word every 6.5 s, slanted slightly.
+  function sweep(x, y, t) {
+    const p = (t % 6.5) / 2.4;
+    if (p > 1) return 0;
+    const centre = left - 160 + (right - left + 320) * p, d = (x + (y - H / 2) * .35 - centre) / 90;
+    return Math.exp(-d * d);
   }
 
-  function paint(dt, settle) {
-    const cover = s.getImageData(0, 0, cols, rows).data;
+  function paint(dt, clock, settle) {
     g.clearRect(0, 0, W, H);
     const reach = Math.max(70, CELL * 12), reach2 = reach * reach;
-    for (let i = 0; i < dots.length; i++) {
-      const dot = dots[i], k = i * 4, alpha = cover[k + 3] / 255;
-      const target = MAX_R * Math.sqrt(alpha);
-      dot.size = settle ? target : dot.size + (target - dot.size) * Math.min(1, dt * 14);
-      if (alpha > .05) {
-        const rgb = cover[k] << 16 | cover[k + 1] << 8 | cover[k + 2];
-        if (rgb !== dot.rgb) { dot.rgb = rgb; dot.fill = `rgb(${cover[k]},${cover[k + 1]},${cover[k + 2]})`; }
-      }
+    for (const dot of dots) {
+      dot.size = settle ? dot.target : dot.size + (dot.target - dot.size) * Math.min(1, dt * 4);
       if (!settle) {
         if (pointer.active) {
           const ox = dot.x - pointer.x, oy = dot.y - pointer.y, d2 = ox * ox + oy * oy;
@@ -155,11 +115,13 @@
           }
         }
       }
-      if (dot.size < .3) continue;
-      g.globalAlpha = Math.min(1, .45 + dot.size / MAX_R);
-      g.fillStyle = dot.fill;
+      const glow = settle ? 0 : sweep(dot.hx, dot.hy, clock);
+      const r = dot.size * (1 + glow * .28);
+      if (r < .3) continue;
+      g.globalAlpha = Math.min(1, .55 + .45 * dot.size / MAX_R);
+      g.fillStyle = glow > .08 ? `rgb(255,${255 - glow * 30 | 0},${255 - glow * 120 | 0})` : "#fff";
       g.beginPath();
-      g.arc(dot.x, dot.y, dot.size, 0, Math.PI * 2);
+      g.arc(dot.x, dot.y, r, 0, Math.PI * 2);
       g.fill();
     }
     g.globalAlpha = 1;
@@ -173,14 +135,16 @@
     const dt = Math.min(.05, (now - last) / 1000);
     last = now;
     clock += dt;
-    drawRobot(cycle(clock));
-    paint(dt, false);
+    paint(dt, clock, false);
   }
   const redraw = () => {
     ready = layout();
-    if (ready && still) { drawRobot(.62); paint(0, true); }
+    if (ready && still) paint(0, 0, true);
   };
-  new ResizeObserver(redraw).observe(canvas);
-  redraw();
-  if (!still) requestAnimationFrame(frame);
+  // Wait for Manrope so the word isn't measured in the fallback font.
+  (document.fonts ? document.fonts.load("800 100px Manrope").catch(() => {}) : Promise.resolve()).then(() => {
+    new ResizeObserver(redraw).observe(canvas);
+    redraw();
+    if (!still) requestAnimationFrame(frame);
+  });
 })();
