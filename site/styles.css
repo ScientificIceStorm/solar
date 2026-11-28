@@ -777,18 +777,13 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 /* ==== Match rows: WIN / LOSS sits in the background, scores line up ==== */
 .visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .match-cell{position:relative;overflow:hidden}
-.match-cell[data-outcome]::before{content:attr(data-outcome);position:absolute;z-index:0;left:-2px;top:50%;transform:translateY(-50%) skewX(-8deg);
-  font-size:38px;font-weight:900;letter-spacing:-.04em;line-height:1;pointer-events:none;opacity:.13;color:currentColor}
 .match-cell .match-label{position:relative;z-index:1}
-.match-row.win{background:linear-gradient(90deg,#16a07b2e,#16a07b0a 45%,transparent 75%)}
-.match-row.loss{background:linear-gradient(90deg,#d23b4f2e,#d23b4f0a 45%,transparent 75%)}
-.match-row.tie,.match-row.dq{background:linear-gradient(90deg,#c9a2342b,transparent 70%)}
-.match-row.win .match-cell{box-shadow:inset 3px 0 #16a07b;color:#0d7a5c}
-.match-row.loss .match-cell{box-shadow:inset 3px 0 #d23b4f;color:#a32737}
-.match-row.tie .match-cell,.match-row.dq .match-cell{box-shadow:inset 3px 0 #c9a234;color:#7d5f10}
+.match-row.win{background:#16a07b1f}
+.match-row.loss{background:#d23b4f1c}
+.match-row.tie,.match-row.dq{background:#c9a2341f}
 .match-row.win .match-label,.match-row.loss .match-label,.match-row.tie .match-label{color:#172b4d}
-.match-row.win:hover{background:linear-gradient(90deg,#16a07b40,#16a07b12 45%,#e4edfa66 75%)}
-.match-row.loss:hover{background:linear-gradient(90deg,#d23b4f40,#d23b4f12 45%,#e4edfa66 75%)}
+.match-row.win:hover{background:#16a07b33}
+.match-row.loss:hover{background:#d23b4f30}
 .match-label{gap:9px}
 .match-field{white-space:nowrap;color:#53637e;font-size:12px}
 /* Both scores in same-size pills: the winner's is filled, the other is a quiet outline. */
@@ -800,15 +795,11 @@ tbody tr:hover,[data-row-link]:hover{background:#e3edffb8}
 /* Full-event webcast: the play mark and its arrow both inside one pill. */
 .webcast-fallback a{display:inline-flex;align-items:center;justify-content:center;gap:3px;width:auto;height:22px;padding:0 8px 0 9px;border-radius:11px;font-size:9px;line-height:1}
 .webcast-fallback a i{font-style:normal;font-size:10px;opacity:.75}
-[data-theme=dark] .match-row.win .match-cell{color:#4fd8ad}
-[data-theme=dark] .match-row.loss .match-cell{color:#ff7a8c}
-[data-theme=dark] .match-row.tie .match-cell,[data-theme=dark] .match-row.dq .match-cell{color:#e6c35a}
 [data-theme=dark] .match-row.win .match-label,[data-theme=dark] .match-row.loss .match-label,[data-theme=dark] .match-row.tie .match-label{color:#e4ecff}
-[data-theme=dark] .match-cell[data-outcome]::before{opacity:.16}
-[data-theme=dark] .match-row.win{background:linear-gradient(90deg,#16a07b38,#16a07b0d 45%,transparent 75%)}
-[data-theme=dark] .match-row.loss{background:linear-gradient(90deg,#d23b4f38,#d23b4f0d 45%,transparent 75%)}
-[data-theme=dark] .match-row.win:hover{background:linear-gradient(90deg,#16a07b4a,#16a07b18 45%,#ffffff0a 75%)}
-[data-theme=dark] .match-row.loss:hover{background:linear-gradient(90deg,#d23b4f4a,#d23b4f18 45%,#ffffff0a 75%)}
+[data-theme=dark] .match-row.win{background:#16a07b26}
+[data-theme=dark] .match-row.loss{background:#d23b4f24}
+[data-theme=dark] .match-row.win:hover{background:#16a07b38}
+[data-theme=dark] .match-row.loss:hover{background:#d23b4f36}
 [data-theme=dark] .final-score>span:not(.score-separator){box-shadow:inset 0 0 0 1px #ffffff26;color:#c6d4ee}
 [data-theme=dark] .final-score .winner{color:#fff;box-shadow:none}
 [data-theme=dark] .match-field{color:#93a5c6}
