@@ -462,7 +462,25 @@ function lookupTeam() {
   else if (seasonsReady) status('Enter an exact team number, such as 98601B.');
 }
 
-window.addEventListener('hashchange', switchView);
+// Tabs fade out, swap, and fade the next one in. The swap runs on a timer, not on the animation
+// finishing, so a page in a background tab (where animations pause) still switches.
+let viewSwap = 0;
+function switchViewSmoothly() {
+  const main = document.querySelector('main');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || !main.animate) return switchView();
+  const token = ++viewSwap;
+  main.getAnimations().forEach((animation) => animation.cancel());
+  const out = main.animate([{opacity: 1}, {opacity: 0, transform: 'translateY(4px)'}],
+    {duration: 130, easing: 'ease-in', fill: 'forwards'});
+  setTimeout(() => {
+    if (token !== viewSwap) return;
+    switchView();
+    out.cancel();
+    main.animate([{opacity: 0, transform: 'translateY(8px)'}, {opacity: 1, transform: 'none'}],
+      {duration: 280, easing: 'cubic-bezier(.2,.8,.2,1)'});
+  }, 130);
+}
+window.addEventListener('hashchange', switchViewSmoothly);
 ui.season.addEventListener('change', loadRows);
 ui.grade.addEventListener('change', loadRows);
 ui.region.addEventListener('change', () => { page = 0; render(); });

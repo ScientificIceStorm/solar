@@ -129,3 +129,16 @@ body.sv-replay .dashboard .mode-switch button[aria-pressed="true"]:not(.play):no
 body.sv-replay #play, body.sv-replay .play { background:#173d9b; color:#fff; border:1px solid #173d9b; border-radius:20px; }
 /* Narrow phones: wrap the nav instead of widening the page. */
 @media(max-width:460px){body.sv-body .top-nav{flex-wrap:wrap;justify-content:center;row-gap:2px;border-radius:20px;max-width:calc(100vw - 16px);font-size:11px}}
+/* ScoutVision sub-nav: a pill that slides to the hovered tab, and the active tab morphs into place
+   when the next page loads (cross-document view transitions). */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.32s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+::view-transition-group(sv-active){animation-duration:.42s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+body.sv-body .sv-nav{position:relative;isolation:isolate}
+body.sv-body .sv-nav a{position:relative;z-index:1;transition:color .2s ease}
+body.sv-body .sv-nav a:hover{background:transparent}
+body.sv-body .sv-nav a[aria-current]{view-transition-name:sv-active}
+body.sv-body .sv-pill{position:absolute;z-index:0;top:4px;bottom:4px;left:0;width:0;border-radius:20px;background:#f5f9ffb8;opacity:0;pointer-events:none;
+  transition:transform .3s cubic-bezier(.22,.8,.25,1),width .3s cubic-bezier(.22,.8,.25,1),opacity .18s ease}
+body.sv-body .sv-pill.shown{opacity:1}
+@media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}
