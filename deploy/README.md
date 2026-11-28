@@ -6,7 +6,18 @@ Pages serves the website from `site/` and forwards its public data routes to the
 2. Set `ROBOEVENTS_API_KEY` and a random `SOLAR_ORIGIN_TOKEN` as secrets on the API host. Mount a writable persistent volume at `/var/cache/solar` for the service user (UID 10001). If the host requires a separate health check, use the root path.
 3. Sign in with `wrangler login`. Create a project with `wrangler pages project create solarscout --production-branch main`.
 4. In the Pages production settings, set `SOLAR_API_ORIGIN` to the HTTPS origin URL. Set the same `SOLAR_ORIGIN_TOKEN` as a Pages secret. Deploy from the repository root with `wrangler pages deploy site --project-name solarscout --branch main`.
-5. Use the `pages.dev` URL printed by Wrangler. Verify World Skills, the California map, an event replay, and a team page. Add a custom domain from the project's **Custom domains** tab when ready.
+5. Use the `pages.dev` URL printed by Wrangler. Verify World Skills, the event map, an event replay, and a team page. Add a custom domain from the project's **Custom domains** tab when ready.
+
+## Event map token
+
+The Map page uses [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/), which needs a Mapbox access token. The Pages worker serves it to the browser from `/api/map-config`.
+
+1. In the [Mapbox account console](https://console.mapbox.com/account/access-tokens/), create a token for this site with only the default public scopes. It must start with `pk.`; the worker refuses anything else. Never use a secret (`sk.`) token.
+2. Restrict the token to the site's URLs: `https://skyloft.tech` and the project's `pages.dev` address. Every visitor can read the token, so the URL restriction is what stops other sites from using it on your account. For local previews, use a separate token that also allows `http://localhost:8788` (or an unrestricted one that you never deploy).
+3. Set `MAPBOX_PUBLIC_TOKEN` in the Pages settings (production, and preview if used), or run `wrangler pages secret put MAPBOX_PUBLIC_TOKEN --project-name solarscout`. Redeploy afterwards.
+4. For local previews, put `MAPBOX_PUBLIC_TOKEN=pk.…` in `.dev.vars` at the repository root. Git ignores that file.
+
+Without a valid token the Map page shows "The map is awaiting setup." and the event list still works. Map loads count toward the Mapbox account's usage and billing.
 
 ## Season seed
 

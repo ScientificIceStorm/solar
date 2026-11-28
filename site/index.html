@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#103cbb">
   <meta name="description" content="Browse VEX V5 teams, events and official World Skills rankings.">
   <title>Solar · VEX Robotics</title>
-  <link rel="stylesheet" href="/styles.css?v=refresh-7">
+  <link rel="stylesheet" href="/styles.css?v=refresh-8">
   <link rel="stylesheet" href="/chrome.css?v=4">
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('solarTheme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}</script>
   <script src="/theme.js?v=3" defer></script>
-  <script src="/map.js?v=scouting-1" defer></script>
+  <script src="/map.js?v=mapbox-5" defer></script>
   <script src="/app.js?v=refresh-6" defer></script>
   <script src="/profile.js?v=account-3" defer></script>
   <script src="/account.js?v=dash-3" defer></script>
@@ -89,28 +89,28 @@
     <section id="mapView" hidden aria-labelledby="mapTitle">
       <div class="intro map-intro"><h1 id="mapTitle">Event map<span>.</span></h1></div>
       <div class="map-layout">
-        <div class="map-canvas" aria-label="United States VEX V5 event map">
-          <svg id="californiaMap" viewBox="0 0 620 705" role="group" aria-label="California counties and VEX event locations"></svg>
+        <div class="map-canvas" aria-label="VEX V5 event map">
+          <div id="eventMap" class="map-view" role="region" aria-label="VEX event locations"></div>
+          <p id="mapMessage" class="map-message" role="status" hidden></p>
           <div class="map-zoom" aria-label="Map zoom">
             <button type="button" id="mapZoomIn" aria-label="Zoom in">+</button>
             <button type="button" id="mapZoomOut" aria-label="Zoom out">−</button>
             <button type="button" id="mapReset" aria-label="Reset map view">Reset</button>
           </div>
-          <a class="map-source" href="https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.2025.html" target="_blank" rel="noopener">U.S. Census boundaries</a>
         </div>
-        <aside class="map-sidebar panel" aria-label="United States VEX events">
+        <aside class="map-sidebar panel" aria-label="VEX events">
           <div class="map-filters">
             <label for="mapFilter">Events</label>
-            <select id="mapFilter"><option value="all">All season</option><option value="upcoming">Upcoming</option><option value="past">Past</option></select>
+            <select id="mapFilter" autocomplete="off"><option value="all">All season</option><option value="upcoming" selected>Upcoming &amp; ongoing</option><option value="past">Past</option></select>
           </div>
-          <input type="search" id="mapSearch" aria-label="Find a U.S. event or city" placeholder="Find an event or city">
+          <input type="search" id="mapSearch" aria-label="Find an event, city or country" placeholder="Find an event, city or country">
           <div id="mapEvents" class="map-events" aria-live="polite"></div>
         </aside>
       </div>
     </section>
     <section id="detail" aria-label="Competition details" hidden></section>
     <section id="accountView" class="account" aria-labelledby="accountTitle" hidden></section>
-    <footer id="footer" hidden><span>Solar <span class="divider">/</span> VEX V5 Robotics Competition <span class="divider">/</span> <span class="made-by">Made by <a href="/team/98601B">98601B</a></span></span><span class="footer-links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://www.robotevents.com/" target="_blank" rel="noopener">Data from VEX Events ↗</a></span></footer>
+    <footer id="footer" hidden><span>Solar <span class="divider">/</span> VEX V5 Robotics Competition <span class="divider">/</span> <span class="made-by">Made by <a href="/team/98601B">98601B</a></span></span><span class="footer-links"><a href="/credits">Credits</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://www.robotevents.com/" target="_blank" rel="noopener">Data from VEX Events ↗</a></span></footer>
   </main>
   <dialog id="eventSearchDialog" class="event-search-dialog" aria-label="Search events">
     <form id="eventSearchForm" role="search">

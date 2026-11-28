@@ -51,3 +51,6 @@ assets/config/solar.local.json
 /.wrangler/
 /site/.wrangler/
 .dev.vars*
+
+# Node packages (installed locally, never committed)
+node_modules/
