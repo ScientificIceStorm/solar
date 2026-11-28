@@ -83,3 +83,17 @@
   .sv-intro-foot span{display:none}
   .sv-intro-foot{justify-content:center}
 }
+.sv-gl{position:absolute;inset:0;width:100%;height:100%;z-index:1;display:block;transition:opacity .6s ease}
+#svField{pointer-events:none}
+
+/* The ScoutVision menu the intro hands over to. */
+.sv-menu{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:18px clamp(14px,3vw,32px) 80px;display:grid;justify-items:center;gap:6px}
+.sv-menu h2{margin:26px 0 14px;color:#fff;font-size:clamp(28px,3.6vw,42px);letter-spacing:-.04em;text-shadow:0 2px 18px #0819368a}
+.sv-menu-grid{width:100%;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr))}
+.sv-menu-card{display:flex;flex-direction:column;gap:8px;padding:20px;border:1px solid #fff9;border-radius:18px;background:#f5f9ffe6;color:#13254a;text-decoration:none;
+  box-shadow:0 16px 44px #061f7428;backdrop-filter:blur(10px);transition:transform .2s ease,box-shadow .2s ease,border-color .2s}
+.sv-menu-card:hover{transform:translateY(-4px);box-shadow:0 22px 50px #061f7440;border-color:#9cb6ec}
+.sv-menu-card .tag{align-self:flex-start;padding:3px 9px;border-radius:99px;background:#e3ecfd;color:#173d9b;font-size:11px;font-weight:750;letter-spacing:.08em;text-transform:uppercase}
+.sv-menu-card h3{margin:2px 0 0;font-size:21px;letter-spacing:-.03em}
+.sv-menu-card p{margin:0;color:#4a5d80;font-size:14px;line-height:1.5;flex:1}
+.sv-menu-card b{color:#173d9b;font-size:14px}
