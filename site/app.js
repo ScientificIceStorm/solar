@@ -12,7 +12,9 @@ const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]);
 const locationText = (item = {}) => [item.city, item.region, item.country].filter(Boolean).join(', ');
-const pageSize = 20;
+// World Skills shows 100 teams a page; the other lists stay at 20.
+const pageSizeFor = () => view === 'skills' ? 100 : 20;
+let skillsEvents = new Map();
 let view = 'skills';
 let rows = [];
 let page = 0;
@@ -176,6 +178,15 @@ async function loadRows() {
     const params = {seasonId: ui.season.value};
     if (view !== 'events') params.gradeLevel = ui.grade.value;
     const source = {events:'events', skills:'skills', teams:'openskill', insights:'openskill'}[view];
+    if (view === 'skills') {
+      skillsEvents = new Map();
+      // Event names for the "Set at" column; the table renders without them and fills in after.
+      api('events', {seasonId: params.seasonId}).then((events) => {
+        if (id !== loadId) return;
+        skillsEvents = new Map(events.map((event) => [event.sku, event]));
+        render();
+      }).catch(() => {});
+    }
     const result = await api(source, params);
     if (id !== loadId) return;
     rows = isRatingView() ? result.rows : view === 'skills' ?
@@ -354,10 +365,12 @@ function render() {
     if (!isEvents && region && (row.eventRegion || row.region) !== region) return false;
     const fields = isEvents
       ? [row.name, row.sku, locationText(row.location)]
-      : [row.teamNumber, row.teamName, row.organization, locationText(row)];
+      : [row.teamNumber, row.teamName, row.organization, locationText(row),
+        ...(view === 'skills' ? [row.eventSku, skillsEvents.get(row.eventSku)?.name] : [])];
     return fields.join(' ').toLowerCase().includes(query);
   });
   ui.count.textContent = loading || listError ? '' : filtered.length.toLocaleString() + (isEvents ? ' events' : ' teams');
+  const pageSize = pageSizeFor();
   const start = page * pageSize;
   if (view === 'insights') filtered.sort((a, b) =>
     (insightValue(b, insightMetric) ?? -Infinity) - (insightValue(a, insightMetric) ?? -Infinity) || a.rank - b.rank);
@@ -397,16 +410,50 @@ function render() {
     return;
   }
   ui.results.innerHTML = table(
-      [['Rank'], ['Team'], ['Name'], ['Region', 'hide-small'], ['Skills', 'numeric'], ['Driver', 'numeric hide-small'], ['Autonomous', 'numeric hide-small']],
-      visible.map((row) =>
-        '<tr><td class="muted">' + (row.rank > 0 ? escape(row.rank) : '—') + '</td>' +
-        '<td>' + teamLink(row.teamNumber, ui.season.value) + '</td>' +
-        '<td>' + escape(row.teamName || row.organization || '—') + '</td>' +
-        '<td class="muted hide-small">' + escape(row.eventRegion || row.region || row.country || '—') + '</td>' +
-        '<td class="numeric"><span class="score">' + escape(row.combinedScore) + '</span></td>' +
-        '<td class="numeric hide-small">' + escape(row.driverScore) + '</td>' +
-        '<td class="numeric hide-small">' + escape(row.programmingScore) + '</td></tr>')
+      [['Rank'], ['Team'], ['Name'], ['Region', 'hide-small'], ['Skills', 'numeric'], ['Driver', 'numeric'],
+        ['Autonomous', 'numeric'], ['Set at', 'hide-small']],
+      visible.map(skillsRow)
     );
+}
+
+// "2026-11-21 09:30:22" as VEX Events reports it, shown without converting time zones.
+function skillsTime(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(value || '');
+  if (!match) return '';
+  const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(match[2]) - 1];
+  return month + ' ' + Number(match[3]) + ', ' + match[4] + ':' + match[5];
+}
+
+function skillsRun(score, best, stop, scoredAt) {
+  const notes = [];
+  if (stop !== undefined) notes.push('stop ' + stop + 's');
+  if (best > score) notes.push('best ' + best);
+  const when = skillsTime(scoredAt);
+  return '<span class="skills-run"><b>' + escape(score) + '</b><small>' + escape(notes.join(' · ')) + '</small>' +
+    (when ? '<small>' + escape(when) + '</small>' : '') + '</span>';
+}
+
+function skillsRow(row) {
+  const event = skillsEvents.get(row.eventSku);
+  const date = row.eventStartDate || event?.start?.slice(0, 10) || '';
+  const place = event ? locationText(event.location) : '';
+  return '<tr><td class="muted">' + (row.rank > 0 ? escape(row.rank) : '—') + '</td>' +
+    '<td>' + teamLink(row.teamNumber, ui.season.value) + '</td>' +
+    '<td class="skills-name">' + escape(row.teamName || '—') + (row.organization && row.organization !== row.teamName ?
+      '<small>' + escape(row.organization) + '</small>' : '') + '</td>' +
+    '<td class="muted hide-small">' + escape(row.eventRegion || row.region || row.country || '—') + '</td>' +
+    '<td class="numeric"><span class="skills-run"><span class="score">' + escape(row.combinedScore) + '</span>' +
+      (row.combinedStopTime !== undefined ? '<small>stop ' + escape(row.combinedStopTime) + 's</small>' : '') + '</span></td>' +
+    '<td class="numeric">' + skillsRun(row.driverScore, row.maxDriverScore, row.driverStopTime, row.driverScoredAt) + '</td>' +
+    '<td class="numeric">' + skillsRun(row.programmingScore, row.maxProgrammingScore, row.programmingStopTime, row.programmingScoredAt) + '</td>' +
+    '<td class="hide-small skills-event">' + (row.eventSku ? eventLink(row.eventSku, event?.name || row.eventSku, ui.season.value) : '—') +
+      '<small>' + escape([date && dateLabelSafe(date), place].filter(Boolean).join(' · ')) + '</small></td></tr>';
+}
+
+function dateLabelSafe(day) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(day);
+  if (!match) return day;
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(match[2]) - 1] + ' ' + Number(match[3]) + ', ' + match[1];
 }
 
 function lookupTeam() {
@@ -422,8 +469,15 @@ ui.region.addEventListener('change', () => { page = 0; render(); });
 ui.search.addEventListener('input', () => { if (seasonsReady) { page = 0; render(); } });
 ui.searchForm.addEventListener('submit', (event) => { event.preventDefault(); if (view === 'teams') lookupTeam(); });
 ui.lookup.addEventListener('click', lookupTeam);
-ui.previous.addEventListener('click', () => { page--; render(); });
-ui.next.addEventListener('click', () => { page++; render(); });
+// A new page starts at the top of the table rather than wherever the buttons were.
+const turnPage = (step) => {
+  page += step;
+  render();
+  const top = ui.browsePanel.getBoundingClientRect().top + scrollY - (document.querySelector('.masthead')?.offsetHeight || 0) - 8;
+  if (scrollY > top) scrollTo({top, behavior: 'smooth'});
+};
+ui.previous.addEventListener('click', () => turnPage(-1));
+ui.next.addEventListener('click', () => turnPage(1));
 
 
 function teamPath(number, season) {
@@ -1626,7 +1680,7 @@ function wireSlidingIndicator(group, control, selected) {
   sync();
   return {sync, disconnect: () => observer.disconnect()};
 }
-const {sync: syncNav} = wireSlidingIndicator(topNav, 'a', '[aria-current]');
+const {sync: syncNav} = wireSlidingIndicator(topNav, '.top-nav > a', '.top-nav > [aria-current]');
 
 const eventSearchDialog = $('eventSearchDialog');
 const eventQuery = $('eventQuery');

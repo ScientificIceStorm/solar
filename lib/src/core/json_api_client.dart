@@ -170,7 +170,9 @@ class JsonApiClient {
         uri: uri,
       );
     }
-    final body = response.body.trim();
+    // JSON is UTF-8 by definition; response.body falls back to Latin-1 when the server leaves out
+    // a charset, which garbles non-English team names.
+    final body = utf8.decode(response.bodyBytes, allowMalformed: true).trim();
     if (body.isEmpty) return null;
     try {
       return jsonDecode(body);

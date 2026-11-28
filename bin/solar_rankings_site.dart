@@ -139,7 +139,7 @@ Future<List<Map<String, dynamic>>> _skillsRows(
   String grade,
 ) async {
   final snapshot = await _siteSnapshot(
-    'skills-$season-${_slugify(grade)}',
+    'skills-v2-$season-${_slugify(grade)}',
     const Duration(minutes: 15),
     () async {
       final rows = await api.worldSkills.fetchRankings(
@@ -1177,11 +1177,12 @@ Future<void> _handleRequest(
       '/map.js',
       '/profile.js',
       '/account.js',
-      '/home-robot.js',
+      '/theme.js',
       '/privacy.html',
       '/terms.html',
       '/california-counties.json',
       '/solar-photo.jpg',
+      '/solar-aurora.webp',
       '/manrope.woff2',
     }.contains(assetPath)) {
       return _writeError(request.response, HttpStatus.notFound, 'Not found.');
@@ -2192,6 +2193,9 @@ ContentType _contentTypeFor(String path) {
   }
   if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
     return ContentType('image', 'jpeg');
+  }
+  if (path.endsWith('.webp')) {
+    return ContentType('image', 'webp');
   }
   return ContentType.html;
 }

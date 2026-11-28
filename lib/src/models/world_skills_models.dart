@@ -19,6 +19,13 @@ class WorldSkillsEntry {
     required this.driverScore,
     required this.maxProgrammingScore,
     required this.maxDriverScore,
+    this.eventStartDate = '',
+    this.combinedStopTime = 0,
+    this.programmingStopTime = 0,
+    this.driverStopTime = 0,
+    this.programmingScoredAt = '',
+    this.driverScoredAt = '',
+    this.eligible = false,
   });
 
   final int rank;
@@ -38,6 +45,13 @@ class WorldSkillsEntry {
   final int driverScore;
   final int maxProgrammingScore;
   final int maxDriverScore;
+  final String eventStartDate;
+  final int combinedStopTime;
+  final int programmingStopTime;
+  final int driverStopTime;
+  final String programmingScoredAt;
+  final String driverScoredAt;
+  final bool eligible;
 
   factory WorldSkillsEntry.fromJson(JsonMap json) {
     final team = asJsonMap(json['team']);
@@ -113,6 +127,23 @@ class WorldSkillsEntry {
             json['maxDriverScore'] ??
             json['max_driver_score'],
       ),
+      eventStartDate: readString(event['startDate'] ?? json['eventStartDate']),
+      combinedStopTime: readInt(
+        scores['combinedStopTime'] ?? json['combinedStopTime'],
+      ),
+      programmingStopTime: readInt(
+        scores['progStopTime'] ?? json['programmingStopTime'],
+      ),
+      driverStopTime: readInt(
+        scores['driverStopTime'] ?? json['driverStopTime'],
+      ),
+      programmingScoredAt: readString(
+        scores['progScoredAt'] ?? json['programmingScoredAt'],
+      ),
+      driverScoredAt: readString(
+        scores['driverScoredAt'] ?? json['driverScoredAt'],
+      ),
+      eligible: json['eligible'] == true,
     );
   }
 
@@ -135,6 +166,13 @@ class WorldSkillsEntry {
       'driverScore': driverScore,
       'maxProgrammingScore': maxProgrammingScore,
       'maxDriverScore': maxDriverScore,
+      'eventStartDate': eventStartDate,
+      'combinedStopTime': combinedStopTime,
+      'programmingStopTime': programmingStopTime,
+      'driverStopTime': driverStopTime,
+      'programmingScoredAt': programmingScoredAt,
+      'driverScoredAt': driverScoredAt,
+      'eligible': eligible,
     };
   }
 }
