@@ -1421,8 +1421,7 @@ function renderTeam(data, season, {partial = false, failed = false} = {}) {
     escape([team.organization, locationText(team.location)].filter(Boolean).join(' · ')) + '</p></div>' +
     '<section class="panel"><div class="detail-toolbar"><h2>Season overview</h2><label>Season <select id="teamSeason"></select>' +
     '</label></div><div class="stats" id="officialStats">' + ratings +
-    '</div><p class="status">' + (partial ? 'Showing available matches while the full profile loads. ' +
-      '<button type="button" data-retry-team>Refresh results</button>' : 'Open a season event for its scouting report.') + '</p></section>' +
+    '</div>' + (partial ? '' : '<p class="status">Open a season event for its scouting report.</p>') + '</section>' +
     '<section class="panel upcoming-panel"><div class="detail-toolbar"><h2>Upcoming competitions</h2></div>' +
     '<div id="teamUpcomingList" aria-live="polite"></div></section>' +
     (eventCards.length ? '<div class="split-layout">' + jumpList('Season events', eventCards) +
