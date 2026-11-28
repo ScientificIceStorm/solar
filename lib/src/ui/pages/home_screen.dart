@@ -15,6 +15,7 @@ import '../theme/solar_chrome_palette.dart';
 import '../widgets/solar_event_photo.dart';
 import '../widgets/solar_match_row.dart';
 import '../widgets/solar_navigation.dart';
+import '../widgets/solar_scaffold_metrics.dart';
 import '../widgets/solar_screen_background.dart';
 import '../widgets/solar_team_link.dart';
 import '../widgets/solar_team_overview_card.dart';
@@ -40,7 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _homeScrollController = ScrollController();
   AppSessionController? _sessionController;
+  bool _didRequestLaunchWarmup = false;
   _HomeSearchScope _searchScope = _HomeSearchScope.all;
+  String? _selectedQuickviewTeamNumber;
 
   @override
   void didChangeDependencies() {
@@ -48,8 +51,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = SolarAppScope.of(context);
     if (!identical(_sessionController, controller)) {
       _sessionController = controller;
+      _didRequestLaunchWarmup = false;
+    }
+
+    if (!_didRequestLaunchWarmup) {
+      _didRequestLaunchWarmup = true;
       unawaited(controller.preloadSearchEvents());
       unawaited(controller.preloadSearchTeams());
+      unawaited(controller.fetchQuickviewSnapshot());
+      unawaited(controller.fetchNotificationCenterSnapshot());
+      if (!controller.isRefreshingTeamStats &&
+          !(controller.teamStats?.hasLiveSignal ?? false)) {
+        unawaited(controller.refreshTeamStats());
+      }
       unawaited(controller.syncIosCompanion());
     }
   }
@@ -182,6 +196,15 @@ class _HomeScreenState extends State<HomeScreen> {
             : eventResults;
         final teamStats =
             controller.teamStats ?? TeamStatsSnapshot(team: account.team);
+        final quickviewTeams = _quickviewTeamsFor(
+          controller: controller,
+          accountTeam: account.team,
+        );
+        final selectedQuickviewTeam = _selectedQuickviewTeam(
+          teams: quickviewTeams,
+          fallback: account.team,
+          selectedTeamNumber: _selectedQuickviewTeamNumber,
+        );
         final notificationFuture = controller.fetchNotificationCenterSnapshot();
         final topInset = MediaQuery.paddingOf(context).top;
         final chromeColor = solarChromeAccentColor(
@@ -236,7 +259,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         physics: const BouncingScrollPhysics(
                           parent: AlwaysScrollableScrollPhysics(),
                         ),
-                        padding: EdgeInsets.fromLTRB(0, headerHeight + 24, 0, 148),
+                        padding: EdgeInsets.fromLTRB(
+                          0,
+                          headerHeight + 24,
+                          0,
+                          solarBottomNavBarClearance + 40,
+                        ),
                         children: <Widget>[
                           if (showSearchResults) ...<Widget>[
                             Padding(
@@ -279,6 +307,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _QuickviewTeamCarousel(
                                 controller: controller,
                                 accountTeam: account.team,
+                                initialTeamNumber: selectedQuickviewTeam.number,
+                                onActiveTeamChanged: (team) {
+                                  final normalized = team.number
+                                      .trim()
+                                      .toUpperCase();
+                                  if (_selectedQuickviewTeamNumber ==
+                                      normalized) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    _selectedQuickviewTeamNumber = normalized;
+                                  });
+                                },
                               ),
                             ),
                             const SizedBox(height: 28),
@@ -312,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onTap: () {
                                   openSolarTeamProfileForSummary(
                                     context,
-                                    account.team,
+                                    selectedQuickviewTeam,
                                   );
                                 },
                               ),
@@ -322,19 +363,38 @@ class _HomeScreenState extends State<HomeScreen> {
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 28,
                               ),
-                              child: FutureBuilder<int>(
-                                future: controller.fetchTeamAwardsCount(
-                                  account.team,
+                              child: FutureBuilder<TeamStatsSnapshot>(
+                                key: ValueKey<String>(
+                                  'team-stats-${selectedQuickviewTeam.number.trim().toUpperCase()}',
                                 ),
-                                builder: (context, awardsSnapshot) {
-                                  return SolarTeamOverviewCard(
-                                    team: account.team,
-                                    teamStats: teamStats,
-                                    awardsCount: awardsSnapshot.data,
-                                    onTap: () {
-                                      openSolarTeamProfileForSummary(
-                                        context,
-                                        account.team,
+                                future: controller.fetchTeamStatsSnapshot(
+                                  selectedQuickviewTeam,
+                                ),
+                                initialData: controller
+                                    .previewTeamStatsSnapshot(
+                                      selectedQuickviewTeam,
+                                    ),
+                                builder: (context, statsSnapshot) {
+                                  final activeTeamStats =
+                                      statsSnapshot.data ??
+                                      controller.previewTeamStatsSnapshot(
+                                        selectedQuickviewTeam,
+                                      );
+                                  return FutureBuilder<int>(
+                                    future: controller.fetchTeamAwardsCount(
+                                      selectedQuickviewTeam,
+                                    ),
+                                    builder: (context, awardsSnapshot) {
+                                      return SolarTeamOverviewCard(
+                                        team: selectedQuickviewTeam,
+                                        teamStats: activeTeamStats,
+                                        awardsCount: awardsSnapshot.data,
+                                        onTap: () {
+                                          openSolarTeamProfileForSummary(
+                                            context,
+                                            selectedQuickviewTeam,
+                                          );
+                                        },
                                       );
                                     },
                                   );
@@ -389,6 +449,42 @@ double _homeHeaderHeight({
   return isRefreshing ? baseHeight + 34 : baseHeight;
 }
 
+List<TeamSummary> _quickviewTeamsFor({
+  required AppSessionController controller,
+  required TeamSummary accountTeam,
+}) {
+  final teamsByNumber = <String, TeamSummary>{
+    accountTeam.number.trim().toUpperCase(): accountTeam,
+  };
+  for (final team in controller.followedTeams) {
+    final normalized = team.number.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      continue;
+    }
+    teamsByNumber.putIfAbsent(normalized, () => team);
+  }
+  return teamsByNumber.values.toList(growable: false);
+}
+
+TeamSummary _selectedQuickviewTeam({
+  required List<TeamSummary> teams,
+  required TeamSummary fallback,
+  String? selectedTeamNumber,
+}) {
+  final normalizedSelection = selectedTeamNumber?.trim().toUpperCase();
+  if (normalizedSelection != null && normalizedSelection.isNotEmpty) {
+    for (final team in teams) {
+      if (team.number.trim().toUpperCase() == normalizedSelection) {
+        return team;
+      }
+    }
+  }
+  if (teams.isNotEmpty) {
+    return teams.first;
+  }
+  return fallback;
+}
+
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({
     required this.topInset,
@@ -418,7 +514,20 @@ class _HomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(28, topInset + 22, 28, 34),
-      color: chromeColor,
+      decoration: BoxDecoration(
+        color: chromeColor,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(solarHeaderCornerRadius),
+          bottomRight: Radius.circular(solarHeaderCornerRadius),
+        ),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 24,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -872,11 +981,7 @@ class _FilterButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Row(
           children: <Widget>[
-            const Icon(
-              Icons.tune_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
+            const Icon(Icons.tune_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 8),
             Text(
               label,
@@ -1488,10 +1593,14 @@ class _QuickviewTeamCarousel extends StatefulWidget {
   const _QuickviewTeamCarousel({
     required this.controller,
     required this.accountTeam,
+    this.initialTeamNumber,
+    this.onActiveTeamChanged,
   });
 
   final AppSessionController controller;
   final TeamSummary accountTeam;
+  final String? initialTeamNumber;
+  final ValueChanged<TeamSummary>? onActiveTeamChanged;
 
   @override
   State<_QuickviewTeamCarousel> createState() => _QuickviewTeamCarouselState();
@@ -1501,6 +1610,7 @@ class _QuickviewTeamCarouselState extends State<_QuickviewTeamCarousel> {
   int _selectedIndex = 0;
   int _slideDirection = 1;
   double _dragDeltaX = 0;
+  String? _lastReportedTeamNumber;
 
   List<TeamSummary> _availableTeams() {
     final byTeamNumber = <String, TeamSummary>{};
@@ -1518,12 +1628,57 @@ class _QuickviewTeamCarouselState extends State<_QuickviewTeamCarousel> {
     return byTeamNumber.values.toList(growable: false);
   }
 
+  int _resolvedSelectedIndex(
+    List<TeamSummary> teams, {
+    String? preferredTeamNumber,
+  }) {
+    if (teams.isEmpty) {
+      return 0;
+    }
+
+    final normalizedPreference = preferredTeamNumber?.trim().toUpperCase();
+    if (normalizedPreference != null && normalizedPreference.isNotEmpty) {
+      final matchingIndex = teams.indexWhere(
+        (team) => team.number.trim().toUpperCase() == normalizedPreference,
+      );
+      if (matchingIndex >= 0) {
+        return matchingIndex;
+      }
+    }
+
+    if (_selectedIndex < teams.length) {
+      return _selectedIndex;
+    }
+    return 0;
+  }
+
+  void _reportActiveTeam(TeamSummary team) {
+    final normalized = team.number.trim().toUpperCase();
+    if (_lastReportedTeamNumber == normalized) {
+      return;
+    }
+    _lastReportedTeamNumber = normalized;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      widget.onActiveTeamChanged?.call(team);
+    });
+  }
+
   @override
   void didUpdateWidget(covariant _QuickviewTeamCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.controller, widget.controller) ||
-        oldWidget.accountTeam.number != widget.accountTeam.number) {
-      _selectedIndex = 0;
+    final shouldReselect =
+        !identical(oldWidget.controller, widget.controller) ||
+        oldWidget.accountTeam.number != widget.accountTeam.number ||
+        oldWidget.initialTeamNumber != widget.initialTeamNumber;
+    if (shouldReselect) {
+      final teams = _availableTeams();
+      _selectedIndex = _resolvedSelectedIndex(
+        teams,
+        preferredTeamNumber: widget.initialTeamNumber,
+      );
     }
   }
 
@@ -1547,9 +1702,10 @@ class _QuickviewTeamCarouselState extends State<_QuickviewTeamCarousel> {
   @override
   Widget build(BuildContext context) {
     final teams = _availableTeams();
-    final selectedIndex = teams.isEmpty
-        ? 0
-        : (_selectedIndex >= teams.length ? teams.length - 1 : _selectedIndex);
+    final selectedIndex = _resolvedSelectedIndex(
+      teams,
+      preferredTeamNumber: widget.initialTeamNumber,
+    );
     if (selectedIndex != _selectedIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -1564,6 +1720,7 @@ class _QuickviewTeamCarouselState extends State<_QuickviewTeamCarousel> {
     final activeTeam = teams.isEmpty
         ? widget.accountTeam
         : teams[selectedIndex];
+    _reportActiveTeam(activeTeam);
     final hasMultipleTeams = teams.length > 1;
     final isFavorite = widget.controller.isFavoriteTeam(activeTeam.number);
 
@@ -2237,7 +2394,10 @@ class _QuickviewLoadingState extends StatelessWidget {
         child: SizedBox(
           width: 28,
           height: 28,
-          child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: Colors.white,
+          ),
         ),
       ),
     );

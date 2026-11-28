@@ -5,6 +5,7 @@ import '../../models/robot_events_models.dart';
 import '../models/solar_match_prediction.dart';
 import '../widgets/solar_event_subpage_scaffold.dart';
 import '../widgets/solar_match_row.dart';
+import '../widgets/solar_search_field.dart';
 import 'event_team_screen.dart';
 import 'match_details_screen.dart';
 
@@ -22,8 +23,17 @@ class EventScheduleScreen extends StatefulWidget {
 class _EventScheduleScreenState extends State<EventScheduleScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _predictionModeEnabled = false;
+  Future<List<MatchSummary>>? _matchesFuture;
   Future<Map<int, SolarMatchPrediction?>>? _predictionFuture;
   String? _predictionCacheKey;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _matchesFuture ??= SolarAppScope.of(
+      context,
+    ).fetchTeamScheduleForEvent(widget.event.id);
+  }
 
   @override
   void dispose() {
@@ -68,7 +78,7 @@ class _EventScheduleScreenState extends State<EventScheduleScreen> {
       title: '$teamNumber Schedule',
       subtitle: widget.event.name,
       body: FutureBuilder<List<MatchSummary>>(
-        future: controller.fetchTeamScheduleForEvent(widget.event.id),
+        future: _matchesFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const _CenteredLoader();
@@ -78,28 +88,34 @@ class _EventScheduleScreenState extends State<EventScheduleScreen> {
           if (matches.isEmpty) {
             return const _EmptyEventState(
               title: 'No scheduled matches yet',
-              body: 'When this event publishes match pairings, they will show up here.',
+              body:
+                  'When this event publishes match pairings, they will show up here.',
             );
           }
 
           final query = _searchController.text.trim().toLowerCase();
           final visibleMatches = query.isEmpty
               ? matches
-              : matches.where((match) {
-                  if (solarMatchScreenLabel(match).toLowerCase().contains(query)) {
-                    return true;
-                  }
-                  for (final alliance in match.alliances) {
-                    for (final team in alliance.teams) {
-                      final label =
-                          '${team.number} ${team.name}'.trim().toLowerCase();
-                      if (label.contains(query)) {
+              : matches
+                    .where((match) {
+                      if (solarMatchScreenLabel(
+                        match,
+                      ).toLowerCase().contains(query)) {
                         return true;
                       }
-                    }
-                  }
-                  return false;
-                }).toList(growable: false);
+                      for (final alliance in match.alliances) {
+                        for (final team in alliance.teams) {
+                          final label = '${team.number} ${team.name}'
+                              .trim()
+                              .toLowerCase();
+                          if (label.contains(query)) {
+                            return true;
+                          }
+                        }
+                      }
+                      return false;
+                    })
+                    .toList(growable: false);
 
           if (visibleMatches.isEmpty) {
             return const _EmptyEventState(
@@ -108,10 +124,14 @@ class _EventScheduleScreenState extends State<EventScheduleScreen> {
             );
           }
 
-          Widget matchesList(Map<int, SolarMatchPrediction?> predictionsByMatch) {
+          Widget matchesList(
+            Map<int, SolarMatchPrediction?> predictionsByMatch,
+          ) {
             return StretchingOverscrollIndicator(
               axisDirection: AxisDirection.down,
               child: ListView.builder(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.only(bottom: 8),
                 itemCount: visibleMatches.length + 1,
                 itemBuilder: (context, index) {
@@ -119,7 +139,6 @@ class _EventScheduleScreenState extends State<EventScheduleScreen> {
                     return _ScheduleToolbar(
                       controller: _searchController,
                       predictionModeEnabled: _predictionModeEnabled,
-                      matchCount: visibleMatches.length,
                       onChanged: (_) => setState(() {}),
                       onPredictionModeChanged: (value) {
                         setState(() {
@@ -174,7 +193,8 @@ class _EventScheduleScreenState extends State<EventScheduleScreen> {
           }
 
           final predictionKey = _predictionKey(visibleMatches);
-          if (_predictionFuture == null || _predictionCacheKey != predictionKey) {
+          if (_predictionFuture == null ||
+              _predictionCacheKey != predictionKey) {
             _predictionCacheKey = predictionKey;
             _predictionFuture = _loadPredictions(visibleMatches);
           }
@@ -198,14 +218,12 @@ class _ScheduleToolbar extends StatelessWidget {
   const _ScheduleToolbar({
     required this.controller,
     required this.predictionModeEnabled,
-    required this.matchCount,
     required this.onChanged,
     required this.onPredictionModeChanged,
   });
 
   final TextEditingController controller;
   final bool predictionModeEnabled;
-  final int matchCount;
   final ValueChanged<String> onChanged;
   final ValueChanged<bool> onPredictionModeChanged;
 
@@ -215,53 +233,14 @@ class _ScheduleToolbar extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD7DBEA)),
-            ),
-            child: Row(
-              children: <Widget>[
-                const Icon(
-                  Icons.search_rounded,
-                  color: Color(0xFF6F748B),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    onChanged: onChanged,
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isCollapsed: true,
-                      hintText: 'Search matches or teams',
-                      hintStyle: TextStyle(
-                        color: Color(0xFF8E92A7),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    style: const TextStyle(
-                      color: Color(0xFF24243A),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$matchCount',
-                  style: const TextStyle(
-                    color: Color(0xFF6F748B),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
+          SolarSearchField(
+            controller: controller,
+            hintText: 'Search matches or teams',
+            onChanged: onChanged,
+            tone: SolarSearchFieldTone.embedded,
+            horizontalPadding: 12,
+            verticalPadding: 6,
+            borderRadius: 18,
           ),
           const SizedBox(height: 8),
           Row(
@@ -293,7 +272,7 @@ class _ScheduleToolbar extends StatelessWidget {
               Switch.adaptive(
                 value: predictionModeEnabled,
                 onChanged: onPredictionModeChanged,
-                activeColor: Colors.white,
+                activeThumbColor: Colors.white,
                 activeTrackColor: const Color(0xFF5F66FF),
               ),
             ],

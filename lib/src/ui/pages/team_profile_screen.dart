@@ -507,15 +507,6 @@ class _TrendsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scoringPoints = _recentMarginPoints(teamStats);
-    final skillsPoints = details.skillsHistory
-        .map(
-          (entry) => SolarTrendPoint(
-            label: _eventDateLabel(entry.event.start),
-            value: entry.combined.toDouble(),
-            detail: 'Driver ${entry.driver} • Auton ${entry.programming}',
-          ),
-        )
-        .toList(growable: false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -551,29 +542,19 @@ class _TrendsTab extends StatelessWidget {
         const SizedBox(height: 24),
         _TeamSection(
           title: 'Skills History',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SolarTrendChart(
-                points: skillsPoints,
-                emptyLabel:
-                    'Recent event skills history will appear here when published attempts are available.',
-                valueLabel: 'Combined skills by recent event',
-                lineColor: const Color(0xFF0F766E),
-              ),
-              if (details.skillsHistory.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 14),
-                Text(
-                  'Latest split: Driver ${details.skillsHistory.last.driver}  •  Auton ${details.skillsHistory.last.programming}',
-                  style: const TextStyle(
-                    color: Color(0xFF6E7388),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+          child: details.skillsHistory.isEmpty
+              ? const _InlineMessage(
+                  'Recent event skills history will appear here when published attempts are available.',
+                )
+              : Column(
+                  children: <Widget>[
+                    for (var i = 0; i < details.skillsHistory.length; i++)
+                      _SkillsHistoryRow(
+                        entry: details.skillsHistory[i],
+                        showDivider: i != details.skillsHistory.length - 1,
+                      ),
+                  ],
                 ),
-              ],
-            ],
-          ),
         ),
         if (teamStats.rankings.isNotEmpty) ...<Widget>[
           const SizedBox(height: 24),
@@ -849,37 +830,31 @@ class _TeamEventRow extends StatelessWidget {
               ],
             ),
             if (awards.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: awards
-                    .take(4)
-                    .map(
-                      (award) => Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: award.qualifications.isNotEmpty
-                              ? const Color(0xFFEAF3FF)
-                              : const Color(0xFFF3F4F8),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+              const SizedBox(height: 12),
+              Column(
+                children: <Widget>[
+                  for (var i = 0; i < awards.take(4).length; i++)
+                    _TeamAwardLine(
+                      award: awards[i],
+                      showDivider:
+                          i != awards.take(4).length - 1 || awards.length > 4,
+                    ),
+                  if (awards.length > 4)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
                         child: Text(
-                          award.title,
-                          style: TextStyle(
-                            color: award.qualifications.isNotEmpty
-                                ? const Color(0xFF1D4ED8)
-                                : const Color(0xFF5C6074),
+                          '+${awards.length - 4} more awards',
+                          style: const TextStyle(
+                            color: Color(0xFF7A7F92),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                    )
-                    .toList(growable: false),
+                    ),
+                ],
               ),
             ],
             const SizedBox(height: 10),
@@ -908,10 +883,9 @@ class _TeamEventRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pushNamed(
-                      EventDetailsScreen.routeName,
-                      arguments: event,
-                    );
+                    Navigator.of(
+                      context,
+                    ).pushNamed(EventDetailsScreen.routeName, arguments: event);
                   },
                   child: const Text('Event details'),
                 ),
@@ -919,6 +893,157 @@ class _TeamEventRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SkillsHistoryRow extends StatelessWidget {
+  const _SkillsHistoryRow({required this.entry, required this.showDivider});
+
+  final _SkillsHistoryEntry entry;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFDADAE3))),
+            )
+          : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  entry.event.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_eventDateLabel(entry.event.start)}  •  Driver ${entry.driver}  •  Auton ${entry.programming}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF7B8198),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Text(
+                '${entry.combined}',
+                style: const TextStyle(
+                  color: Color(0xFF24243A),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'TOTAL',
+                style: TextStyle(
+                  color: Color(0xFF8E92A7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamAwardLine extends StatelessWidget {
+  const _TeamAwardLine({required this.award, required this.showDivider});
+
+  final AwardSummary award;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    final qualificationLabel = award.qualifications
+        .map((qualification) => qualification.trim())
+        .where((qualification) => qualification.isNotEmpty)
+        .join(' • ');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: showDivider
+          ? const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFE0E3ED))),
+            )
+          : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.emoji_events_rounded,
+              size: 16,
+              color: qualificationLabel.isEmpty
+                  ? const Color(0xFF7A7F92)
+                  : const Color(0xFF1D4ED8),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  award.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF24243A),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                  ),
+                ),
+                if (qualificationLabel.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 4),
+                  Text(
+                    qualificationLabel,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF1D4ED8),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
