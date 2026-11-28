@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#060b1c">
   <meta name="description" content="Vision UI: a new V5 brain screen for running, stepping through and tuning VEX autonomous routes.">
   <title>Vision UI · Solar</title>
-  <link rel="stylesheet" href="/styles.css?v=wide-1">
+  <link rel="stylesheet" href="/styles.css?v=events-3">
   <script src="/profile.js?v=account-3" defer></script>
-  <script src="/vision-ui/vision.js?v=4" defer></script>
+  <script src="/vision-ui/vision.js?v=5" defer></script>
   <style>
     :root{--ink:#eaf2ff;--quiet:#9fb0d0;--cyan:#3cc9f0;--orange:#f6a13a;--violet:#9b8cff;--green:#4ade80;--deep:#060b1c}
     html{overflow-x:clip;scroll-behavior:smooth}
@@ -61,9 +61,17 @@
     .steps li.now{background:#3cc9f01f;color:#fff;transform:translateX(6px);box-shadow:0 0 0 1px #3cc9f055 inset}
     .stats{height:380vh}
     .stats-device{display:grid}
-    .stats-device img{grid-area:1/1;aspect-ratio:2/1;height:auto;opacity:0;transform:scale(.97);filter:blur(4px);
-      transition:opacity .45s ease,transform .45s ease,filter .45s ease}
-    .stats-device img.on{opacity:1;transform:none;filter:none}
+    .stats-device img{grid-area:1/1;aspect-ratio:2/1;height:auto;opacity:0;transition:opacity .4s ease}
+    .stats-device img.on{opacity:1}
+    /* One tab bar over every stats screenshot, so the highlight slides instead of jumping. */
+    .stat-bar{grid-area:1/1;align-self:start;position:relative;z-index:1;width:90.834%;aspect-ratio:872/84;border-top-left-radius:clamp(6px,1vw,12px);
+      background:url(/vision-ui/stats-tabs.webp) 0 0/100% 200% no-repeat}
+    .stat-bar i{position:absolute;inset:0;background:inherit;background-position:0 100%;border-radius:inherit;
+      clip-path:inset(14.29% 79.82% 14.29% 1.83% round 7px);transition:clip-path .5s cubic-bezier(.6,0,.2,1)}
+    .pid{height:300vh}
+    .pid-device{display:grid}
+    .pid-device img,.pid-device canvas{grid-area:1/1;aspect-ratio:2/1;height:auto}
+    .pid-device canvas{background:none}
     .stat-tabs li{padding:0;color:#b8c5df}
     .stat-tabs li::before{content:none}
     .stat-tabs button{all:unset;box-sizing:border-box;display:flex;gap:11px;align-items:flex-start;width:100%;padding:11px 13px;border-radius:12px;cursor:pointer;color:inherit}
@@ -175,6 +183,7 @@
             <p>The <b>Stats</b> tab checks every motor, sensor and battery. Scroll through it.</p>
           </div>
           <div class="device stats-device" id="statsDevice">
+            <div class="stat-bar" id="statBar" aria-hidden="true"><i></i></div>
             <img src="/vision-ui/stats-drive.webp" width="960" height="480" class="on" alt="Drive stats: all six drive motors with temperature, current and speed; hottest motor 55°C on right 2.">
             <img src="/vision-ui/stats-lift.webp" width="960" height="480" loading="lazy" alt="Lift stats: four lift motors from 38°C to 56°C, each colour-coded by heat.">
             <img src="/vision-ui/stats-odom.webp" width="960" height="480" loading="lazy" alt="Odometry: position x −47.1 in, y −23.6 in, heading 134.5°, both tracking pods connected.">
@@ -188,6 +197,27 @@
           <li><button type="button" data-tab="2"><b style="background:#3cc9f0"></b><span><strong>Odom</strong>Live x/y position and heading, and whether both tracking pods are connected.</span></button></li>
           <li><button type="button" data-tab="3"><b style="background:#9b8cff"></b><span><strong>IMU</strong>Heading, total rotation, pitch and roll, and whether the IMU is ready to run.</span></button></li>
           <li><button type="button" data-tab="4"><b style="background:#4ade80"></b><span><strong>Battery</strong>Robot charge, voltage and battery temperature, plus the controller's link and charge.</span></button></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="play pid" id="pid" aria-label="PID tuning on the brain">
+      <div class="play-sticky">
+        <div class="play-main">
+          <div class="play-copy reveal">
+            <h2>Tune it between runs.</h2>
+            <p>The <b>PID</b> tab drives a test move, plots it against the target and scores the run. Change kP, kI or kD on the screen and go again, without re-uploading.</p>
+          </div>
+          <div class="device pid-device" id="pidDevice">
+            <img src="/vision-ui/pid-lab.webp" width="960" height="480" loading="lazy" alt="PID Lab on the V5 brain: drive test with kP 8, kI 0, kD 1; the response rises to the 24-inch target with 3.4% overshoot, settles in 0.61 s with 0.01 in final error.">
+            <canvas id="pidPlot" width="960" height="480" aria-hidden="true"></canvas>
+          </div>
+        </div>
+        <ol class="steps" id="pidSteps" aria-label="PID test steps">
+          <li class="now"><b style="background:#3cc9f0"></b>Pick drive or turn</li>
+          <li><b style="background:#9b8cff"></b>Set kP, kI and kD</li>
+          <li><b style="background:#f6a13a"></b>Run the test move</li>
+          <li><b style="background:#4ade80"></b>Read overshoot, settle time and error</li>
         </ol>
       </div>
     </section>

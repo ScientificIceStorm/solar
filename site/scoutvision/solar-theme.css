@@ -127,3 +127,5 @@ body.sv-replay .dashboard button:not(.play):not(#play):hover { background:#f0f5f
 body.sv-replay .dashboard .mode-switch button:not(.play):not(#play) { border:0; background:transparent; box-shadow:none; }
 body.sv-replay .dashboard .mode-switch button[aria-pressed="true"]:not(.play):not(#play) { background:#fff; box-shadow:0 1px 4px #0b25602b; }
 body.sv-replay #play, body.sv-replay .play { background:#173d9b; color:#fff; border:1px solid #173d9b; border-radius:20px; }
+/* Narrow phones: wrap the nav instead of widening the page. */
+@media(max-width:460px){body.sv-body .top-nav{flex-wrap:wrap;justify-content:center;row-gap:2px;border-radius:20px;max-width:calc(100vw - 16px);font-size:11px}}

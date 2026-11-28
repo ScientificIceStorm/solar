@@ -1,4 +1,5 @@
 /* ScoutVision scroll intro. The stage stays pinned while the page scrolls past it. */
+html{overflow-x:clip}
 .sv-intro{position:relative;height:760vh;--dark:1;color:#eaf2ff;z-index:0}
 .sv-intro-stage{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden}
 .sv-intro-stage::before{content:"";position:absolute;inset:0;opacity:var(--dark);
@@ -97,3 +98,8 @@
 .sv-menu-card h3{margin:2px 0 0;font-size:21px;letter-spacing:-.03em}
 .sv-menu-card p{margin:0;color:#4a5d80;font-size:14px;line-height:1.5;flex:1}
 .sv-menu-card b{color:#173d9b;font-size:14px}
+
+/* The real broadcast behind the model during autonomous, feathered into the backdrop. */
+.sv-broadcast{position:absolute;z-index:1;display:block;object-fit:fill;pointer-events:none;visibility:hidden;opacity:0;border-radius:6px;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent),linear-gradient(180deg,transparent,#000 12%,#000 90%,transparent);
+  -webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent),linear-gradient(180deg,transparent,#000 12%,#000 90%,transparent);mask-composite:intersect}

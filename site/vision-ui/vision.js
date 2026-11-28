@@ -115,11 +115,16 @@
   // ---- Stats tab: scroll (or tap a tab) to flip through the brain's five stats pages -------
   const stats = $("stats"), statShots = [...document.querySelectorAll("#statsDevice img")], statTabs = [...document.querySelectorAll("#statTabs li")];
   let statShown = 0;
+  // The tab highlight slides between tabs on the bar laid over the screenshots (tabs sit at
+  // x = 16 + 170 i, 160 wide, on an 872-wide bar).
+  const barHighlight = document.querySelector("#statBar i");
   const showStat = (index) => {
     if (index === statShown) return;
     statShown = index;
     statShots.forEach((img, k) => img.classList.toggle("on", k === index));
     statTabs.forEach((li, k) => li.classList.toggle("now", k === index));
+    const left = (16 + 170 * index) / 872 * 100, right = (872 - 176 - 170 * index) / 872 * 100;
+    barHighlight.style.clipPath = `inset(14.29% ${right.toFixed(2)}% 14.29% ${left.toFixed(2)}% round 7px)`;
   };
   const onStatsScroll = () => {
     const area = stats.getBoundingClientRect();
@@ -136,6 +141,66 @@
     showStat(index);
   });
   onStatsScroll();
+
+  // ---- PID tab: the test run plots itself as the page scrolls ---------------------------------
+  // The response curve traced from the brain screenshot (screen pixels), redrawn over the plot.
+  const CURVE = [84,368.5,90,367.5,96,364.5,102,362.5,108,359.5,114,355.5,120,351.5,126,345.5,132,341.5,138,335.5,144,329.5,150,323.5,156,317.5,162,310.5,168,303.5,174,297.5,180,291.5,186,285.5,192,279.5,198,273.5,204,267.5,210,263.5,216,257.5,222,253.5,228,249.5,234,245.5,240,242,246,238.5,252,235.5,258,232.5,264,230.5,270,228.5,276,226.5,282,224.5,288,223.5,294,222.5,300,221.5,306,220.5,312,219.5,318,219.5,324,219.5,330,219.5,336,219.5,342,219.5,348,219.5,354,219.5,360,219.5,366,219.5,372,219.5,378,219.5,384,219.5,390,219.5,396,219.5,402,219.5,408,219.5,414,220.5,420,221.5,426,221.5,432,221.5,438,221.5,444,221.5,450,221.5,456,221.5,462,221.5,468,222.5,474,223.5,480,223.5,486,223.5,492,223.5,498,223.5,504,223.5,510,223.5,516,223.5,522,223.5,528,223.5,534,223.5,540,223.5,546,223.5,552,223.5,558,223.5,564,223.5,570,223.5,576,223.5,582,223.5,588,223.5,594,223.5,600,223.5,606,223.5,612,223.5,618,223.5,624,223.5,630,223.5,636,223.5,642,223.5,648,223.5,654,223.5,660,223.5,666,223.5,672,223.5,678,223.5,684,223.5,690,223.5,696,223.5,702,223.5,708,223.5,714,223.5,720,223.5,726,223.5,732,223.5,738,223.5,744,223.5,750,223.5,756,223.5,762,223.5,768,223.5,774,223.5,780,223.5,786,223.5,792,223.5,798,223.5,804,223.5,807,223.5];
+  const pidArea = $("pid"), pidCanvas = $("pidPlot"), pc = pidCanvas.getContext("2d");
+  const pidSteps = [...document.querySelectorAll("#pidSteps li")];
+  let pidShown = -1;
+  function drawPid(progress) {
+    const run = clamp((progress - .3) / .5), done = run >= 1;
+    pc.clearRect(0, 0, 960, 480);
+    pc.fillStyle = "#0c1430";
+    pc.fillRect(82, 179, 758, 197);                       // plot area
+    pc.fillStyle = "#152250";
+    for (const y of [188, 248, 308, 368]) pc.fillRect(84, y, 754, 2);
+    pc.fillStyle = "#ffb547";
+    for (let x = 84; x < 836; x += 20) pc.fillRect(x, 224, Math.min(12, 836 - x), 2);
+    const end = 84 + (807 - 84) * run;
+    pc.strokeStyle = "#37d5f4"; pc.lineWidth = 4; pc.lineJoin = pc.lineCap = "round";
+    pc.beginPath();
+    let head = null;
+    for (let i = 0; i < CURVE.length; i += 2) {
+      let x = CURVE[i], y = CURVE[i + 1];
+      if (x > end) {
+        const px = CURVE[i - 2], py = CURVE[i - 1], k = (end - px) / (x - px);
+        x = end; y = py + (y - py) * k;
+      }
+      i ? pc.lineTo(x, y) : pc.moveTo(x, y);
+      head = [x, y];
+      if (x >= end) break;
+    }
+    if (run > 0) pc.stroke();
+    if (run > 0 && !done) {
+      pc.fillStyle = "#dffbff"; pc.shadowColor = "#37d5f4"; pc.shadowBlur = 14;
+      pc.beginPath(); pc.arc(head[0], head[1], 6, 0, Math.PI * 2); pc.fill();
+      pc.shadowBlur = 0;
+    }
+    if (!done) {
+      // Hide the results until the run finishes.
+      pc.fillStyle = "#0c1430";
+      for (const x of [26, 202, 378]) pc.fillRect(x, 440, 150, 26);
+      pc.fillStyle = "#04060c";
+      pc.fillRect(546, 406, 320, 56);
+      if (run > 0) {
+        pc.fillStyle = "#b8c5df";
+        pc.font = "500 17px Manrope, system-ui, sans-serif";
+        pc.fillText("Running drive test…", 552, 431);
+        pc.fillStyle = "#56658a";
+        pc.fillText(`${(run * 2.45).toFixed(2)} s`, 552, 456);
+      }
+    }
+    const step = progress < .12 ? 0 : progress < .3 ? 1 : !done ? 2 : 3;
+    if (step !== pidShown) { pidShown = step; pidSteps.forEach((li, k) => { li.className = k < step ? "done" : k === step ? "now" : ""; }); }
+  }
+  const onPidScroll = () => {
+    const area = pidArea.getBoundingClientRect();
+    drawPid(clamp(-area.top / (area.height - innerHeight)));
+  };
+  addEventListener("scroll", onPidScroll, {passive: true});
+  addEventListener("resize", onPidScroll);
+  onPidScroll();
 
   if (still) { drawFluid(0); return; }
   const loop = time => { drawFluid(time); requestAnimationFrame(loop); };
