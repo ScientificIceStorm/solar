@@ -1,0 +1,76 @@
+/* Solar's top bar, shared by every page (main site, ScoutVision, replays, Vision UI): logo, glass
+   navigation with its sliding pill, dark-mode toggle, profile panel, the fade behind the bar once the
+   page scrolls, and click ripples. Load it after the page's own CSS. Scripts: /theme.js, /profile.js. */
+.masthead{position:sticky;top:0;z-index:20;isolation:isolate;pointer-events:none}
+.masthead>*{pointer-events:auto}
+.masthead::before{content:"";position:absolute;z-index:-1;top:0;left:50%;width:100vw;height:calc(100% + 36px);transform:translateX(-50%);pointer-events:none;
+  background:linear-gradient(180deg,#081a3ee6,#081a3fa6 55%,#081a3f00);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  -webkit-mask-image:linear-gradient(#000 50%,transparent);mask-image:linear-gradient(#000 50%,transparent);opacity:0;transition:opacity .3s ease}
+.scrolled .masthead::before{opacity:1}
+
+.top-nav{position:relative;isolation:isolate;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #f0f5ff88;border-radius:30px;
+  background:#edf4ff76;-webkit-backdrop-filter:blur(18px) saturate(145%);backdrop-filter:blur(18px) saturate(145%);box-shadow:0 6px 20px #071d4430;
+  color:#112343;font:650 13px/1.2 Manrope,system-ui,sans-serif;letter-spacing:normal}
+.top-nav>a{position:relative;z-index:1;margin:0;padding:8px 17px;border-radius:22px;color:inherit;text-decoration:none;white-space:nowrap;background:transparent;transition:color .2s ease}
+.top-nav>a:hover,.top-nav>a[aria-current]{background:transparent;color:#143a88}
+.top-nav .scoutvision-link{display:inline-flex;align-items:center;gap:5px}
+.scoutvision-beta{border-radius:4px;background:#e9dbab;color:#4a3610;padding:2px 4px;font-size:9px;line-height:1;font-weight:750}
+.nav-indicator{position:absolute;z-index:0;top:4px;bottom:4px;left:0;width:0;border-radius:22px;background:#f5f9fff2;opacity:0;pointer-events:none;
+  transition:transform .28s cubic-bezier(.22,.8,.25,1),width .28s cubic-bezier(.22,.8,.25,1),opacity .17s ease}
+.nav-indicator.shown{opacity:1}
+#profileToggle{position:relative;z-index:1;border:0;border-radius:999px;background:transparent;color:inherit;padding:7px 12px;font:inherit;cursor:pointer;white-space:nowrap}
+#profileToggle:hover,#profileToggle[aria-expanded="true"]{background:#f5f9ffd9}
+@media(max-width:1100px){.top-nav>a{padding-inline:13px}}
+@media(max-width:900px){.top-nav{font-size:12px}.top-nav>a{padding:7px 10px}}
+@media(max-width:760px){
+  .masthead{grid-template-columns:1fr!important;justify-items:center;gap:9px}
+  .top-nav{flex-wrap:wrap;justify-content:center;row-gap:2px;border-radius:20px;max-width:calc(100vw - 16px)}
+}
+
+.theme-toggle{justify-self:end;position:relative;overflow:hidden;display:grid;place-items:center;width:40px;height:40px;padding:0;border-radius:50%;
+  border:1px solid #f0f5ff88;background:#edf4ff76;color:#112343;-webkit-backdrop-filter:blur(18px) saturate(145%);backdrop-filter:blur(18px) saturate(145%);
+  box-shadow:0 6px 20px #071d4430;cursor:pointer}
+.theme-toggle svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.theme-toggle .moon{fill:currentColor;stroke:none}
+.theme-toggle .sun,[data-theme=dark] .theme-toggle .moon{display:none}
+[data-theme=dark] .theme-toggle .sun{display:inline}
+@media(max-width:760px){.theme-toggle{position:absolute;right:12px;top:12px;width:36px;height:36px}}
+
+#profilePanel{position:absolute;top:calc(100% + 8px);right:0;width:min(300px,88vw);padding:18px;border:1px solid #ffffffb3;border-radius:22px;
+  background:#eef4ffd9;-webkit-backdrop-filter:blur(22px) saturate(150%);backdrop-filter:blur(22px) saturate(150%);box-shadow:0 12px 28px #071d4440;
+  color:#112343;font:500 13px/1.4 Manrope,system-ui,sans-serif;text-align:left;transform-origin:top right;animation:profile-open .22s ease-out}
+@keyframes profile-open{from{opacity:0;transform:translateY(-5px) scale(.94)}}
+#profilePanel form:not([hidden]){display:grid;gap:8px;margin-top:12px}
+#profilePanel label{display:grid;gap:3px;font-size:12px;font-weight:650;color:#34466a}
+#profilePanel input,#profilePanel button{margin:0;border:1px solid #cfddf0;border-radius:12px;padding:10px 11px;background:#fff;color:inherit;font:inherit;box-shadow:none}
+#profilePanel button{cursor:pointer;font-weight:650}
+#profilePanel #profileGoogle{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 12px}
+#profileGoogle svg{width:18px;height:18px;flex:none}
+#profilePanel button[type=submit]{padding:10px;font-weight:700}
+#profilePanel button[value=login]{background:#173d9b;color:#fff;border-color:#173d9b}
+#profilePanel button[value=login]:hover{background:#2053c7}
+#profilePanel a{display:inline;margin:0;padding:0;border-radius:0;background:none;color:#1649a7;font-weight:650;text-decoration:none}
+#profilePanel a:hover{text-decoration:underline}
+#profilePanel .profile-consent{margin:2px 0 0;text-align:center;line-height:1.5;font-size:11px;color:#53637e}
+#profileStatus{margin:8px 0 0;overflow-wrap:anywhere}
+#profileTeamForm a{font-size:13px}
+
+.ripple-host{position:relative;overflow:hidden}
+.ripple{position:absolute;z-index:2;border-radius:50%;pointer-events:none;background:currentColor;opacity:.2;transform:scale(0);animation:ripple .55s ease-out forwards}
+@keyframes ripple{to{transform:scale(1);opacity:0}}
+@media(prefers-reduced-motion:reduce){#profilePanel{animation:none}}
+
+/* Dark */
+[data-theme=dark] .masthead::before{background:linear-gradient(180deg,#030816ee,#030816b3 55%,#03081600)}
+[data-theme=dark] .top-nav,[data-theme=dark] .theme-toggle{background:#0b1630a8;border-color:#ffffff24;color:#dbe6ff;box-shadow:0 6px 24px #0008}
+[data-theme=dark] .top-nav>a:hover,[data-theme=dark] .top-nav>a[aria-current]{color:#fff}
+[data-theme=dark] .nav-indicator{background:#ffffff1f}
+[data-theme=dark] #profileToggle:hover,[data-theme=dark] #profileToggle[aria-expanded="true"]{background:#ffffff1a}
+[data-theme=dark] .scoutvision-beta{background:#5c4a17;color:#ffe9a8}
+[data-theme=dark] #profilePanel{background:#0b1630f0;border-color:#ffffff24;color:#e4ecff}
+[data-theme=dark] #profilePanel input,[data-theme=dark] #profilePanel button{background:#0f1d3d;border-color:#ffffff26;color:#e4ecff}
+[data-theme=dark] #profilePanel #profileGoogle{background:#fff;color:#1f1f1f}
+[data-theme=dark] #profilePanel button[value=login]{background:#3f6fe0;border-color:#3f6fe0;color:#fff}
+[data-theme=dark] #profilePanel label{color:#b9c7e2}
+[data-theme=dark] #profilePanel a{color:#8cc2ff}
+[data-theme=dark] #profilePanel .profile-consent{color:#93a5c6}

@@ -36,6 +36,30 @@
     onScroll();
   }
 
+  // ---- Nav pill ---------------------------------------------------------------------------------
+  // The main site's app.js drives the pill itself; every other page gets it here.
+  const nav = document.querySelector('.top-nav');
+  if (nav && !document.querySelector('script[src*="/app.js"]')) {
+    let pill = nav.querySelector('.nav-indicator');
+    if (!pill) { pill = document.createElement('span'); pill.className = 'nav-indicator'; pill.setAttribute('aria-hidden', 'true'); nav.prepend(pill); }
+    const links = () => [...nav.children].filter((el) => el.matches('a, #profileToggle'));
+    const sync = (target = nav.querySelector(':scope > a[aria-current]')) => {
+      if (target) { pill.style.transform = `translateX(${target.offsetLeft}px)`; pill.style.width = `${target.offsetWidth}px`; }
+      pill.classList.toggle('shown', Boolean(target));
+    };
+    nav.addEventListener('pointerover', (event) => {
+      if (event.pointerType === 'touch') return;
+      const target = links().find((el) => el.contains(event.target));
+      if (target) sync(target);
+    });
+    nav.addEventListener('pointerleave', () => sync());
+    nav.addEventListener('focusin', (event) => { if (links().includes(event.target)) sync(event.target); });
+    nav.addEventListener('focusout', (event) => { if (!nav.contains(event.relatedTarget)) sync(); });
+    new ResizeObserver(() => sync()).observe(nav);
+    requestAnimationFrame(() => sync());
+    document.fonts?.ready.then(() => sync());
+  }
+
   // ---- Dropdowns -----------------------------------------------------------------------------------
   // Filter selects get a custom button and list. The real <select> stays in the page (hidden), so
   // app.js keeps reading .value and listening for 'change' exactly as before.
