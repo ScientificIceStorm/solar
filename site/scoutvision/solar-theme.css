@@ -136,8 +136,11 @@ body.sv-body .sv-pill.shown{opacity:1}
 @media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}
 
 /* ==== Dark mode (toggle in the top bar) ==== */
-[data-theme=dark] body.sv-body,[data-theme=dark] body.sv-replay{color-scheme:dark;
-  background:linear-gradient(180deg,#02061280,#0207144d 40%,#020714a6),#06122a url("/solar-aurora.jpg") center 40% / cover fixed no-repeat}
+body.sv-body,body.sv-replay{isolation:isolate}
+body.sv-body::before,body.sv-replay::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:0;transition:opacity .7s ease;
+  background:linear-gradient(180deg,#02061280,#0207144d 40%,#020714a6),#06122a url("/solar-aurora.jpg") center 40% / cover no-repeat}
+[data-theme=dark] body.sv-body::before,[data-theme=dark] body.sv-replay::before{opacity:1}
+[data-theme=dark] body.sv-body,[data-theme=dark] body.sv-replay{color-scheme:dark}
 [data-theme=dark] body.sv-body{--card:#0a1430c4;--edge:#ffffff1f;--text:#e4ecff;--muted:#93a5c6;--panel:#0a1430c4;--line:#ffffff1f;--fg:#e4ecff;--quiet:#93a5c6;--accent:#8cc2ff;--mint:#8cc2ff;--cyan:#8cc2ff}
 [data-theme=dark] body.sv-body .sv-card,[data-theme=dark] body.sv-body .sv-main .panel,[data-theme=dark] body.sv-body .sv-main .event{border-color:#ffffff1f;box-shadow:0 18px 50px #0009}
 [data-theme=dark] body.sv-body .sv-card h2,[data-theme=dark] body.sv-body .sv-main h2{color:#fff}

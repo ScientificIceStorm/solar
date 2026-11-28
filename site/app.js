@@ -678,7 +678,7 @@ function markAnalyses(root) {
 function replayButton(match) {
   if (!match.replay) {
     return match.webcast ? '<span class="webcast-fallback" title="Full event webcast">' +
-      externalLink(match.webcast, '▶') + '</span>' :
+      externalLink(match.webcast, '▶').replace(' ↗</a>', '<i aria-hidden="true">↗</i></a>') + '</span>' :
       '';
   }
   return '<button type="button" class="play-match" data-replay="' + escape(match.replay) +
@@ -709,15 +709,16 @@ function matchTable(matches, season, showOdds = true, focusTeam) {
         (difference > 0 ? 'win' : difference < 0 ? 'loss' : 'tie') : '';
       const redWon = match.completed && red?.score > blue?.score;
       const blueWon = match.completed && blue?.score > red?.score;
-      return '<tr data-match="' + escape(match.id) + '" class="match-row ' + outcome + '"><td><span class="match-label">' +
-        replayButton(match) +
-        (outcome ? '<span class="result-dot" aria-label="' + outcome + '" title="' + outcome + '">' + (dq ? 'DQ' : outcome[0].toUpperCase()) + '</span>' : '') +
+      const mark = {win: 'WIN', loss: 'LOSS', tie: 'TIE', dq: 'DQ'}[outcome] || '';
+      return '<tr data-match="' + escape(match.id) + '" class="match-row ' + outcome + '"><td class="match-cell"' +
+        (mark ? ' data-outcome="' + mark + '"' : '') + '><span class="match-label">' +
+        replayButton(match) + (mark ? '<span class="visually-hidden">' + mark.toLowerCase() + ', </span>' : '') +
         escape(match.name || match.round) + '</span></td><td class="red alliance-cell' + (redWon ? ' won-alliance' : '') + '">' +
         allianceTeams(red, season, focusTeam) + '</td><td class="match-score">' + (!match.completed && match.scheduled &&
           Number.isFinite(Date.parse(match.scheduled)) ? '<time datetime="' + escape(match.scheduled) +
           '">' + escape(new Date(match.scheduled).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})) +
           '</time>' : score(match)) + '</td><td class="blue alliance-cell' + (blueWon ? ' won-alliance' : '') + '">' +
-        allianceTeams(blue, season, focusTeam) + '</td><td>' + shown(match.field || null) + '</td>' +
+        allianceTeams(blue, season, focusTeam) + '</td><td class="match-field">' + escape(match.field || '—') + '</td>' +
         (showOdds ? '<td class="match-odds">' + odds(match) + '</td>' : '') + '</tr>';
     }));
   }).join('') + '</div>';
@@ -1346,11 +1347,11 @@ function openTeamEvent(team, event, season, initialMatches = [], divisionId) {
         '<p>Official team standings are unavailable.</p>' : '') +
       '<h3>Robot Skills and awards</h3>' +
       (supplements ? '<div class="stats">' + (skills.length ? skills.map((row) =>
-        metric((row.type || 'Skills') + ' skills', shown(row.score) + ' · rank ' + shown(row.rank))).join('') :
+        metric((row.type || 'Skills') + ' skills', shown(row.score) + (row.rank > 0 ? ' · #' + escape(row.rank) : ''))).join('') :
         metric('Skills', 'No posted results')) + metric('Awards', awards.length) + '</div>' +
         (awards.length ? '<ul>' + awards.map((row) => '<li>' + escape(row.title) + '</li>').join('') + '</ul>' : '') :
         '<p role="status">' + (supplementaryFailed ? 'Skills and awards are unavailable.' : 'Loading Skills and awards…') + '</p>') +
-      comparisonBars('Alliance points by match', scores) + '<h3>Match results and predictions</h3>' +
+      '<h3>Match results and predictions</h3>' +
       matchTable(matches, season, true, team.id);
   };
   redraw();
