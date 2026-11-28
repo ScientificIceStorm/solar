@@ -1,0 +1,315 @@
+import {
+    DisplayP3Color,
+    HCLColor,
+    hclToRgb,
+    LABColor,
+    labToRgb,
+    OKLABColor,
+    oklabToRgb,
+    OKLCHColor,
+    oklchToRgb,
+    RGBColor,
+    rgbToDisplayP3,
+    rgbToHcl,
+    rgbToLab,
+    rgbToOklab,
+    rgbToOklch
+} from './color_spaces';
+import {parseCssColor} from './parse_css_color';
+import {interpolateArray, interpolateNumber} from '../../util/interpolate-primitives';
+
+export type InterpolationColorSpace = 'rgb' | 'hcl' | 'lab' | 'oklch' | 'oklab';
+
+/**
+ * Checks whether the specified color space is one of the supported interpolation color spaces.
+ *
+ * @param colorSpace Color space key to verify.
+ * @returns `true` if the specified color space is one of the supported
+ * interpolation color spaces, `false` otherwise
+ */
+export function isSupportedInterpolationColorSpace(
+    colorSpace: string
+): colorSpace is InterpolationColorSpace {
+    return (
+        colorSpace === 'rgb' ||
+        colorSpace === 'hcl' ||
+        colorSpace === 'lab' ||
+        colorSpace === 'oklch' ||
+        colorSpace === 'oklab'
+    );
+}
+
+/**
+ * Color representation used by WebGL.
+ * Defined in sRGB color space and pre-blended with alpha.
+ * A color outside sRGB is clipped to it channel by channel, and keeps its
+ * unclipped value for `displayP3` and color interpolation.
+ * @private
+ */
+export class Color {
+    readonly r: number;
+    readonly g: number;
+    readonly b: number;
+    readonly a: number;
+
+    /**
+     * @param r Red component premultiplied by `alpha` 0..1
+     * @param g Green component premultiplied by `alpha` 0..1
+     * @param b Blue component premultiplied by `alpha` 0..1
+     * @param [alpha=1] Alpha component 0..1
+     * @param [premultiplied=true] Whether the `r`, `g` and `b` values have already
+     * been multiplied by alpha. If `true` nothing happens if `false` then they will
+     * be multiplied automatically.
+     */
+    constructor(r: number, g: number, b: number, alpha = 1, premultiplied = true) {
+        if (!premultiplied && (Math.min(r, g, b) < 0 || Math.max(r, g, b) > 1)) {
+            this.overwriteGetter('unclippedRgb', [r, g, b, alpha]);
+            r = Math.min(Math.max(r, 0), 1);
+            g = Math.min(Math.max(g, 0), 1);
+            b = Math.min(Math.max(b, 0), 1);
+        }
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = alpha;
+
+        if (!premultiplied) {
+            this.r *= alpha;
+            this.g *= alpha;
+            this.b *= alpha;
+
+            if (!alpha) {
+                // alpha = 0 erases completely rgb channels. This behavior is not desirable
+                // if this particular color is later used in color interpolation.
+                // Because of that, a reference to original color is saved.
+                this.overwriteGetter('rgb', [r, g, b, alpha]);
+            }
+        }
+    }
+
+    static black = new Color(0, 0, 0, 1);
+    static white = new Color(1, 1, 1, 1);
+    static transparent = new Color(0, 0, 0, 0);
+    static red = new Color(1, 0, 0, 1);
+
+    /**
+     * Parses CSS color strings and converts colors to sRGB color space if needed.
+     * Officially supported color formats:
+     * - keyword, e.g. 'aquamarine' or 'steelblue'
+     * - hex (with 3, 4, 6 or 8 digits), e.g. '#f0f' or '#e9bebea9'
+     * - rgb and rgba, e.g. 'rgb(0,240,120)' or 'rgba(0%,94%,47%,0.1)' or 'rgb(0 240 120 / .3)'
+     * - hsl and hsla, e.g. 'hsl(0,0%,83%)' or 'hsla(0,0%,83%,.5)' or 'hsl(0 0% 83% / 20%)'
+     * - oklch, e.g. 'oklch(62.8% 0.258 29.23)' or 'oklch(0.7 40% 0.5turn / 50%)'
+     * - oklab, e.g. 'oklab(62.8% 0.225 0.126)' or 'oklab(0.7 -40% 20% / 50%)'
+     * - display-p3, e.g. 'color(display-p3 1 0.5 0)' or 'color(display-p3 100% 50% 0% / 50%)'
+     *
+     * @param input CSS color string to parse.
+     * @returns A `Color` instance, or `undefined` if the input is not a valid color string.
+     */
+    static parse(input: Color | string | undefined | null): Color | undefined {
+        // in zoom-and-property function input could be an instance of Color class
+        if (input instanceof Color) {
+            return input;
+        }
+
+        if (typeof input !== 'string') {
+            return;
+        }
+
+        const rgba = parseCssColor(input);
+        if (rgba) {
+            return new Color(...rgba, false);
+        }
+    }
+
+    /**
+     * Used by 'to-rgba' expression.
+     *
+     * @returns Gien color, with reversed alpha blending, in sRGB color space.
+     */
+    get rgb(): RGBColor {
+        const {r, g, b, a} = this;
+        const f = a || Infinity; // reverse alpha blending factor
+        return this.overwriteGetter('rgb', [r / f, g / f, b / f, a]);
+    }
+
+    /**
+     * Used in color interpolation.
+     *
+     * @returns Gien color, with reversed alpha blending, in HCL color space.
+     */
+    get hcl(): HCLColor {
+        return this.overwriteGetter('hcl', rgbToHcl(this.unclippedRgb));
+    }
+
+    /**
+     * Used in color interpolation.
+     *
+     * @returns Gien color, with reversed alpha blending, in LAB color space.
+     */
+    get lab(): LABColor {
+        return this.overwriteGetter('lab', rgbToLab(this.unclippedRgb));
+    }
+
+    /**
+     * Used in color interpolation.
+     *
+     * @returns Given color, with reversed alpha blending, in OKLCH color space.
+     */
+    get oklch(): OKLCHColor {
+        return this.overwriteGetter('oklch', rgbToOklch(this.unclippedRgb));
+    }
+
+    /**
+     * Used in color interpolation.
+     *
+     * @returns Given color, with reversed alpha blending, in OKLAB color space.
+     */
+    get oklab(): OKLABColor {
+        return this.overwriteGetter('oklab', rgbToOklab(this.unclippedRgb));
+    }
+
+    /**
+     * Used by a renderer that draws in Display P3.
+     *
+     * @returns Given color, with reversed alpha blending, in Display P3, clipped to it channel by channel.
+     */
+    get displayP3(): DisplayP3Color {
+        return this.overwriteGetter('displayP3', rgbToDisplayP3(this.unclippedRgb));
+    }
+
+    /**
+     * @returns Given color, with reversed alpha blending, in sRGB color space,
+     * with channels outside 0..1 for a color outside sRGB.
+     */
+    private get unclippedRgb(): RGBColor {
+        return this.rgb;
+    }
+
+    /**
+     * Lazy getter pattern. When getter is called for the first time lazy value
+     * is calculated and then overwrites getter function in given object instance.
+     *
+     * @example:
+     * const redColor = Color.parse('red');
+     * let x = redColor.hcl; // this will invoke `get hcl()`, which will calculate
+     * // the value of red in HCL space and invoke this `overwriteGetter` function
+     * // which in turn will set a field with a key 'hcl' in the `redColor` object.
+     * // In other words it will override `get hcl()` from its `Color` prototype
+     * // with its own property: hcl = [calculated red value in hcl].
+     * let y = redColor.hcl; // next call will no longer invoke getter but simply
+     * // return the previously calculated value
+     * x === y; // true - `x` is exactly the same object as `y`
+     *
+     * @param getterKey Getter key
+     * @param lazyValue Lazily calculated value to be memoized by current instance
+     * @private
+     */
+    private overwriteGetter<T>(getterKey: string, lazyValue: T): T {
+        Object.defineProperty(this, getterKey, {value: lazyValue});
+        return lazyValue;
+    }
+
+    /**
+     * Used by 'to-string' expression.
+     *
+     * @returns Serialized color in format `rgba(r,g,b,a)`
+     * where r,g,b are numbers within 0..255 and alpha is number within 1..0
+     *
+     * @example
+     * var purple = new Color.parse('purple');
+     * purple.toString; // = "rgba(128,0,128,1)"
+     * var translucentGreen = new Color.parse('rgba(26, 207, 26, .73)');
+     * translucentGreen.toString(); // = "rgba(26,207,26,0.73)"
+     */
+    toString(): string {
+        const [r, g, b, a] = this.rgb;
+        return `rgba(${[r, g, b].map((n) => Math.round(n * 255)).join(',')},${a})`;
+    }
+
+    static interpolate(
+        from: Color,
+        to: Color,
+        t: number,
+        spaceKey: InterpolationColorSpace = 'rgb'
+    ): Color {
+        switch (spaceKey) {
+            case 'rgb': {
+                const [r, g, b, alpha] = interpolateArray(from.unclippedRgb, to.unclippedRgb, t);
+                return new Color(r, g, b, alpha, false);
+            }
+            case 'hcl': {
+                const [hue0, chroma0, light0, alphaF] = from.hcl;
+                const [hue1, chroma1, light1, alphaT] = to.hcl;
+
+                // https://github.com/gka/chroma.js/blob/cd1b3c0926c7a85cbdc3b1453b3a94006de91a92/src/interpolator/_hsx.js
+                let hue, chroma;
+
+                if (!isNaN(hue0) && !isNaN(hue1)) {
+                    let dh = hue1 - hue0;
+                    if (hue1 > hue0 && dh > 180) {
+                        dh -= 360;
+                    } else if (hue1 < hue0 && hue0 - hue1 > 180) {
+                        dh += 360;
+                    }
+                    hue = hue0 + t * dh;
+                } else if (!isNaN(hue0)) {
+                    hue = hue0;
+                    if (light1 === 1 || light1 === 0) chroma = chroma0;
+                } else if (!isNaN(hue1)) {
+                    hue = hue1;
+                    if (light0 === 1 || light0 === 0) chroma = chroma1;
+                } else {
+                    hue = NaN;
+                }
+
+                const [r, g, b, alpha] = hclToRgb([
+                    hue,
+                    chroma ?? interpolateNumber(chroma0, chroma1, t),
+                    interpolateNumber(light0, light1, t),
+                    interpolateNumber(alphaF, alphaT, t)
+                ]);
+                return new Color(r, g, b, alpha, false);
+            }
+            case 'lab': {
+                const [r, g, b, alpha] = labToRgb(interpolateArray(from.lab, to.lab, t));
+                return new Color(r, g, b, alpha, false);
+            }
+            case 'oklch': {
+                // https://drafts.csswg.org/css-color-4/#interpolation
+                const [light0, chroma0, h0, alpha0] = from.oklch;
+                const [light1, chroma1, h1, alpha1] = to.oklch;
+                let hue0 = isNaN(h0) ? h1 : h0;
+                let hue1 = isNaN(h1) ? h0 : h1;
+                if (hue1 - hue0 > 180) {
+                    hue0 += 360;
+                } else if (hue1 - hue0 < -180) {
+                    hue1 += 360;
+                }
+                const alpha = interpolateNumber(alpha0, alpha1, t);
+                const divisor = alpha === 0 ? 1 : alpha;
+                const [r, g, b] = oklchToRgb([
+                    interpolateNumber(light0 * alpha0, light1 * alpha1, t) / divisor,
+                    interpolateNumber(chroma0 * alpha0, chroma1 * alpha1, t) / divisor,
+                    interpolateNumber(hue0, hue1, t),
+                    alpha
+                ]);
+                return new Color(r, g, b, alpha, false);
+            }
+            case 'oklab': {
+                // https://drafts.csswg.org/css-color-4/#interpolation
+                const [light0, a0, b0, alpha0] = from.oklab;
+                const [light1, a1, b1, alpha1] = to.oklab;
+                const alpha = interpolateNumber(alpha0, alpha1, t);
+                const divisor = alpha === 0 ? 1 : alpha;
+                const [r, g, b] = oklabToRgb([
+                    interpolateNumber(light0 * alpha0, light1 * alpha1, t) / divisor,
+                    interpolateNumber(a0 * alpha0, a1 * alpha1, t) / divisor,
+                    interpolateNumber(b0 * alpha0, b1 * alpha1, t) / divisor,
+                    alpha
+                ]);
+                return new Color(r, g, b, alpha, false);
+            }
+        }
+    }
+}

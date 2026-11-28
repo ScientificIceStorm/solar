@@ -1,0 +1,336 @@
+# pbf
+
+[![Node](https://github.com/mapbox/pbf/actions/workflows/node.yml/badge.svg)](https://github.com/mapbox/pbf/actions/workflows/node.yml)
+[![minzipped size](https://img.shields.io/bundlejs/size/pbf?label=min%2Bgzip)](https://esm.run/pbf)
+
+A low-level, fast, ultra-lightweight (2.5KB gzipped) JavaScript library for decoding and encoding [protocol buffers](https://protobuf.dev), a compact binary format for structured data serialization. Works both in Node and the browser. Supports lazy decoding and detailed customization of the reading/writing code.
+
+## Performance
+
+This library is fast — competitive with or faster than other JS protobuf implementations —
+while being an order of magnitude smaller. Here's a result from a real-world benchmark on Node v26
+(decoding and encoding 439 Mapbox vector tiles, 37.5 MB total; the equivalent JSON is 137 MB):
+
+|| decode | encode | size (minzip) |
+|---|---|---|---|
+| **pbf** | 149ms, 252 MB/s | 122ms, 307 MB/s | 2.5 KB |
+| [protocol-buffers](https://github.com/mafintosh/protocol-buffers) | 275ms, 136 MB/s | 543ms,  69 MB/s | 15.7 KB |
+| [protobuf.js](https://github.com/protobufjs/protobuf.js/) | 168ms, 223 MB/s | 118ms, 317 MB/s | 33.2 KB |
+| JSON | 415ms, 331 MB/s | 506ms, 271 MB/s | — |
+
+`JSON` throughput is measured against the 137 MB JSON payload, not the 37.5 MB pbf payload —
+on the same data, pbf is ~2.8× faster to decode and ~4.1× faster to encode, and produces output
+roughly a quarter the size. Timings are for warmed-up code, with each library in a separate process;
+see `bench/bench-tiles.js`.
+
+## Examples
+
+#### Using Compiled Code
+
+Install `pbf` and compile a JavaScript module from a `.proto` file:
+
+```bash
+$ npm install -g pbf
+$ pbf example.proto > example.js
+```
+
+Then read and write objects using the module like this:
+
+```js
+import {PbfReader, PbfWriter} from 'pbf';
+import {readExample, writeExample} from './example.js';
+
+// read
+const obj = readExample(new PbfReader(buffer));
+
+// write
+const pbf = new PbfWriter();
+writeExample(obj, pbf);
+const buffer = pbf.finish();
+```
+
+Alternatively, you can compile a protobuf schema file directly in the code:
+
+```js
+import {compile} from 'pbf/compile';
+import {resolve} from 'pbf/resolve';
+
+const {readExample, writeExample} = compile(resolve('example.proto'));
+```
+
+`resolve` merges in all imported files, which it looks up the same way as the CLI does (see below); pass
+`{paths: ['include_dir', ...]}` as the second argument to set include directories. `resolve` reads from disk, so
+it's Node-only; to generate code as a string instead (e.g. in a build script), use `compileRaw(schema, options)`
+from `pbf/compile`, which takes the same options as the CLI (`noRead`, `noWrite`, `legacy`, `dts`).
+
+#### Custom Reading
+
+```js
+const pbf = new PbfReader(buffer);
+const data = readData(pbf);
+
+function readData(pbf, end) {
+    const data = {};
+    let field;
+    while ((field = pbf.nextField(end))) {
+        if (field === 1) data.name = pbf.readString();
+        else if (field === 2) data.version = pbf.readVarint();
+        else if (field === 3) data.layer = readLayer(pbf, pbf.readVarint() + pbf.pos);
+    }
+    return data;
+}
+function readLayer(pbf, end) {
+    const layer = {};
+    let field;
+    while ((field = pbf.nextField(end))) {
+        if (field === 1) layer.name = pbf.readString();
+        else if (field === 2) layer.size = pbf.readVarint();
+    }
+    return layer;
+}
+```
+
+#### Custom Writing
+
+```js
+const pbf = new PbfWriter();
+writeData(data, pbf);
+const buffer = pbf.finish();
+
+function writeData(data, pbf) {
+    pbf.writeStringField(1, data.name);
+    pbf.writeVarintField(2, data.version);
+    pbf.writeMessage(3, writeLayer, data.layer);
+}
+function writeLayer(layer, pbf) {
+    pbf.writeStringField(1, layer.name);
+    pbf.writeVarintField(2, layer.size);
+}
+```
+
+## Install
+
+Install using NPM with `npm install pbf`, then import as a module:
+
+```js
+import {PbfReader, PbfWriter} from 'pbf';
+```
+
+Or use as a module directly in the browser with [jsDelivr](https://www.jsdelivr.com/esm):
+
+```html
+<script type="module">
+    import {PbfReader, PbfWriter} from 'https://cdn.jsdelivr.net/npm/pbf/+esm';
+</script>
+```
+
+Alternatively, there's a browser bundle exposing a `Pbf` global with `PbfReader` and `PbfWriter` properties:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/pbf"></script>
+```
+
+## API
+
+The library exposes two classes: `PbfReader` for decoding and `PbfWriter` for encoding. Splitting them lets bundlers tree-shake the half you don't use.
+
+Create a `PbfReader` from a `Uint8Array` (including a Node `Buffer`) or an `ArrayBuffer`:
+
+```js
+// parse a pbf file from disk in Node
+const pbf = new PbfReader(fs.readFileSync('data.pbf'));
+
+// parse a pbf file fetched over the network
+const pbf = new PbfReader(await (await fetch(url)).arrayBuffer());
+```
+
+Both classes expose the following properties:
+
+```js
+pbf.length; // length of the underlying buffer
+pbf.pos; // current offset for reading or writing
+```
+
+#### Reading
+
+Loop over a message's fields with `nextField` and dispatch on the field number. Unrecognized or unread fields are skipped automatically on the next iteration:
+
+```js
+let field;
+while ((field = pbf.nextField(end))) {
+    if (field === 1) obj.id = pbf.readVarint();
+    else if (field === 2) obj.name = pbf.readString();
+}
+```
+
+To read an embedded message, pass `pbf.readVarint() + pbf.pos` as `end` to a nested reader:
+
+```js
+const msg = readSubMessage(pbf, pbf.readVarint() + pbf.pos);
+```
+
+Read values:
+
+```js
+const value = pbf.readVarint();
+const str = pbf.readString();
+const numbers = pbf.readPackedVarint();
+```
+
+For lazy or partial decoding, save the position and come back to it later:
+
+```js
+let fooPos = -1;
+let field;
+while ((field = pbf.nextField())) {
+    if (field === 1) fooPos = pbf.pos;
+}
+...
+pbf.pos = fooPos;
+const foo = readFoo(pbf, pbf.readVarint() + pbf.pos);
+```
+
+Callback-based `readFields(fn, obj, end)` and `readMessage(fn, obj)` are also available for backward compatibility, but new code should prefer the `nextField` loop — it's significantly faster.
+
+Scalar reading methods:
+
+* `readVarint(isSigned)` (pass `true` if you expect negative varints)
+* `readSVarint()`
+* `readFixed32()`
+* `readFixed64()`
+* `readSFixed32()`
+* `readSFixed64()`
+* `readBoolean()`
+* `readFloat()`
+* `readDouble()`
+* `readString()`
+* `readBytes()`
+
+Field iteration methods:
+
+* `nextField(end)` - returns the next field number, or `0` at end-of-message; skips the previous field's value if it wasn't consumed
+* `skip(value)` - skips a field given its raw tag varint
+
+Packed reading methods:
+
+* `readPackedVarint(arr, isSigned)` (appends read items to `arr`, or a new array if omitted, and returns it)
+* `readPackedSVarint(arr)`
+* `readPackedFixed32(arr)`
+* `readPackedFixed64(arr)`
+* `readPackedSFixed32(arr)`
+* `readPackedSFixed64(arr)`
+* `readPackedBoolean(arr)`
+* `readPackedFloat(arr)`
+* `readPackedDouble(arr)`
+
+#### Writing
+
+Create a `PbfWriter` (optionally with a pre-allocated `Uint8Array` or `ArrayBuffer`):
+
+```js
+const pbf = new PbfWriter();
+```
+
+Write values:
+
+```js
+pbf.writeVarint(123);
+pbf.writeString("Hello world");
+```
+
+Write an embedded message:
+
+```js
+pbf.writeMessage(1, writeObj, obj);
+
+function writeObj(obj, pbf) {
+    pbf.writeStringField(1, obj.name);
+    pbf.writeVarintField(2, obj.version);
+}
+```
+
+Field writing methods:
+
+* `writeVarintField(tag, val)`
+* `writeSVarintField(tag, val)`
+* `writeFixed32Field(tag, val)`
+* `writeFixed64Field(tag, val)`
+* `writeSFixed32Field(tag, val)`
+* `writeSFixed64Field(tag, val)`
+* `writeBooleanField(tag, val)`
+* `writeFloatField(tag, val)`
+* `writeDoubleField(tag, val)`
+* `writeStringField(tag, val)`
+* `writeBytesField(tag, buffer)`
+
+Packed field writing methods:
+
+* `writePackedVarint(tag, arr)`
+* `writePackedSVarint(tag, arr)`
+* `writePackedFixed32(tag, arr)`
+* `writePackedFixed64(tag, arr)`
+* `writePackedSFixed32(tag, arr)`
+* `writePackedSFixed64(tag, arr)`
+* `writePackedBoolean(tag, arr)`
+* `writePackedFloat(tag, arr)`
+* `writePackedDouble(tag, arr)`
+
+Scalar writing methods:
+
+* `writeVarint(val)`
+* `writeSVarint(val)`
+* `writeFixed32(val)`
+* `writeFixed64(val)`
+* `writeSFixed32(val)`
+* `writeSFixed64(val)`
+* `writeBoolean(val)`
+* `writeFloat(val)`
+* `writeDouble(val)`
+* `writeString(val)`
+* `writeBytes(buffer)`
+
+Message writing methods:
+
+* `writeMessage(tag, fn[, obj])`
+* `writeRawMessage(fn[, obj])`
+
+Misc methods:
+
+* `realloc(minBytes)` - pad the underlying buffer size to accommodate the given number of bytes;
+   note that the size increases exponentially, so it won't necessarily equal the size of data written
+* `finish()` - return the written data as a `Uint8Array` view into the underlying buffer (not a copy)
+
+For an example of a real-world usage of the library, see [vector-tile-js](https://github.com/mapbox/vector-tile-js).
+
+## Proto Schema to JavaScript
+
+`pbf` comes with a binary (run it with `npx pbf` or install the package globally) that compiles `proto` files into JavaScript modules. Usage:
+
+```bash
+$ pbf <file.proto> [-I <include_dir>]... [--no-write] [--no-read] [--legacy] [--dts]
+```
+
+Imports are looked up relative to the importing file, then in each `-I` (or `--proto_path`) directory,
+defaulting to the current one — like in `protoc`.
+The `--no-write` and `--no-read` switches remove corresponding code in the output.
+The `--legacy` switch makes it generate a CommonJS module instead of ESM.
+The `--dts` switch makes it generate TypeScript declarations for the module instead, to save next to it:
+
+```bash
+$ pbf example.proto > example.js
+$ pbf example.proto --dts > example.d.ts
+```
+
+It generates a pair of functions for every message in the schema:
+
+* `read<Message>(pbf)` - decodes an object from the given `PbfReader` instance.
+* `write<Message>(obj, pbf)` - encodes an object into the given `PbfWriter` instance (usually empty).
+
+For nested messages, their names are concatenated — e.g. `Message` inside `Test` produces `readTestMessage` and
+`writeTestMessage`.
+
+The resulting code is clean and simple, so it's meant to be customized.
+
+The declarations describe each message with an interface of the same name and each enum with a union of its values.
+Read functions return every field of a message, filled with defaults when missing (except for messages and `bytes`,
+which may be `undefined`), while write functions accept any subset of fields.

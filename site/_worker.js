@@ -340,6 +340,12 @@ export default {
       return contributions(request, env, url);
     }
     if (request.method !== 'GET') return error('Method not allowed.', 405);
+    if (url.pathname === '/api/map-config') {
+      // A public (pk.) token only: it is sent to every visitor's browser.
+      const token = env.MAPBOX_PUBLIC_TOKEN;
+      if (!token?.startsWith('pk.')) return error('The map is awaiting setup.', 503);
+      return Response.json({token}, {headers: {'Cache-Control': 'no-store'}});
+    }
     if (url.pathname === '/api/profile-config') {
       if (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY) return error('Profile is awaiting setup.', 503);
       return Response.json({url: env.SUPABASE_URL, key: env.SUPABASE_PUBLISHABLE_KEY},

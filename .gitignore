@@ -47,3 +47,7 @@ app.*.map.json
 # Local Solar config
 solar.local.json
 assets/config/solar.local.json
+
+# Local Cloudflare Pages settings and state
+.dev.vars
+.wrangler/
